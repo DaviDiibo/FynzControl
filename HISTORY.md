@@ -7,6 +7,14 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[TAURI-WINDOW-COMPACT-SIZE-LIMITS-001]` (2026-10-23): Calibración compacta y límites de tamaño para ventana de escritorio en Tauri:
+  - Archivos intervenidos:
+    * `src-tauri/tauri.conf.json`
+  - Resumen técnico:
+    - Calibración de dimensiones de ventana nativa de escritorio en Tauri para aspect-ratio tipo smartphone/phablet (`width: 460`, `height: 860`, `center: true`).
+    - Establecimiento de límites de redimensión defensivos (`minWidth: 400`, `minHeight: 680`, `maxWidth: 580`, `maxHeight: 980`) para evitar estiramientos antiestéticos en monitores ultra-anchos y preservar la ergonomía visual mobile-first.
+  - Verificación y calidad: 53/53 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[GIT-DUAL-BRANCH-AND-VERCEL-BUILD-OPTIMIZATION-001]` (2026-10-23): Estrategia de ramas Dual-Branch y optimización de builds en Vercel con smart ignore:
   - Archivos intervenidos:
     * `scripts/vercel-ignore.sh`
