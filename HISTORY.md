@@ -7,6 +7,20 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[GIT-DUAL-BRANCH-AND-VERCEL-BUILD-OPTIMIZATION-001]` (2026-10-23): Estrategia de ramas Dual-Branch y optimización de builds en Vercel con smart ignore:
+  - Archivos intervenidos:
+    * `scripts/vercel-ignore.sh`
+    * `vercel.json`
+  - Resumen técnico:
+    - Adopción de la arquitectura de ramas Dual-Branch (`main` para producción consolidada y `dev` para trabajo diario).
+    - Creación del script `scripts/vercel-ignore.sh` e integración como `ignoreCommand` en `vercel.json` para cancelar construcciones innecesarias en Vercel:
+      * Cancelación si el commit contiene `[skip ci]` o `[skip vercel]`.
+      * Cancelación si la rama no es `main` (cero builds en `dev` y ramas secundarias).
+      * Smart diff: cancelación si solo se modificaron archivos documentales (`*.md`), soporte (`.agents/`, `.vscode/`) o escritorio (`src-tauri/`).
+      * Autorización de build (`exit 1`) únicamente ante cambios reales para web sobre `main`.
+    - Creación de la rama local `dev`.
+  - Verificación y calidad: 53/53 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[TAURI-V2-DESKTOP-APP-INITIALIZATION-001]` (2026-10-23): Inicialización y soporte de aplicación de escritorio nativa con Tauri v2:
   - Archivos intervenidos:
     * `package.json`
