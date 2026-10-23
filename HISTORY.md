@@ -7,6 +7,20 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[TAURI-V2-DESKTOP-APP-INITIALIZATION-001]` (2026-10-23): Inicialización y soporte de aplicación de escritorio nativa con Tauri v2:
+  - Archivos intervenidos:
+    * `package.json`
+    * `package-lock.json`
+    * `src-tauri/tauri.conf.json`
+    * `src-tauri/Cargo.toml`
+    * `src-tauri/src/main.rs`
+  - Resumen técnico:
+    - Configuración e inicialización de soporte de escritorio nativo con Tauri v2 (`@tauri-apps/cli` 2.12.4, Tauri 2.12.5) bajo WebView2 en Windows.
+    - Paridad estética en la ventana nativa: dimensiones 1280x850, centrado automático, fondo `#121212` sin destellos.
+    - Integración del pipeline: `beforeBuildCommand: "npm run build:web"`, `frontendDist: "../dist"` enlazado con la exportación estática de Expo Web, y `desktop:dev` / `desktop:build` en scripts de `package.json`.
+    - Cero alteración a rutas móviles o lógica web.
+  - Verificación y calidad: 53/53 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[DEBTS-REMOTE-DELETION-AND-SYNC-PERSISTENCE-001]` (2026-10-23): Sincronización y persistencia de eliminación remota en módulo de deudas y préstamos:
   - Archivos intervenidos:
     * `src/store/debts-store.ts`

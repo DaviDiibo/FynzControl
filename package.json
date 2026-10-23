@@ -36,6 +36,7 @@
     "zustand": "^4.5.2"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
     "@types/jest": "29.5.14",
     "@types/react": "~19.2.2",
     "eslint": "^9.0.0",
@@ -52,7 +53,9 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "jest",
-    "build:web": "expo export -p web"
+    "build:web": "expo export -p web",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build"
   },
   "private": true
 }
