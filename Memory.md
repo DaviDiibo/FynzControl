@@ -19,6 +19,9 @@
   - Cobertura de Testing (53/53 tests en verde): Suites en `src/__tests__/` con Fake Timers deterministas para ciclos de facturación, amortizaciones contables y utilidades de fechas.
   - Especificación arquitectónica relacional en `DATABASE_SCHEMA.md` para Supabase/PostgreSQL.
 - **Hitos Recientes Concluidos**:
+  - **Guardián Web y Loader de Sync Inicial (`[WEB-AUTH-GUARD-AND-INITIAL-SYNC-LOADER-001]`)**: Guardián declarativo con `<Redirect href="/(auth)/login" />` en `app/(app)/_layout.tsx`; estado reactivo de sync inicial en `sync-service.ts` con timeout de 4s; pantalla de carga cyberpunk en `index.tsx` (`[ SINCRONIZANDO FINANZAS ]`) impidiendo saldos vacíos en $0,00 hasta hidratación de Supabase; 53/53 tests en verde (100%), 0 errores TS.
+  - **Despliegue en Producción Web en Vercel (`[VERCEL-PRODUCTION-DEPLOYMENT-SUCCESS-001]`)**: Vinculación y despliegue exitoso en Vercel desde GitHub (`DaviDiibo/FynzControl`), compilación estática Expo Router (`dist/`), soporte de autenticación híbrida (Email/Password + Google OAuth), navegación SPA fluida y 100% operativo en caliente.
+  - **Inicialización y Push a GitHub (`[GITHUB-REPOSITORY-INITIALIZATION-AND-PUSH-001]`)**: Repositorio Git inicializado en rama `main`, vinculado y subido exitosamente a `https://github.com/DaviDiibo/FynzControl.git` (212 archivos versionados, exclusión total de `.env*` y temporales).
   - **Preparación de Despliegue Web en Vercel (`[VERCEL-WEB-DEPLOYMENT-PREPARATION-001]`)**: Dependencia `@expo/metro-runtime` (~57.0.17), script `build:web`, configuración SPA en `vercel.json` (`dist/`, `cleanUrls`, rewrites SPA), blindaje en `.gitignore`; exportación web exitosa (42 rutas estáticas), 53/53 tests en verde (100%), 0 errores TS.
   - **Sincronización de Splash Screen y Rehidratación Zustand (`[SPLASH-SCREEN-AND-ZUSTAND-HYDRATION-SYNC-001]`)**: Hook `useAppHydration` sobre los 5 stores (`auth`, `transactions`, `debts`, `cards`, `settings`) con timeout 1500 ms; prevención de auto-hide nativo y montaje retenido hasta rehidratación en `app/_layout.tsx`, eliminando el destello de ceros; 53/53 tests en verde (100%), 0 errores TS.
   - **Resolución de Ciclo Require en Metro (`[RESOLVE-METRO-REQUIRE-CYCLE-SYNC-STORE-001]`)**: Inversión de dependencias en `transactions-store.ts` con `setTransactionSyncHandlers` y desacople en `sync-service.ts`, logrando flujo unidireccional y eliminando advertencia de ciclo en Metro; 53/53 tests en verde (100%), 0 errores TS.
@@ -26,10 +29,8 @@
   - **Ratio Real de Deuda y Salud Financiera (`[STATS-REAL-DEBT-RATIO-AND-DYNAMIC-HEALTH-PHASE-2-001]`)**: Conexión con `useDebtsStore` para compromiso mensual (`personalDebts` y cuotas de `thirdPartyCharges`), ratio de endeudamiento real `(deuda / ingresos) * 100`, semáforo dinámico (ÓPTIMO `#00FFA3`, MODERADO `#FFD60A`, CRÍTICO `#FF453A`) y barra de progreso reactiva en `financial-health-card.tsx`; 53/53 tests en verde (100%), 0 errores TS.
   - **Filtro Temporal Dinámico en Estadísticas (`[STATS-DYNAMIC-TEMPORAL-FILTER-PHASE-1-001]`)**: Eliminación de multiplicadores artificiales, selector de año dinámico (`Año ${YYYY}`), filtrado de transacciones por mes/trimestre/año con `parseTxDate`, totales reactivos (`periodIncome`, `periodExpense`, `periodNet`, `savingsRate`), desglose por categorías dinámico y variación real vs período previo; 53/53 tests en verde (100%), 0 errores TS.
   - **Filtro Mensual Dinámico (`[TRANSACTIONS-DYNAMIC-MONTHLY-FILTER-001]`)**: Reemplazo de arreglo estático `AVAILABLE_MONTHS` por navegación temporal ilimitada (`selectedDate: Date`), toggle de histórico completo, filtrado resiliente de fechas (`isSameMonthAndYear`) y cálculo reactivo de métricas mensuales (`monthlyIncome`, `monthlyExpense`, `monthlyNet`); 53/53 tests en verde (100%), 0 errores TS.
-  - **Persistencia Bidireccional y Soft-Delete (`[OFFLINE-FIRST-BIDIRECTIONAL-PERSISTENCE-AND-DELETE-001]`)**: Implementación de `deleteRemoteRecord` con soft-delete (`deleted_at = now()`) en Supabase y `triggerBackgroundPush` no bloqueante al crear transacciones; volcado preventivo (*flush*) en `logout()` con timeout 2000 ms previo a la purga de stores; 53/53 tests en verde (100%), 0 errores TS.
-  - **Integración Reactiva de Avatar de Google OAuth (`[GOOGLE-OAUTH-AVATAR-INTEGRATION-001]`)**: Extracción dual de avatar (`avatar_url` / `picture` OIDC), inyección en `user.avatarUrl`, visualización en `UserProfileCard` (Ajustes) y `DashboardHeader` (Dashboard) con fallback a ícono neón; 53/53 tests en verde (100%), 0 errores TS.
 - **Próximo Foco Inmediato**:
-  - Inicialización de Git, creación de repositorio en GitHub y despliegue en Vercel.
+  - Push de los cambios a GitHub para despliegue automático en Vercel y verificación en caliente.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
 - ❌ **NO modificar estilos ni layouts visuales preexistentes** a menos que el usuario lo solicite explícitamente (`Visual Freeze`).
@@ -57,6 +58,7 @@
 - **Congelamiento visual al volver de modales (`react-freeze`)**: Resuelto con `focusRefreshKey` en `useFocusEffect` y cálculo en `useMemo`.
 - **Reversión Contable Integral**: Transacciones vinculadas ejecutan rollback automático e inverso en `useDebtsStore` al eliminarse.
 - **Protección de Consumos en Cuotas**: Bloqueo preventivo de eliminación para compras diferidas con amortizaciones previas registradas para evitar inconsistencias contables.
+- **Destello Web y Saldos en Cero Post-Login**: Resuelto con guardián `<Redirect>` en `app/(app)/_layout.tsx` y pantalla de carga inmersiva `isSyncingInitial` en Dashboard durante la hidratación desde Supabase.
 
 ## 5. Referencia Histórica
 - Para la bitácora histórica completa de tareas concluidas, archivos modificados y trazabilidad técnica, consultar bajo demanda: `HISTORY.md`.

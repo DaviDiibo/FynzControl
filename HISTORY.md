@@ -7,6 +7,38 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[WEB-AUTH-GUARD-AND-INITIAL-SYNC-LOADER-001]` (2026-10-23): Guardián declarativo de autenticación web y pantalla de carga de sincronización inicial:
+  - Archivos intervenidos:
+    * `app/(app)/_layout.tsx`
+    * `src/services/sync-service.ts`
+    * `app/(app)/(tabs)/index.tsx`
+  - Resumen técnico:
+    - Erradicación del destello del Dashboard previo al login en web mediante guardián declarativo con `<Redirect href="/(auth)/login" />` en `app/(app)/_layout.tsx`.
+    - Creación del estado reactivo de sincronización inicial en `sync-service.ts` (`subscribeToInitialSync`, `notifySyncListeners`) con timeout defensivo de 4000ms.
+    - Pantalla de carga inmersiva cyberpunk en `app/(app)/(tabs)/index.tsx` durante `isSyncingInitial`, mostrando spinner neón y badge `[ SINCRONIZANDO FINANZAS ]` en lugar de saldos en $0,00 hasta que los datos reales de Supabase terminan de hidratarse.
+  - Verificación y calidad: 53/53 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[VERCEL-PRODUCTION-DEPLOYMENT-SUCCESS-001]` (2026-10-23): Despliegue exitoso en producción web en Vercel:
+  - Archivos intervenidos:
+    * `HISTORY.md`
+    * `Memory.md`
+  - Resumen técnico:
+    - Despliegue en producción exitoso en Vercel conectado al repositorio GitHub `DaviDiibo/FynzControl`.
+    - Compilación estática de Expo Router (`dist/`), renderizado web fluido de la interfaz cyberpunk, soporte de autenticación híbrida (Email/Password + Google OAuth) y navegación SPA.
+    - Verificación: 100% operativo en producción web en caliente.
+  - Verificación y calidad: 53/53 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[GITHUB-REPOSITORY-INITIALIZATION-AND-PUSH-001]` (2026-10-23): Inicialización de repositorio Git y push inicial a GitHub:
+  - Archivos intervenidos:
+    * Repositorio completo (212 archivos versionados)
+    * `.gitignore`
+  - Resumen técnico:
+    - Inicialización de repositorio Git en rama `main`.
+    - Vinculación y push exitoso al repositorio remoto oficial: `https://github.com/DaviDiibo/FynzControl.git`.
+    - 212 archivos versionados con exclusión total de credenciales sensibles (`.env*`) y artefactos temporales (`node_modules/`, `dist/`, `.expo/`).
+    - Estado de árbol de trabajo limpio (`working tree clean`) en rama `main`.
+  - Verificación y calidad: 53/53 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[VERCEL-WEB-DEPLOYMENT-PREPARATION-001]` (2026-10-23): Preparación y configuración de exportación web para despliegue en Vercel:
   - Archivos intervenidos:
     * `package.json`

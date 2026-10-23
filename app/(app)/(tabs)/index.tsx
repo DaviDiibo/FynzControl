@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import type { JSX } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, Text, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { colors } from '../../../src/theme/colors';
@@ -13,9 +13,21 @@ import RecentTransactionsList, {
 } from '../../../src/components/dashboard/recent-transactions-list';
 import { useTransactionsStore } from '../../../src/store/transactions-store';
 import { useSettingsStore } from '../../../src/store/settings-store';
+import {
+  subscribeToInitialSync,
+  isInitialSyncing,
+} from '../../../src/services/sync-service';
 
 const DashboardScreen = (): JSX.Element => {
   const router = useRouter();
+  const [isSyncingInitial, setIsSyncingInitial] = useState<boolean>(() => isInitialSyncing());
+
+  useEffect(() => {
+    const unsubscribe = subscribeToInitialSync(setIsSyncingInitial);
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   const transactions = useTransactionsStore((state) => state.transactions);
   const currentMonthIncome = useTransactionsStore((state) =>
@@ -40,6 +52,23 @@ const DashboardScreen = (): JSX.Element => {
     dateFormatted: t.dateFormatted,
     currency: currencySymbol,
   }));
+
+  if (isSyncingInitial) {
+    return (
+      <SafeAreaView style={styles.syncSafeArea}>
+        <View style={styles.syncContainer}>
+          <View style={styles.syncBadge}>
+            <Text style={styles.syncBadgeText}>[ SINCRONIZANDO FINANZAS ]</Text>
+          </View>
+          <ActivityIndicator size="large" color="#00FFA3" style={styles.syncSpinner} />
+          <Text style={styles.syncTitle}>Cargando tus finanzas...</Text>
+          <Text style={styles.syncSubtitle}>
+            Descargando tus movimientos, cuentas y tarjetas seguras...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -87,6 +116,47 @@ const DashboardScreen = (): JSX.Element => {
 };
 
 const styles = StyleSheet.create({
+  syncSafeArea: {
+    flex: 1,
+    backgroundColor: '#121212',
+  },
+  syncContainer: {
+    flex: 1,
+    backgroundColor: '#121212',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  syncBadge: {
+    backgroundColor: '#1E1E1E',
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  syncBadgeText: {
+    color: '#00FFA3',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  syncSpinner: {
+    marginVertical: 24,
+  },
+  syncTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  syncSubtitle: {
+    color: '#A0A0A0',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,

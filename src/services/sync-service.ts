@@ -49,6 +49,25 @@ const mergeById = <T extends { id: string }>(local: T[], remote: T[]): T[] => {
 
 let isSyncInProgress = false;
 
+export type SyncStateListener = (isSyncing: boolean) => void;
+let isInitialSyncActive = false;
+const syncListeners = new Set<SyncStateListener>();
+
+export const notifySyncListeners = (status: boolean): void => {
+  isInitialSyncActive = status;
+  syncListeners.forEach((listener) => listener(status));
+};
+
+export const subscribeToInitialSync = (listener: SyncStateListener): (() => void) => {
+  syncListeners.add(listener);
+  listener(isInitialSyncActive);
+  return () => {
+    syncListeners.delete(listener);
+  };
+};
+
+export const isInitialSyncing = (): boolean => isInitialSyncActive;
+
 export const syncPush = async (userId?: string): Promise<SyncResult> => {
   try {
     let targetUserId = userId;
@@ -310,6 +329,11 @@ export const syncAll = async (userId?: string): Promise<SyncResult> => {
   }
 
   isSyncInProgress = true;
+  notifySyncListeners(true);
+  const safetyTimeout = setTimeout(() => {
+    notifySyncListeners(false);
+  }, 4000);
+
   try {
     let targetUserId = userId;
     if (!targetUserId) {
@@ -342,6 +366,8 @@ export const syncAll = async (userId?: string): Promise<SyncResult> => {
       error instanceof Error ? error.message : 'Error imprevisto durante syncAll';
     return { success: false, offline: true, error: errMessage };
   } finally {
+    clearTimeout(safetyTimeout);
+    notifySyncListeners(false);
     isSyncInProgress = false;
   }
 };
@@ -392,6 +418,8 @@ export const syncService = {
   deleteRemoteRecord,
   triggerBackgroundPush,
   isSyncing: (): boolean => isSyncInProgress,
+  isInitialSyncing,
+  subscribeToInitialSync,
 };
 
 setTransactionSyncHandlers({
