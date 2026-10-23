@@ -34,6 +34,20 @@ const safeStorage: StateStorage = {
   },
 };
 
+export type DebtSyncHandlers = {
+  onDebtAddedOrUpdated?: () => void;
+  onPersonalDebtDeleted?: (id: string) => void;
+  onFriendLoanDeleted?: (id: string) => void;
+  onThirdPartyChargeDeleted?: (id: string) => void;
+  onPersonDeleted?: (id: string) => void;
+};
+
+let debtSyncHandlers: DebtSyncHandlers = {};
+
+export const setDebtSyncHandlers = (handlers: DebtSyncHandlers): void => {
+  debtSyncHandlers = handlers;
+};
+
 export type DebtCategory = 'credit_card' | 'loan' | 'mortgage' | 'other';
 export type DebtType = 'credit_card' | 'installment_loan';
 export type DebtDirection = 'i_owe' | 'they_owe_me'; // 'i_owe' = Deuda propia; 'they_owe_me' = Préstamo dado a tercero
@@ -257,13 +271,16 @@ export const useDebtsStore = create<DebtsState>()(
         set((state) => ({
           people: [...state.people, newPerson],
         }));
+        debtSyncHandlers.onDebtAddedOrUpdated?.();
         return newPerson;
       },
 
-      deletePerson: (id: string): void =>
+      deletePerson: (id: string): void => {
         set((state) => ({
           people: state.people.filter((p) => p.id !== id),
-        })),
+        }));
+        debtSyncHandlers.onPersonDeleted?.(id);
+      },
 
       addPersonalDebt: (
         debt: Omit<PersonalDebt, 'id' | 'createdAt'> & { createdAt?: string }
@@ -301,6 +318,7 @@ export const useDebtsStore = create<DebtsState>()(
         set((state) => ({
           personalDebts: [...state.personalDebts, newDebt],
         }));
+        debtSyncHandlers.onDebtAddedOrUpdated?.();
         return newDebt;
       },
 
@@ -322,10 +340,11 @@ export const useDebtsStore = create<DebtsState>()(
         set((state) => ({
           personalDebts: state.personalDebts.filter((d) => d.id !== id),
         }));
+        debtSyncHandlers.onPersonalDebtDeleted?.(id);
         return true;
       },
 
-      payPersonalDebt: (id, amount, options): void =>
+      payPersonalDebt: (id, amount, options): void => {
         set((state) => ({
           personalDebts: state.personalDebts.map((debt) => {
             if (debt.id !== id) return debt;
@@ -399,9 +418,11 @@ export const useDebtsStore = create<DebtsState>()(
               lastPaymentDate: new Date().toISOString(),
             };
           }),
-        })),
+        }));
+        debtSyncHandlers.onDebtAddedOrUpdated?.();
+      },
 
-      revertPersonalDebtPayment: (debtId, amount, options): void =>
+      revertPersonalDebtPayment: (debtId, amount, options): void => {
         set((state) => ({
           personalDebts: state.personalDebts.map((debt) => {
             if (debt.id !== debtId) return debt;
@@ -467,7 +488,9 @@ export const useDebtsStore = create<DebtsState>()(
               settledAt: isSettled ? (debt.settledAt ?? new Date().toISOString()) : undefined,
             };
           }),
-        })),
+        }));
+        debtSyncHandlers.onDebtAddedOrUpdated?.();
+      },
 
       addThirdPartyCharge: (charge: {
         personName: string;
@@ -556,12 +579,15 @@ export const useDebtsStore = create<DebtsState>()(
           people: updatedPeople,
           thirdPartyCharges: [...state.thirdPartyCharges, newCharge],
         }));
+        debtSyncHandlers.onDebtAddedOrUpdated?.();
       },
 
-      deleteThirdPartyCharge: (chargeId: string): void =>
+      deleteThirdPartyCharge: (chargeId: string): void => {
         set((state) => ({
           thirdPartyCharges: state.thirdPartyCharges.filter((c) => c.id !== chargeId),
-        })),
+        }));
+        debtSyncHandlers.onThirdPartyChargeDeleted?.(chargeId);
+      },
 
       recordThirdPartyInstallmentAbono: (chargeId: string, amount: number): void => {
         set((state) => ({
@@ -587,6 +613,7 @@ export const useDebtsStore = create<DebtsState>()(
             };
           }),
         }));
+        debtSyncHandlers.onDebtAddedOrUpdated?.();
       },
 
       recordMonthlyPersonAbono: (
@@ -795,6 +822,7 @@ export const useDebtsStore = create<DebtsState>()(
               return update ? { ...charge, ...update } : charge;
             }),
           }));
+          debtSyncHandlers.onDebtAddedOrUpdated?.();
         }
 
         return { updatedCharges, allocations };
@@ -831,6 +859,7 @@ export const useDebtsStore = create<DebtsState>()(
             };
           }),
         }));
+        debtSyncHandlers.onDebtAddedOrUpdated?.();
       },
 
       revertThirdPartyChargeCollection: (chargeId: string, amount: number): void => {
@@ -855,6 +884,7 @@ export const useDebtsStore = create<DebtsState>()(
             };
           }),
         }));
+        debtSyncHandlers.onDebtAddedOrUpdated?.();
       },
 
       revertThirdPartyPersonAbono: (personName: string, amount: number): void => {
@@ -927,10 +957,11 @@ export const useDebtsStore = create<DebtsState>()(
               };
             }),
           }));
+          debtSyncHandlers.onDebtAddedOrUpdated?.();
         }
       },
 
-      settleThirdPartyCharge: (id: string): void =>
+      settleThirdPartyCharge: (id: string): void => {
         set((state) => ({
           thirdPartyCharges: state.thirdPartyCharges.map((c) =>
             c.id === id
@@ -944,9 +975,12 @@ export const useDebtsStore = create<DebtsState>()(
                 }
               : c
           ),
-        })),
+        }));
+        debtSyncHandlers.onDebtAddedOrUpdated?.();
+      },
 
-      settleThirdPartyChargeByPerson: (personName: string, cardName?: string): void =>
+      settleThirdPartyChargeByPerson: (personName: string, cardName?: string): void => {
+        let wasUpdated = false;
         set((state) => {
           const normPerson = personName.toLowerCase().replace(/[^a-z0-9]/g, '');
           const normCard = cardName ? cardName.toLowerCase().replace(/[^a-z0-9]/g, '') : null;
@@ -969,6 +1003,7 @@ export const useDebtsStore = create<DebtsState>()(
           });
 
           if (!target) return state;
+          wasUpdated = true;
 
           return {
             thirdPartyCharges: state.thirdPartyCharges.map((c) =>
@@ -984,7 +1019,11 @@ export const useDebtsStore = create<DebtsState>()(
                 : c
             ),
           };
-        }),
+        });
+        if (wasUpdated) {
+          debtSyncHandlers.onDebtAddedOrUpdated?.();
+        }
+      },
 
       getThirdPartyMonthlyBillingSummary: (referenceDate: Date = new Date()): ThirdPartyPersonMonthlySummary[] => {
         const normalizeStr = (str: string): string =>
@@ -1139,6 +1178,7 @@ export const useDebtsStore = create<DebtsState>()(
         set((state) => ({
           friendLoans: [...state.friendLoans, newLoan],
         }));
+        debtSyncHandlers.onDebtAddedOrUpdated?.();
         return newLoan;
       },
 
@@ -1163,10 +1203,11 @@ export const useDebtsStore = create<DebtsState>()(
         set((state) => ({
           friendLoans: state.friendLoans.filter((l) => l.id !== id),
         }));
+        debtSyncHandlers.onFriendLoanDeleted?.(id);
         return true;
       },
 
-      collectFriendLoan: (id: string, amount: number) =>
+      collectFriendLoan: (id: string, amount: number): void => {
         set((state) => ({
           friendLoans: state.friendLoans.map((l) => {
             if (l.id !== id) return l;
@@ -1182,9 +1223,11 @@ export const useDebtsStore = create<DebtsState>()(
               ...(isSettled ? { settledAt: new Date().toISOString() } : {}),
             };
           }),
-        })),
+        }));
+        debtSyncHandlers.onDebtAddedOrUpdated?.();
+      },
 
-      revertFriendLoanCollection: (loanId: string, amount: number) =>
+      revertFriendLoanCollection: (loanId: string, amount: number): void => {
         set((state) => ({
           friendLoans: state.friendLoans.map((loan) => {
             if (loan.id !== loanId) return loan;
@@ -1202,7 +1245,9 @@ export const useDebtsStore = create<DebtsState>()(
               settledAt: undefined,
             };
           }),
-        })),
+        }));
+        debtSyncHandlers.onDebtAddedOrUpdated?.();
+      },
 
       getTotalPersonalDebt: (): number => {
         return parseFloat(

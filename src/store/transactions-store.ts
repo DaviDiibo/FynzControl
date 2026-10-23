@@ -315,6 +315,15 @@ export const useTransactionsStore = create<TransactionsState>()(
       },
 
       removeInitialLoanTransactions: ({ debtId, loanId }): void => {
+        const toRemove = get().transactions.filter(
+          (t) =>
+            (debtId && t.relatedDebtId === debtId && t.type === 'income' && t.category === 'Desembolso Préstamo') ||
+            (loanId && t.relatedLoanId === loanId && t.type === 'expense' && t.category === 'Préstamo Otorgado')
+        );
+        toRemove.forEach((t) => {
+          syncHandlers.onTransactionDeleted?.(t.id);
+        });
+
         set((state) => ({
           transactions: state.transactions.filter((t) => {
             if (debtId && t.relatedDebtId === debtId && t.type === 'income' && t.category === 'Desembolso Préstamo') {

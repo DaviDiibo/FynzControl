@@ -7,6 +7,18 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[DEBTS-REMOTE-DELETION-AND-SYNC-PERSISTENCE-001]` (2026-10-23): Sincronización y persistencia de eliminación remota en módulo de deudas y préstamos:
+  - Archivos intervenidos:
+    * `src/store/debts-store.ts`
+    * `src/services/sync-service.ts`
+    * `src/store/transactions-store.ts`
+  - Resumen técnico:
+    - Definición y registro desacoplado de `DebtSyncHandlers` (`setDebtSyncHandlers`) en `debts-store.ts` para notificar eliminaciones y mutaciones sin dependencias circulares en Metro.
+    - Conexión en `sync-service.ts` de `onPersonalDebtDeleted`, `onFriendLoanDeleted`, `onThirdPartyChargeDeleted` y `onPersonDeleted` invocando `deleteRemoteRecord` con sus tablas correspondientes en Supabase (`personal_debts`, `friend_loans`, `third_party_card_charges`, `people`), aplicando soft-delete `deleted_at = now()`.
+    - Notificación de eliminación remota en `removeInitialLoanTransactions` dentro de `transactions-store.ts` para transacciones de desembolso asociadas.
+    - Disparo reactivo en segundo plano (`triggerBackgroundPush`) ante altas y abonos en `debts-store`.
+  - Verificación y calidad: 53/53 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[WEB-AUTH-GUARD-AND-INITIAL-SYNC-LOADER-001]` (2026-10-23): Guardián declarativo de autenticación web y pantalla de carga de sincronización inicial:
   - Archivos intervenidos:
     * `app/(app)/_layout.tsx`

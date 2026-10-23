@@ -19,6 +19,7 @@
   - Cobertura de Testing (53/53 tests en verde): Suites en `src/__tests__/` con Fake Timers deterministas para ciclos de facturación, amortizaciones contables y utilidades de fechas.
   - Especificación arquitectónica relacional en `DATABASE_SCHEMA.md` para Supabase/PostgreSQL.
 - **Hitos Recientes Concluidos**:
+  - **Sincronización y Eliminación Remota de Deudas (`[DEBTS-REMOTE-DELETION-AND-SYNC-PERSISTENCE-001]`)**: Desacople con `DebtSyncHandlers` en `debts-store.ts`, soft-delete remoto (`deleted_at`) en Supabase para deudas, préstamos, cargos y personas en `sync-service.ts`, eliminación vinculada de desembolsos en `transactions-store.ts` y push en background; 53/53 tests en verde (100%), 0 errores TS.
   - **Guardián Web y Loader de Sync Inicial (`[WEB-AUTH-GUARD-AND-INITIAL-SYNC-LOADER-001]`)**: Guardián declarativo con `<Redirect href="/(auth)/login" />` en `app/(app)/_layout.tsx`; estado reactivo de sync inicial en `sync-service.ts` con timeout de 4s; pantalla de carga cyberpunk en `index.tsx` (`[ SINCRONIZANDO FINANZAS ]`) impidiendo saldos vacíos en $0,00 hasta hidratación de Supabase; 53/53 tests en verde (100%), 0 errores TS.
   - **Despliegue en Producción Web en Vercel (`[VERCEL-PRODUCTION-DEPLOYMENT-SUCCESS-001]`)**: Vinculación y despliegue exitoso en Vercel desde GitHub (`DaviDiibo/FynzControl`), compilación estática Expo Router (`dist/`), soporte de autenticación híbrida (Email/Password + Google OAuth), navegación SPA fluida y 100% operativo en caliente.
   - **Inicialización y Push a GitHub (`[GITHUB-REPOSITORY-INITIALIZATION-AND-PUSH-001]`)**: Repositorio Git inicializado en rama `main`, vinculado y subido exitosamente a `https://github.com/DaviDiibo/FynzControl.git` (212 archivos versionados, exclusión total de `.env*` y temporales).
@@ -27,8 +28,6 @@
   - **Resolución de Ciclo Require en Metro (`[RESOLVE-METRO-REQUIRE-CYCLE-SYNC-STORE-001]`)**: Inversión de dependencias en `transactions-store.ts` con `setTransactionSyncHandlers` y desacople en `sync-service.ts`, logrando flujo unidireccional y eliminando advertencia de ciclo en Metro; 53/53 tests en verde (100%), 0 errores TS.
   - **Formateo Unificado y Estado Vacío en Estadísticas (`[STATS-UNIFIED-FORMATTING-AND-EMPTY-STATE-PHASE-3-001]`)**: Formateo monetario en español (`es-ES`), supresión de mocks residuales, estado vacío contextual (`pie-chart-outline`) y clamping de porcentajes en `category-breakdown-card.tsx`; 53/53 tests en verde (100%), 0 errores TS.
   - **Ratio Real de Deuda y Salud Financiera (`[STATS-REAL-DEBT-RATIO-AND-DYNAMIC-HEALTH-PHASE-2-001]`)**: Conexión con `useDebtsStore` para compromiso mensual (`personalDebts` y cuotas de `thirdPartyCharges`), ratio de endeudamiento real `(deuda / ingresos) * 100`, semáforo dinámico (ÓPTIMO `#00FFA3`, MODERADO `#FFD60A`, CRÍTICO `#FF453A`) y barra de progreso reactiva en `financial-health-card.tsx`; 53/53 tests en verde (100%), 0 errores TS.
-  - **Filtro Temporal Dinámico en Estadísticas (`[STATS-DYNAMIC-TEMPORAL-FILTER-PHASE-1-001]`)**: Eliminación de multiplicadores artificiales, selector de año dinámico (`Año ${YYYY}`), filtrado de transacciones por mes/trimestre/año con `parseTxDate`, totales reactivos (`periodIncome`, `periodExpense`, `periodNet`, `savingsRate`), desglose por categorías dinámico y variación real vs período previo; 53/53 tests en verde (100%), 0 errores TS.
-  - **Filtro Mensual Dinámico (`[TRANSACTIONS-DYNAMIC-MONTHLY-FILTER-001]`)**: Reemplazo de arreglo estático `AVAILABLE_MONTHS` por navegación temporal ilimitada (`selectedDate: Date`), toggle de histórico completo, filtrado resiliente de fechas (`isSameMonthAndYear`) y cálculo reactivo de métricas mensuales (`monthlyIncome`, `monthlyExpense`, `monthlyNet`); 53/53 tests en verde (100%), 0 errores TS.
 - **Próximo Foco Inmediato**:
   - Push de los cambios a GitHub para despliegue automático en Vercel y verificación en caliente.
 
@@ -59,6 +58,7 @@
 - **Reversión Contable Integral**: Transacciones vinculadas ejecutan rollback automático e inverso en `useDebtsStore` al eliminarse.
 - **Protección de Consumos en Cuotas**: Bloqueo preventivo de eliminación para compras diferidas con amortizaciones previas registradas para evitar inconsistencias contables.
 - **Destello Web y Saldos en Cero Post-Login**: Resuelto con guardián `<Redirect>` en `app/(app)/_layout.tsx` y pantalla de carga inmersiva `isSyncingInitial` en Dashboard durante la hidratación desde Supabase.
+- **Reaparición de Préstamos Eliminados tras Logout**: Resuelto conectando `DebtSyncHandlers` con `deleteRemoteRecord` (`deleted_at`) en `sync-service.ts`.
 
 ## 5. Referencia Histórica
 - Para la bitácora histórica completa de tareas concluidas, archivos modificados y trazabilidad técnica, consultar bajo demanda: `HISTORY.md`.

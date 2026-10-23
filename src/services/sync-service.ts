@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { useCardsStore } from '../store/cards-store';
-import { useDebtsStore } from '../store/debts-store';
+import { useDebtsStore, setDebtSyncHandlers } from '../store/debts-store';
 import { useTransactionsStore, setTransactionSyncHandlers } from '../store/transactions-store';
 import {
   bankToRow,
@@ -428,5 +428,23 @@ setTransactionSyncHandlers({
   },
   onTransactionDeleted: (id: string): void => {
     syncService.deleteRemoteRecord('transactions', id).catch(() => {});
+  },
+});
+
+setDebtSyncHandlers({
+  onDebtAddedOrUpdated: (): void => {
+    syncService.triggerBackgroundPush();
+  },
+  onPersonalDebtDeleted: (id: string): void => {
+    syncService.deleteRemoteRecord('personal_debts', id).catch(() => {});
+  },
+  onFriendLoanDeleted: (id: string): void => {
+    syncService.deleteRemoteRecord('friend_loans', id).catch(() => {});
+  },
+  onThirdPartyChargeDeleted: (id: string): void => {
+    syncService.deleteRemoteRecord('third_party_card_charges', id).catch(() => {});
+  },
+  onPersonDeleted: (id: string): void => {
+    syncService.deleteRemoteRecord('people', id).catch(() => {});
   },
 });
