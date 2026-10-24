@@ -7,6 +7,17 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[DASHBOARD-RESPONSIVE-2-COLUMN-LAYOUT-001]` (2026-10-23): Layout responsivo en 2 columnas para el Dashboard en pantallas de escritorio y tablets:
+  - Archivos intervenidos:
+    * `app/(app)/(tabs)/index.tsx`
+    * `src-tauri/tauri.conf.json`
+  - Resumen técnico:
+    - Implementación de layout responsivo en 2 columnas para el Dashboard usando `useWindowDimensions()` con breakpoint `width >= 768px`.
+    - Distribución equilibrada en pantalla ancha: Columna Izquierda con `BalanceHeroCard` y `QuickActionsGrid`; Columna Derecha con `UpcomingDebtsCard` y `RecentTransactionsList`; contenedor acotado a `maxWidth: 1200` y centrado en monitores grandes.
+    - Preservación 100% intacta del flujo vertical para móviles cuando `width < 768px`.
+    - Calibración de ventana en Tauri a 960x780 (min 460, max 1280) para habilitar experiencia de escritorio fluida.
+  - Verificación y calidad: 53/53 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[TAURI-WINDOW-COMPACT-SIZE-LIMITS-001]` (2026-10-23): Calibración compacta y límites de tamaño para ventana de escritorio en Tauri:
   - Archivos intervenidos:
     * `src-tauri/tauri.conf.json`

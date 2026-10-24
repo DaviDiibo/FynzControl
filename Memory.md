@@ -19,16 +19,17 @@
   - Cobertura de Testing (53/53 tests en verde): Suites en `src/__tests__/` con Fake Timers deterministas para ciclos de facturación, amortizaciones contables y utilidades de fechas.
   - Especificación arquitectónica relacional en `DATABASE_SCHEMA.md` para Supabase/PostgreSQL.
 - **Hitos Recientes Concluidos**:
+  - **Layout Responsivo en 2 Columnas para Dashboard (`[DASHBOARD-RESPONSIVE-2-COLUMN-LAYOUT-001]`)**: Layout en 2 columnas en `index.tsx` (`useWindowDimensions()`, breakpoint `>= 768px`, max-width 1200) separando balance/acciones rápidas (izq) y deudas/transacciones (der); ventana Tauri calibrada a 960x780; móvil vertical 100% preservado; 53/53 tests en verde (100%), 0 errores TS.
   - **Calibración Compacta de Ventana en Tauri (`[TAURI-WINDOW-COMPACT-SIZE-LIMITS-001]`)**: Dimensiones compactas smartphone/phablet (`width: 460`, `height: 860`, `center: true`) y límites de redimensión defensivos (`minWidth: 400`, `minHeight: 680`, `maxWidth: 580`, `maxHeight: 980`) para preservar ergonomía mobile-first en escritorio; 53/53 tests en verde (100%), 0 errores TS.
   - **Estrategia Dual-Branch y Vercel Build Optimization (`[GIT-DUAL-BRANCH-AND-VERCEL-BUILD-OPTIMIZATION-001]`)**: Arquitectura de ramas `main` (producción) y `dev` (desarrollo activo); script `scripts/vercel-ignore.sh` en `vercel.json` con smart ignore para commits `[skip ci]`, ramas no-main y diffs documentales/escritorio; 53/53 tests en verde (100%), 0 errores TS.
   - **Soporte de Escritorio Nativo con Tauri v2 (`[TAURI-V2-DESKTOP-APP-INITIALIZATION-001]`)**: Configuración e inicialización de Tauri v2 (`@tauri-apps/cli` 2.12.4, Tauri 2.12.5) bajo WebView2 en Windows; ventana 1280x850 centrada fondo `#121212`; pipeline enlazado a `dist/` (`npm run build:web`), scripts `desktop:dev` y `desktop:build`; 53/53 tests en verde (100%), 0 errores TS.
   - **Sincronización y Eliminación Remota de Deudas (`[DEBTS-REMOTE-DELETION-AND-SYNC-PERSISTENCE-001]`)**: Desacople con `DebtSyncHandlers` en `debts-store.ts`, soft-delete remoto (`deleted_at`) en Supabase para deudas, préstamos, cargos y personas en `sync-service.ts`, eliminación vinculada de desembolsos en `transactions-store.ts` y push en background; 53/53 tests en verde (100%), 0 errores TS.
   - **Guardián Web y Loader de Sync Inicial (`[WEB-AUTH-GUARD-AND-INITIAL-SYNC-LOADER-001]`)**: Guardián declarativo con `<Redirect href="/(auth)/login" />` en `app/(app)/_layout.tsx`; estado reactivo de sync inicial en `sync-service.ts` con timeout de 4s; pantalla de carga cyberpunk en `index.tsx` (`[ SINCRONIZANDO FINANZAS ]`) impidiendo saldos vacíos en $0,00 hasta hidratación de Supabase; 53/53 tests en verde (100%), 0 errores TS.
   - **Despliegue en Producción Web en Vercel (`[VERCEL-PRODUCTION-DEPLOYMENT-SUCCESS-001]`)**: Vinculación y despliegue exitoso en Vercel desde GitHub (`DaviDiibo/FynzControl`), compilación estática Expo Router (`dist/`), soporte de autenticación híbrida (Email/Password + Google OAuth), navegación SPA fluida y 100% operativo en caliente.
-  - **Inicialización y Push a GitHub (`[GITHUB-REPOSITORY-INITIALIZATION-AND-PUSH-001]`)**: Repositorio Git inicializado en rama `main`, vinculado y subido exitosamente a `https://github.com/DaviDiibo/FynzControl.git` (212 archivos versionados, exclusión total de `.env*` y temporales).
+
 
 - **Próximo Foco Inmediato**:
-  - Probar la ventana compacta de escritorio con `npm run desktop:dev` en la rama `dev`.
+  - Probar el Dashboard responsivo en Tauri con `npm run desktop:dev` en la rama `dev`.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
 - ❌ **NO desarrollar directamente en rama `main`**: Operar siempre sobre `dev`; mergear hacia `main` únicamente al cerrar bloques grandes de tareas consolidadas y verificadas.

@@ -13,11 +13,11 @@
     "windows": [
       {
         "title": "ControlFynz",
-        "width": 460,
-        "height": 860,
-        "minWidth": 400,
+        "width": 960,
+        "height": 780,
+        "minWidth": 460,
         "minHeight": 680,
-        "maxWidth": 580,
+        "maxWidth": 1280,
         "maxHeight": 980,
         "center": true,
         "backgroundColor": "#121212",
