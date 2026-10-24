@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../src/theme/colors';
+import { useIsWide } from '../../../src/hooks/use-responsive';
 import DebtsSummaryCard from '../../../src/components/debts/debts-summary-card';
 import { getDebtDueStatus } from '../../../src/utils/date-helpers';
 import {
@@ -261,6 +262,7 @@ const getFriendLoanDueDateInfo = (dueDateStr?: string): FriendLoanDueDateInfo =>
 };
 
 const DebtsScreen = (): JSX.Element => {
+  const isWide = useIsWide(768);
   const [filter, setFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLoanForAbono, setSelectedLoanForAbono] = useState<FriendLoan | null>(null);
@@ -943,7 +945,7 @@ const DebtsScreen = (): JSX.Element => {
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <ScrollView
         style={styles.container}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, isWide && styles.scrollContentWide]}
         showsVerticalScrollIndicator={false}
       >
         {/* Cabecera estructurada según especificación */}
@@ -1139,28 +1141,29 @@ const DebtsScreen = (): JSX.Element => {
                     </View>
 
                     {/* Préstamos individuales ordenados de menor a mayor saldo */}
-                    {group.debts.map((item) => {
-                      const isSettled = (item.remainingAmount <= 0) || Boolean(item.settled);
-                const debtStatus = getDebtDueStatus(item.dueDay ?? 1, item.lastPaymentDate);
-                const isUpToDate = debtStatus.status === 'up_to_date' || debtStatus.isUpToDateThisMonth;
-                const dueInfo = calculateRecurringDueDate(item.dueDay, item.dueDate);
-                const urgency = getUrgencyInfo(dueInfo.daysRemaining);
-                const paid = Math.max(0, item.totalAmount - item.remainingAmount);
-                const pct =
-                  item.totalAmount > 0
-                    ? Math.min(100, Math.round((paid / item.totalAmount) * 100))
-                    : 0;
-                const totalInstallments = item.totalInstallments || 0;
-                const paidInstallments = item.paidInstallments || 0;
-                const remainingInstallments = Math.max(0, totalInstallments - paidInstallments);
-                const hasRecordedPayments = item.isPreexisting
-                  ? (item.totalActualPaid || 0) > 0
-                  : (item.paidInstallments || 0) > 0 ||
-                    (item.totalActualPaid || 0) > 0 ||
-                    item.remainingAmount < item.totalAmount;
+                    <View style={[styles.cardsGrid, isWide && styles.cardsGridWide]}>
+                      {group.debts.map((item) => {
+                        const isSettled = (item.remainingAmount <= 0) || Boolean(item.settled);
+                  const debtStatus = getDebtDueStatus(item.dueDay ?? 1, item.lastPaymentDate);
+                  const isUpToDate = debtStatus.status === 'up_to_date' || debtStatus.isUpToDateThisMonth;
+                  const dueInfo = calculateRecurringDueDate(item.dueDay, item.dueDate);
+                  const urgency = getUrgencyInfo(dueInfo.daysRemaining);
+                  const paid = Math.max(0, item.totalAmount - item.remainingAmount);
+                  const pct =
+                    item.totalAmount > 0
+                      ? Math.min(100, Math.round((paid / item.totalAmount) * 100))
+                      : 0;
+                  const totalInstallments = item.totalInstallments || 0;
+                  const paidInstallments = item.paidInstallments || 0;
+                  const remainingInstallments = Math.max(0, totalInstallments - paidInstallments);
+                  const hasRecordedPayments = item.isPreexisting
+                    ? (item.totalActualPaid || 0) > 0
+                    : (item.paidInstallments || 0) > 0 ||
+                      (item.totalActualPaid || 0) > 0 ||
+                      item.remainingAmount < item.totalAmount;
 
-                return (
-                  <View key={item.id} style={styles.card}>
+                  return (
+                    <View key={item.id} style={[styles.card, isWide && styles.cardWide]}>
                     {/* Cabecera de la tarjeta: Título + Entidad Bancaria + Urgencia / Liquidado */}
                     <View style={styles.cardHeader}>
                       <View
@@ -1366,6 +1369,7 @@ const DebtsScreen = (): JSX.Element => {
                     </View>
                   );
                 })}
+                    </View>
               </View>
             );
           })
@@ -1433,55 +1437,72 @@ const DebtsScreen = (): JSX.Element => {
                     </View>
 
                     {filteredThirdPartySummaries.length > 0 ? (
-                      filteredThirdPartySummaries.map((summary, summaryIdx) => {
-                        const summaryKey = `${summary.personId || summary.personName}-${summaryIdx}`;
-                        const isExpanded = !collapsedSummaries[summaryKey];
-                        const isCollapsed = !isExpanded;
-                        return (
-                          <View
-                            key={summaryKey}
-                            style={[
-                              styles.thirdPartySummaryCard,
-                              summary.totalRemainingDebt <= 0 && styles.thirdPartySummaryCardSettled,
-                            ]}
-                          >
-                            {/* Fila superior (Header) */}
-                            <View style={styles.summaryHeaderRow}>
-                              <View style={styles.summaryHeaderLeft}>
-                                <View style={styles.personNameAccentBar} />
-                                <View style={styles.summaryHeaderTextCol}>
-                                  <Text style={styles.summaryPersonName}>{summary.personName}</Text>
-                                  <View style={styles.summaryCardPillsRow}>
-                                    <View style={styles.summaryCardPill}>
-                                      <Text style={styles.summaryCardPillText}>💳 {summary.cardName}</Text>
-                                    </View>
-                                    <View style={styles.summaryCountPill}>
-                                      <Text style={styles.summaryCountPillText}>
-                                        {summary.chargesCount === 1 ? '1 compra' : `${summary.chargesCount} compras`}
-                                      </Text>
+                      <View style={[styles.cardsGrid, isWide && styles.cardsGridWide]}>
+                        {filteredThirdPartySummaries.map((summary, summaryIdx) => {
+                          const summaryKey = `${summary.personId || summary.personName}-${summaryIdx}`;
+                          const isExpanded = !collapsedSummaries[summaryKey];
+                          const isCollapsed = !isExpanded;
+                          const uniqueCardNames = Array.from(
+                            new Set(
+                              summary.charges
+                                .map((c) => (c.cardName || '').trim())
+                                .filter((name) => name.length > 0)
+                            )
+                          );
+                          const cardsToDisplay = uniqueCardNames.length > 0 ? uniqueCardNames : ['Tarjeta'];
+
+                          return (
+                            <View
+                              key={summaryKey}
+                              style={[
+                                styles.thirdPartySummaryCard,
+                                isWide && styles.cardWide,
+                                summary.totalRemainingDebt <= 0 && styles.thirdPartySummaryCardSettled,
+                              ]}
+                            >
+                              {/* Fila superior (Header) */}
+                              <View style={styles.summaryHeaderRow}>
+                                <View style={styles.summaryHeaderLeft}>
+                                  <View style={styles.personNameAccentBar} />
+                                  <View style={styles.summaryHeaderTextCol}>
+                                    <Text style={styles.summaryPersonName} numberOfLines={1} ellipsizeMode="tail">
+                                      {summary.personName}
+                                    </Text>
+                                    <View style={styles.summaryCardPillsRow}>
+                                      {cardsToDisplay.map((cardItemName) => (
+                                        <View key={cardItemName} style={styles.summaryCardPill}>
+                                          <Text style={styles.summaryCardPillText} numberOfLines={1} ellipsizeMode="tail">
+                                            💳 {cardItemName}
+                                          </Text>
+                                        </View>
+                                      ))}
+                                      <View style={styles.summaryCountPill}>
+                                        <Text style={styles.summaryCountPillText}>
+                                          {summary.chargesCount === 1 ? '1 compra' : `${summary.chargesCount} compras`}
+                                        </Text>
+                                      </View>
                                     </View>
                                   </View>
                                 </View>
+                                {summary.totalRemainingDebt <= 0 ? (
+                                  <View style={styles.cycleSettledBadge}>
+                                    <Ionicons name="trophy" size={12} color="#00FFA3" />
+                                    <Text style={styles.cycleSettledBadgeText}>
+                                      🏆 SALDADO ESTE CICLO ($0.00 PENDIENTE)
+                                    </Text>
+                                  </View>
+                                ) : summary.isMonthSettled ? (
+                                  <View style={styles.monthSettledBadge}>
+                                    <Ionicons name="checkmark-circle" size={12} color="#00FFA3" />
+                                    <Text style={styles.monthSettledBadgeText}>AL DÍA ESTE MES</Text>
+                                  </View>
+                                ) : (
+                                  <View style={styles.monthPendingBadge}>
+                                    <Ionicons name="time-outline" size={12} color="#FF9F0A" />
+                                    <Text style={styles.monthPendingBadgeText}>CUOTA PENDIENTE</Text>
+                                  </View>
+                                )}
                               </View>
-                              {summary.totalRemainingDebt <= 0 ? (
-                                <View style={styles.cycleSettledBadge}>
-                                  <Ionicons name="trophy" size={12} color="#00FFA3" />
-                                  <Text style={styles.cycleSettledBadgeText}>
-                                    🏆 SALDADO ESTE CICLO ($0.00 PENDIENTE)
-                                  </Text>
-                                </View>
-                              ) : summary.isMonthSettled ? (
-                                <View style={styles.monthSettledBadge}>
-                                  <Ionicons name="checkmark-circle" size={12} color="#00FFA3" />
-                                  <Text style={styles.monthSettledBadgeText}>AL DÍA ESTE MES</Text>
-                                </View>
-                              ) : (
-                                <View style={styles.monthPendingBadge}>
-                                  <Ionicons name="time-outline" size={12} color="#FF9F0A" />
-                                  <Text style={styles.monthPendingBadgeText}>CUOTA PENDIENTE</Text>
-                                </View>
-                              )}
-                            </View>
 
                             {/* Fila central (Compromiso del Mes vs Deuda Global) */}
                             <View style={[styles.summaryCommitmentBox, summary.totalRemainingDebt <= 0 && styles.summaryCommitmentBoxSettled]}>
@@ -1546,7 +1567,9 @@ const DebtsScreen = (): JSX.Element => {
                                       <View style={styles.thirdPartyCardGroupHeader}>
                                         <View style={styles.thirdPartyCardGroupHeaderLeft}>
                                           <Ionicons name="card-outline" size={14} color="#64D2FF" />
-                                          <Text style={styles.thirdPartyCardGroupNameText}>{cGroup.cardName}</Text>
+                                          <Text style={styles.thirdPartyCardGroupNameText} numberOfLines={1} ellipsizeMode="tail">
+                                            {cGroup.cardName}
+                                          </Text>
                                         </View>
                                         <View style={styles.thirdPartyCardGroupBadge}>
                                           <Text style={styles.thirdPartyCardGroupBadgeText}>
@@ -1748,7 +1771,8 @@ const DebtsScreen = (): JSX.Element => {
                             )}
                           </View>
                         );
-                      })
+                      })}
+                      </View>
                     ) : (
                       <View style={styles.emptySectionCard}>
                         <Ionicons name="card-outline" size={32} color="#00FFA3" />
@@ -1788,14 +1812,15 @@ const DebtsScreen = (): JSX.Element => {
                       </View>
                     </View>
 
-                    {activeFriendLoans.map((loan) => {
-                      const dueInfo = getFriendLoanDueDateInfo(loan.dueDate);
-                      const hasLoanPayments = loan.isPreexisting
-                        ? (loan.paidAmount || 0) > (loan.initialPaidAmount || 0)
-                        : (loan.paidAmount || 0) > 0 ||
-                          loan.remainingAmount < (loan.totalAmount ?? loan.totalToCollect);
-                      return (
-                        <View key={loan.id} style={styles.card}>
+                    <View style={[styles.cardsGrid, isWide && styles.cardsGridWide]}>
+                      {activeFriendLoans.map((loan) => {
+                        const dueInfo = getFriendLoanDueDateInfo(loan.dueDate);
+                        const hasLoanPayments = loan.isPreexisting
+                          ? (loan.paidAmount || 0) > (loan.initialPaidAmount || 0)
+                          : (loan.paidAmount || 0) > 0 ||
+                            loan.remainingAmount < (loan.totalAmount ?? loan.totalToCollect);
+                        return (
+                          <View key={loan.id} style={[styles.card, isWide && styles.cardWide]}>
                           <View style={styles.cardHeader}>
                             <View style={styles.cardIconWrapperBlue}>
                               <Ionicons name="cash-outline" size={18} color="#0A84FF" />
@@ -1944,6 +1969,7 @@ const DebtsScreen = (): JSX.Element => {
                         </View>
                       );
                     })}
+                    </View>
                   </View>
                 )}
               </>
@@ -1979,13 +2005,14 @@ const DebtsScreen = (): JSX.Element => {
                       </Text>
                     </View>
 
-                    {settledPersonalDebts.map((item) => {
-                      const paid = item.totalAmount;
-                      const totalInstallments = item.totalInstallments || 0;
-                      const paidInstallments = item.paidInstallments || totalInstallments;
+                    <View style={[styles.cardsGrid, isWide && styles.cardsGridWide]}>
+                      {settledPersonalDebts.map((item) => {
+                        const paid = item.totalAmount;
+                        const totalInstallments = item.totalInstallments || 0;
+                        const paidInstallments = item.paidInstallments || totalInstallments;
 
-                      return (
-                        <View key={`settled-${item.id}`} style={[styles.card, styles.settledCardMuted]}>
+                        return (
+                          <View key={`settled-${item.id}`} style={[styles.card, styles.settledCardMuted, isWide && styles.cardWide]}>
                           <View style={styles.cardHeader}>
                             <View style={styles.cardIconWrapperNeon}>
                               <Ionicons name="checkmark-done" size={18} color="#00FFA3" />
@@ -2090,6 +2117,7 @@ const DebtsScreen = (): JSX.Element => {
                         </View>
                       );
                     })}
+                    </View>
                   </View>
                 )}
 
@@ -2106,9 +2134,10 @@ const DebtsScreen = (): JSX.Element => {
                       </Text>
                     </View>
 
-                    {settledFriendLoans.map((loan) => {
-                      return (
-                        <View key={`settled-loan-${loan.id}`} style={[styles.card, styles.settledCardMuted]}>
+                    <View style={[styles.cardsGrid, isWide && styles.cardsGridWide]}>
+                      {settledFriendLoans.map((loan) => {
+                        return (
+                          <View key={`settled-loan-${loan.id}`} style={[styles.card, styles.settledCardMuted, isWide && styles.cardWide]}>
                           <View style={styles.cardHeader}>
                             <View style={styles.cardIconWrapperNeon}>
                               <Ionicons name="checkmark-done" size={18} color="#00FFA3" />
@@ -2178,6 +2207,7 @@ const DebtsScreen = (): JSX.Element => {
                         </View>
                       );
                     })}
+                    </View>
                   </View>
                 )}
 
@@ -2197,17 +2227,18 @@ const DebtsScreen = (): JSX.Element => {
                       </Text>
                     </View>
 
-                    {filteredSettledThirdPartyCharges.map((charge) => {
-                      const originalAmount = charge.totalAmount || charge.amount;
-                      const isSingle = charge.installmentsCount <= 1;
-                      const totalInstallments = charge.installmentsCount || 1;
-                      const paidInstallments = charge.paidInstallmentsCount || totalInstallments;
+                    <View style={[styles.cardsGrid, isWide && styles.cardsGridWide]}>
+                      {filteredSettledThirdPartyCharges.map((charge) => {
+                        const originalAmount = charge.totalAmount || charge.amount;
+                        const isSingle = charge.installmentsCount <= 1;
+                        const totalInstallments = charge.installmentsCount || 1;
+                        const paidInstallments = charge.paidInstallmentsCount || totalInstallments;
 
-                      return (
-                        <View
-                          key={`settled-charge-${charge.id}`}
-                          style={[styles.card, styles.settledCardMuted]}
-                        >
+                        return (
+                          <View
+                            key={`settled-charge-${charge.id}`}
+                            style={[styles.card, styles.settledCardMuted, isWide && styles.cardWide]}
+                          >
                           <View style={styles.cardHeader}>
                             <View style={styles.cardIconWrapperNeon}>
                               <Ionicons name="card" size={18} color="#00FFA3" />
@@ -2312,6 +2343,7 @@ const DebtsScreen = (): JSX.Element => {
                         </View>
                       );
                     })}
+                    </View>
                   </View>
                 )}
               </>
@@ -3312,6 +3344,25 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 110,
     gap: 18,
+  },
+  scrollContentWide: {
+    maxWidth: 1200,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  cardsGrid: {
+    width: '100%',
+    gap: 12,
+  },
+  cardsGridWide: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  cardWide: {
+    width: '48.5%',
+    flexGrow: 0,
+    flexShrink: 0,
   },
   header: {
     gap: 8,
@@ -4594,23 +4645,27 @@ const styles = StyleSheet.create({
   summaryHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   summaryHeaderLeft: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 10,
     flex: 1,
+    minWidth: 0,
+    marginRight: 8,
   },
   personNameAccentBar: {
     width: 4,
-    height: 36,
+    height: 18,
+    marginTop: 2,
     borderRadius: 2,
     backgroundColor: '#00FFA3',
   },
   summaryHeaderTextCol: {
     gap: 3,
     flex: 1,
+    minWidth: 0,
   },
   summaryPersonName: {
     fontSize: 16,
@@ -4630,6 +4685,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
+    maxWidth: 160,
+    flexShrink: 1,
   },
   summaryCardPillText: {
     color: colors.textSecondary,
@@ -4660,6 +4717,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    flexShrink: 0,
+    alignSelf: 'flex-start',
   },
   monthSettledBadgeText: {
     color: '#00FFA3',
@@ -4677,6 +4736,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    flexShrink: 0,
+    alignSelf: 'flex-start',
   },
   monthPendingBadgeText: {
     color: '#FF9F0A',
@@ -5410,17 +5471,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flex: 1,
+    minWidth: 0,
+    marginRight: 8,
   },
   thirdPartyCardGroupNameText: {
     fontSize: 12,
     fontWeight: '700',
     color: '#64D2FF',
+    flexShrink: 1,
   },
   thirdPartyCardGroupBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    flexShrink: 0,
   },
   thirdPartyCardGroupBadgeText: {
     fontSize: 11,
@@ -5529,6 +5595,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#00FFA3',
+    flexShrink: 0,
+    alignSelf: 'flex-start',
   },
   cycleSettledBadgeText: {
     fontSize: 10,

@@ -7,6 +7,17 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[DEBTS-MULTI-CARD-OVERLAP-FIX-AND-RESPONSIVE-FLEX-001]` (2026-10-24): Erradicación de sobreposición visual multi-tarjeta y layout responsivo con Flexbox en Deudas:
+  - Archivos intervenidos:
+    * `app/(app)/(tabs)/debts.tsx`
+  - Resumen técnico:
+    - Erradicación del bug de colisión y sobreposición visual cuando una persona tiene deudas en más de una tarjeta de crédito en `debts.tsx`.
+    - Sustitución de la pastilla monolítica concatenada por pastillas independientes de tarjeta (`uniqueCardNames.map`), cada una con ancho acotado (`maxWidth: 160`) y truncado `numberOfLines={1}`.
+    - Blindaje defensivo de Flexbox: `minWidth: 0` y `alignItems: 'flex-start'` en `summaryHeaderLeft`, altura calibrada en `personNameAccentBar`, `flexShrink: 0` en badges de estado y cabeceras de grupos de tarjetas.
+    - Implementación de layout responsivo con Flexbox en 2 columnas (`cardsGridWide`, `width: '48.5%'`, `gap: 16`) para préstamos bancarios, préstamos a amigos, resúmenes de terceros y deudas liquidadas en pantallas anchas (`width >= 768px`) con contenedor centrado (`maxWidth: 1200`).
+    - Preservación 100% idéntica del flujo vertical para móviles cuando `width < 768px`.
+  - Verificación y calidad: 53/53 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[DASHBOARD-RECENT-TX-INVALID-DOM-NESTING-FIX-001]` (2026-10-24): Erradicación de advertencia `validateDOMNesting` en Tauri/Web para lista de transacciones recientes:
   - Archivos intervenidos:
     * `src/components/dashboard/recent-transactions-list.tsx`
