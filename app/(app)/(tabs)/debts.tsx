@@ -3196,10 +3196,16 @@ const DebtsScreen = (): JSX.Element => {
             >
               {(() => {
                 const hasPayments = personalDebtToDelete
-                  ? personalDebtToDelete.isPreexisting
+                  ? personalDebtToDelete.totalInstallments
+                    ? (personalDebtToDelete.totalActualPaid || 0) > 0 ||
+                      (personalDebtToDelete.paidInstallments || 0) >
+                        (personalDebtToDelete.initialPaidInstallments ??
+                          (personalDebtToDelete.isPreexisting
+                            ? personalDebtToDelete.paidInstallments ?? 0
+                            : 0))
+                    : personalDebtToDelete.isPreexisting
                     ? (personalDebtToDelete.totalActualPaid || 0) > 0
-                    : (personalDebtToDelete.paidInstallments || 0) > 0 ||
-                      (personalDebtToDelete.totalActualPaid || 0) > 0 ||
+                    : (personalDebtToDelete.totalActualPaid || 0) > 0 ||
                       personalDebtToDelete.remainingAmount < personalDebtToDelete.totalAmount
                   : friendLoanToDelete
                   ? friendLoanToDelete.isPreexisting

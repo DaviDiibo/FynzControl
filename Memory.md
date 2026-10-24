@@ -16,9 +16,10 @@
   - 5 Tabs operativas: Dashboard, Movimientos, Deudas, Estadísticas y Ajustes.
   - Flujo modal de transacciones con catálogo segregado de gastos/ingresos y soporte de tarjetas diferidas.
   - Centro de Gestión de Pasivos y Cobros: Préstamos bancarios, préstamos a amigos, y Liquidación Mensual de Terceros (Fases 1 y 2).
-  - Cobertura de Testing (53/53 tests en verde): Suites en `src/__tests__/` con Fake Timers deterministas para ciclos de facturación, amortizaciones contables y utilidades de fechas.
+  - Cobertura de Testing (54/54 tests en verde): Suites en `src/__tests__/` con Fake Timers deterministas para ciclos de facturación, amortizaciones contables y utilidades de fechas.
   - Especificación arquitectónica relacional en `DATABASE_SCHEMA.md` para Supabase/PostgreSQL.
 - **Hitos Recientes Concluidos**:
+  - **Corrección en Eliminación de Deudas y Restricción de Cuotas Previas (`[PERSONAL-DEBT-DELETE-AND-PREV-INSTALLMENTS-CLEANUP-001]`)**: Validación contable precisa (`totalActualPaid > 0 || paidInstallments > initialPaidInstallments`) en `debts-store.ts` y confirmación en `debts.tsx`; selectores de cuotas previas condicionados a `isLegacyMode` en `new-debt.tsx` (alta en Deudas inicia con 0 cuotas previas y 100% saldo); Caso 14 en `accounting-integration.test.ts`; 54/54 tests en verde (100%), 0 errores TS.
   - **Fix Overlap Multi-Tarjeta y Flex Responsivo en Deudas (`[DEBTS-MULTI-CARD-OVERLAP-FIX-AND-RESPONSIVE-FLEX-001]`)**: Pastillas independientes de tarjeta (`uniqueCardNames.map`, max 160, truncado), blindajes Flexbox (`minWidth: 0`, `flexShrink: 0`) contra colisiones y layout responsivo en 2 columnas (`cardsGridWide`, `width: '48.5%'`, `maxWidth: 1200`) en `debts.tsx`; móvil idéntico; 53/53 tests en verde (100%), 0 errores TS.
   - **Corrección de Invalid DOM Nesting en Dashboard (`[DASHBOARD-RECENT-TX-INVALID-DOM-NESTING-FIX-001]`)**: Erradicación del warning `validateDOMNesting: <button> inside <button>` en Tauri/Web sustituyendo `TouchableOpacity` exterior por `View` en `RecentTransactionsList`; botón de papelera interior intacto; móvil idéntico; 53/53 tests en verde (100%), 0 errores TS.
   - **Layout Responsivo en 2 Columnas para Estadísticas (`[STATS-RESPONSIVE-2-COLUMN-LAYOUT-001]`)**: Layout en 2 columnas en `stats.tsx` con `useIsWide(768)` (izq: selector de período, balance comparativo y Salud Financiera; der: gráfico y desglose por categorías, `maxWidth: 1200`); móvil intacto; 53/53 tests en verde (100%), 0 errores TS.
@@ -46,8 +47,10 @@
 - ❌ **NO registrar pagos de tarjeta como `type: 'expense'`**: Usar siempre `type: 'card_payment'` para evitar doble gasto en presupuesto.
 - ❌ **NO usar `keyboardType="numeric"` para dinero**: Usar siempre `keyboardType="decimal-pad"` y normalizar comas a puntos.
 - ❌ **NO mezclar compras en tarjeta de crédito en la pestaña Deudas**: Las compras propias pertenecen a tarjetas. `debts.tsx` es exclusiva para préstamos y cuentas entre personas.
+- ❌ **NO permitir cuotas previas en alta de Deudas ni bloquear borrado sin pagos reales en la app**: Las deudas en pestaña Deudas son estrictamente actuales (sin cuotas previas pagadas). Para borrado de deudas, `hasPayments` solo debe ser verdadero si existen desembolsos reales en la app (`totalActualPaid > 0 || paidInstallments > initialPaidInstallments`).
 
 ## 4. Bugs Críticos Resueltos & Blindajes
+- **Bloqueo Injustificado de Eliminación de Deudas**: Resuelto evaluando desembolsos reales en la app (`totalActualPaid > 0 || paidInstallments > initialPaidInstallments`) en vez de cuotas iniciales históricas.
 - **Colisión Multi-Tarjeta en Deudas**: Resuelto desglosando pastillas independientes por tarjeta y blindando con `minWidth: 0` y `flexShrink: 0` en `debts.tsx`.
 - **Invalid DOM Nesting en Tauri/Web**: Resuelto sustituyendo `TouchableOpacity` exterior por `View` en `RecentTransactionsList`.
 - **Destello de Ceros al Iniciar**: Resuelto reteniendo el Splash Screen nativo hasta confirmar rehidratación local de Zustand (`hasHydrated`).

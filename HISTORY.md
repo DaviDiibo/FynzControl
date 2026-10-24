@@ -7,6 +7,18 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[PERSONAL-DEBT-DELETE-AND-PREV-INSTALLMENTS-CLEANUP-001]` (2026-10-24): Corrección de eliminación de deudas personales y restricción de cuotas previas en pestaña Deudas:
+  - Archivos intervenidos:
+    * `src/store/debts-store.ts`
+    * `src/__tests__/accounting-integration.test.ts`
+    * `app/(app)/(tabs)/debts.tsx`
+    * `app/(app)/(modal)/new-debt.tsx`
+  - Resumen técnico:
+    - Corrección de validación contable en `deletePersonalDebt` (`src/store/debts-store.ts`) y en el modal de confirmación de eliminación (`debts.tsx`): ahora se evalúa si existen pagos reales registrados en la app (`totalActualPaid > 0` o `paidInstallments > initialPaidInstallments`), permitiendo eliminar deudas creadas con cuotas iniciales sin abonos reales.
+    - Restricción en el alta de deudas (`new-debt.tsx`): los selectores de cuotas previas pagadas se ocultaron y condicionaron a `isLegacyMode`, garantizando que en la pestaña Deudas (`!isLegacyMode`) las deudas se inicialicen siempre con 0 cuotas previas y el 100% del saldo pendiente.
+    - Incorporación del Caso 14 en `src/__tests__/accounting-integration.test.ts` que valida exhaustivamente la eliminación de deudas con cuotas iniciales sin abonos reales y el bloqueo preventivo cuando sí existen pagos reales en la app.
+  - Verificación y calidad: 54/54 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[DEBTS-MULTI-CARD-OVERLAP-FIX-AND-RESPONSIVE-FLEX-001]` (2026-10-24): Erradicación de sobreposición visual multi-tarjeta y layout responsivo con Flexbox en Deudas:
   - Archivos intervenidos:
     * `app/(app)/(tabs)/debts.tsx`
