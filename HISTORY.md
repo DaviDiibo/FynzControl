@@ -7,6 +7,15 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[LOGIN-DESKTOP-RESPONSIVE-SPLIT-VIEW-001]` (2026-10-24): Estética de escritorio y diseño responsivo split-view en pantalla de login (Web y Tauri):
+  - Archivo intervenido:
+    * `app/(auth)/login.tsx`
+  - Resumen técnico:
+    - Integración de `useIsWide(768)` para dotar a la pantalla de login de un diseño de escritorio responsivo (Web y Tauri) con split view de 2 columnas centrado (`maxWidth: 960`): Panel izquierdo de marca y pilares (`ControlFynz OS`, `Ionicons`) y Panel derecho para el formulario ergonómico de acceso/registro.
+    - Cero alteraciones en la experiencia móvil (`!isWide`), manteniendo la paridad y fidelidad visual al 100%.
+    - Respeto estricto al protocolo de Visual Freeze en móvil y compatibilidad cross-platform en teclado y temas.
+  - Verificación y calidad: 54/54 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[PERSONAL-DEBT-DELETE-AND-PREV-INSTALLMENTS-CLEANUP-001]` (2026-10-24): Corrección de eliminación de deudas personales y restricción de cuotas previas en pestaña Deudas:
   - Archivos intervenidos:
     * `src/store/debts-store.ts`
