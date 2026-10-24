@@ -7,6 +7,16 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[DASHBOARD-RECENT-TX-INVALID-DOM-NESTING-FIX-001]` (2026-10-24): Erradicación de advertencia `validateDOMNesting` en Tauri/Web para lista de transacciones recientes:
+  - Archivos intervenidos:
+    * `src/components/dashboard/recent-transactions-list.tsx`
+  - Resumen técnico:
+    - Erradicación del error en React Native Web / Tauri `validateDOMNesting: <button> cannot appear as a descendant of <button>` en `RecentTransactionsList`.
+    - Sustitución del contenedor exterior interactivo `<TouchableOpacity>` por un contenedor estructural pasivo `<View>`, retirando el rol y evento redundantes de eliminación.
+    - Preservación del botón de papelera interior (`styles.deleteButton`) como único disparador de confirmación de borrado.
+    - Paridad y Visual Freeze estricto: 0 alteraciones visuales en móvil, con mejora de UX evitando aperturas accidentales del modal de borrado al hacer scroll sobre la tarjeta.
+  - Verificación y calidad: 53/53 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[STATS-RESPONSIVE-2-COLUMN-LAYOUT-001]` (2026-10-24): Layout responsivo en 2 columnas para la pestaña Estadísticas (Stats) en escritorio y tablets:
   - Archivos intervenidos:
     * `app/(app)/(tabs)/stats.tsx`
