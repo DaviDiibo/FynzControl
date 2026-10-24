@@ -18,6 +18,7 @@ import TransactionItemCard, {
 import DeleteTransactionModal from '../../../src/components/transactions/delete-transaction-modal';
 import { useTransactionsStore, type Transaction } from '../../../src/store/transactions-store';
 import { useSettingsStore } from '../../../src/store/settings-store';
+import { useIsWide } from '../../../src/hooks/use-responsive';
 
 type FilterType = 'all' | 'income' | 'expense';
 
@@ -71,6 +72,7 @@ const getTimeString = (tx: Transaction): string => {
 };
 
 const TransactionsScreen = (): JSX.Element => {
+  const isWide = useIsWide(768);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
@@ -224,11 +226,250 @@ const TransactionsScreen = (): JSX.Element => {
     };
   }, [monthTransactions]);
 
+  const renderSummaryHeader = (): JSX.Element => (
+    <TransactionsSummaryHeader
+      currentMonth={formattedMonth}
+      onPrevMonth={handlePrevMonth}
+      onNextMonth={handleNextMonth}
+      incomeTotal={monthlyIncome}
+      expenseTotal={monthlyExpense}
+      netBalance={monthlyNet}
+      currency={currencySymbol}
+      isAllTime={isAllTime}
+      onToggleAllTime={handleToggleAllTime}
+    />
+  );
+
+  const renderSearchBar = (): JSX.Element => (
+    <View style={[styles.searchBar, isWide && styles.searchBarWide]}>
+      <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
+      <TextInput
+        style={styles.searchInput}
+        placeholder="Buscar por concepto o categoría..."
+        placeholderTextColor={colors.textSecondary}
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        autoCapitalize="none"
+        autoCorrect={false}
+        clearButtonMode="while-editing"
+      />
+      {searchQuery.length > 0 && (
+        <TouchableOpacity
+          onPress={() => setSearchQuery('')}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
+  const renderFilterSection = (): JSX.Element => (
+    <View style={[styles.filterSection, isWide && styles.filterSectionWide]}>
+      <View style={styles.pillsContainer}>
+        {/* Todos */}
+        <TouchableOpacity
+          style={[
+            styles.pill,
+            activeFilter === 'all' && styles.pillActive,
+          ]}
+          onPress={() => setActiveFilter('all')}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.pillText,
+              activeFilter === 'all' && styles.pillTextActive,
+            ]}
+          >
+            Todos
+          </Text>
+          <View
+            style={[
+              styles.countBadge,
+              activeFilter === 'all' && styles.countBadgeActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.countBadgeText,
+                activeFilter === 'all' && styles.countBadgeTextActive,
+              ]}
+            >
+              {counts.all}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Ingresos */}
+        <TouchableOpacity
+          style={[
+            styles.pill,
+            activeFilter === 'income' && styles.pillActiveIncome,
+          ]}
+          onPress={() => setActiveFilter('income')}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name="arrow-down-circle-outline"
+            size={14}
+            color={activeFilter === 'income' ? '#00FFA3' : colors.textSecondary}
+          />
+          <Text
+            style={[
+              styles.pillText,
+              activeFilter === 'income' && styles.pillTextActiveIncome,
+            ]}
+          >
+            Ingresos
+          </Text>
+          <View
+            style={[
+              styles.countBadge,
+              activeFilter === 'income' && styles.countBadgeActiveIncome,
+            ]}
+          >
+            <Text
+              style={[
+                styles.countBadgeText,
+                activeFilter === 'income' && styles.countBadgeTextActiveIncome,
+              ]}
+            >
+              {counts.income}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Gastos */}
+        <TouchableOpacity
+          style={[
+            styles.pill,
+            activeFilter === 'expense' && styles.pillActiveExpense,
+          ]}
+          onPress={() => setActiveFilter('expense')}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name="arrow-up-circle-outline"
+            size={14}
+            color={activeFilter === 'expense' ? '#FF453A' : colors.textSecondary}
+          />
+          <Text
+            style={[
+              styles.pillText,
+              activeFilter === 'expense' && styles.pillTextActiveExpense,
+            ]}
+          >
+            Gastos
+          </Text>
+          <View
+            style={[
+              styles.countBadge,
+              activeFilter === 'expense' && styles.countBadgeActiveExpense,
+            ]}
+          >
+            <Text
+              style={[
+                styles.countBadgeText,
+                activeFilter === 'expense' && styles.countBadgeTextActiveExpense,
+              ]}
+            >
+              {counts.expense}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderTransactionsList = (): JSX.Element => (
+    <View style={[styles.listContainer, isWide && styles.listContainerWide]}>
+      {groupedTransactions.map((group) => (
+        <View key={group.dateGroup} style={styles.dateGroupContainer}>
+          <View style={styles.dateGroupHeader}>
+            <Text style={styles.dateGroupTitle}>{group.dateGroup}</Text>
+            <Text style={styles.dateGroupCount}>
+              {group.items.length} {group.items.length === 1 ? 'movimiento' : 'movimientos'}
+            </Text>
+          </View>
+          {group.items.map((item) => (
+            <TransactionItemCard
+              key={item.id}
+              item={item}
+              onPress={handleDeleteTransaction}
+              onDelete={handleDeleteTransaction}
+            />
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+
+  const renderEmptyState = (): JSX.Element => (
+    <View style={[styles.emptyStateContainer, isWide && styles.emptyStateContainerWide]}>
+      <View style={styles.emptyIconCircle}>
+        <Ionicons
+          name={transactions.length === 0 ? 'wallet-outline' : 'search-outline'}
+          size={28}
+          color={colors.textSecondary}
+        />
+      </View>
+      <Text style={styles.emptyStateTitle}>
+        {transactions.length === 0
+          ? 'No hay movimientos registrados'
+          : monthTransactions.length === 0
+          ? 'Sin movimientos en este período'
+          : 'Sin movimientos encontrados'}
+      </Text>
+      <Text style={styles.emptyStateSubtitle}>
+        {transactions.length === 0
+          ? 'Agrega tus ingresos y gastos para ver tu historial detallado aquí.'
+          : monthTransactions.length === 0
+          ? 'No se registraron transacciones para el período seleccionado.'
+          : 'Intenta cambiar el término de búsqueda o el filtro seleccionado.'}
+      </Text>
+      {(searchQuery.length > 0 ||
+        activeFilter !== 'all' ||
+        (!isAllTime && monthTransactions.length === 0 && transactions.length > 0)) && (
+        <TouchableOpacity
+          style={styles.resetButton}
+          onPress={() => {
+            setSearchQuery('');
+            setActiveFilter('all');
+            if (!isAllTime && monthTransactions.length === 0 && transactions.length > 0) {
+              setIsAllTime(true);
+            }
+          }}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name={
+              !isAllTime && monthTransactions.length === 0 && transactions.length > 0
+                ? 'calendar-outline'
+                : 'refresh-outline'
+            }
+            size={14}
+            color={colors.primary}
+          />
+          <Text style={styles.resetButtonText}>
+            {!isAllTime && monthTransactions.length === 0 && transactions.length > 0
+              ? 'Ver todo el historial'
+              : 'Restablecer filtros'}
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <ScrollView
         style={styles.container}
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={[
+          styles.contentContainer,
+          isWide && styles.contentContainerWide,
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Cabecera */}
@@ -240,237 +481,25 @@ const TransactionsScreen = (): JSX.Element => {
           <Text style={styles.headerTitle}>HISTORIAL DE MOVIMIENTOS</Text>
         </View>
 
-        {/* Resumen Mensual */}
-        <TransactionsSummaryHeader
-          currentMonth={formattedMonth}
-          onPrevMonth={handlePrevMonth}
-          onNextMonth={handleNextMonth}
-          incomeTotal={monthlyIncome}
-          expenseTotal={monthlyExpense}
-          netBalance={monthlyNet}
-          currency={currencySymbol}
-          isAllTime={isAllTime}
-          onToggleAllTime={handleToggleAllTime}
-        />
+        {isWide ? (
+          <View style={styles.wideGridContainer}>
+            <View style={styles.leftColumn}>
+              {renderSummaryHeader()}
+              {renderSearchBar()}
+              {renderFilterSection()}
+            </View>
 
-        {/* Buscador */}
-        <View style={styles.searchBar}>
-          <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar por concepto o categoría..."
-            placeholderTextColor={colors.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoCapitalize="none"
-            autoCorrect={false}
-            clearButtonMode="while-editing"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity
-              onPress={() => setSearchQuery('')}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Filtro Segmentado */}
-        <View style={styles.filterSection}>
-          <View style={styles.pillsContainer}>
-            {/* Todos */}
-            <TouchableOpacity
-              style={[
-                styles.pill,
-                activeFilter === 'all' && styles.pillActive,
-              ]}
-              onPress={() => setActiveFilter('all')}
-              activeOpacity={0.7}
-            >
-              <Text
-                style={[
-                  styles.pillText,
-                  activeFilter === 'all' && styles.pillTextActive,
-                ]}
-              >
-                Todos
-              </Text>
-              <View
-                style={[
-                  styles.countBadge,
-                  activeFilter === 'all' && styles.countBadgeActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.countBadgeText,
-                    activeFilter === 'all' && styles.countBadgeTextActive,
-                  ]}
-                >
-                  {counts.all}
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* Ingresos */}
-            <TouchableOpacity
-              style={[
-                styles.pill,
-                activeFilter === 'income' && styles.pillActiveIncome,
-              ]}
-              onPress={() => setActiveFilter('income')}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name="arrow-down-circle-outline"
-                size={14}
-                color={activeFilter === 'income' ? '#00FFA3' : colors.textSecondary}
-              />
-              <Text
-                style={[
-                  styles.pillText,
-                  activeFilter === 'income' && styles.pillTextActiveIncome,
-                ]}
-              >
-                Ingresos
-              </Text>
-              <View
-                style={[
-                  styles.countBadge,
-                  activeFilter === 'income' && styles.countBadgeActiveIncome,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.countBadgeText,
-                    activeFilter === 'income' && styles.countBadgeTextActiveIncome,
-                  ]}
-                >
-                  {counts.income}
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* Gastos */}
-            <TouchableOpacity
-              style={[
-                styles.pill,
-                activeFilter === 'expense' && styles.pillActiveExpense,
-              ]}
-              onPress={() => setActiveFilter('expense')}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name="arrow-up-circle-outline"
-                size={14}
-                color={activeFilter === 'expense' ? '#FF453A' : colors.textSecondary}
-              />
-              <Text
-                style={[
-                  styles.pillText,
-                  activeFilter === 'expense' && styles.pillTextActiveExpense,
-                ]}
-              >
-                Gastos
-              </Text>
-              <View
-                style={[
-                  styles.countBadge,
-                  activeFilter === 'expense' && styles.countBadgeActiveExpense,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.countBadgeText,
-                    activeFilter === 'expense' && styles.countBadgeTextActiveExpense,
-                  ]}
-                >
-                  {counts.expense}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Lista Agrupada de Movimientos */}
-        {groupedTransactions.length > 0 ? (
-          <View style={styles.listContainer}>
-            {groupedTransactions.map((group) => (
-              <View key={group.dateGroup} style={styles.dateGroupContainer}>
-                <View style={styles.dateGroupHeader}>
-                  <Text style={styles.dateGroupTitle}>{group.dateGroup}</Text>
-                  <Text style={styles.dateGroupCount}>
-                    {group.items.length} {group.items.length === 1 ? 'movimiento' : 'movimientos'}
-                  </Text>
-                </View>
-                {group.items.map((item) => (
-                  <TransactionItemCard
-                    key={item.id}
-                    item={item}
-                    onPress={handleDeleteTransaction}
-                    onDelete={handleDeleteTransaction}
-                  />
-                ))}
-              </View>
-            ))}
+            <View style={styles.rightColumn}>
+              {groupedTransactions.length > 0 ? renderTransactionsList() : renderEmptyState()}
+            </View>
           </View>
         ) : (
-          /* Estado Vacío */
-          <View style={styles.emptyStateContainer}>
-            <View style={styles.emptyIconCircle}>
-              <Ionicons
-                name={transactions.length === 0 ? 'wallet-outline' : 'search-outline'}
-                size={28}
-                color={colors.textSecondary}
-              />
-            </View>
-            <Text style={styles.emptyStateTitle}>
-              {transactions.length === 0
-                ? 'No hay movimientos registrados'
-                : monthTransactions.length === 0
-                ? 'Sin movimientos en este período'
-                : 'Sin movimientos encontrados'}
-            </Text>
-            <Text style={styles.emptyStateSubtitle}>
-              {transactions.length === 0
-                ? 'Agrega tus ingresos y gastos para ver tu historial detallado aquí.'
-                : monthTransactions.length === 0
-                ? 'No se registraron transacciones para el período seleccionado.'
-                : 'Intenta cambiar el término de búsqueda o el filtro seleccionado.'}
-            </Text>
-            {(searchQuery.length > 0 ||
-              activeFilter !== 'all' ||
-              (!isAllTime && monthTransactions.length === 0 && transactions.length > 0)) && (
-              <TouchableOpacity
-                style={styles.resetButton}
-                onPress={() => {
-                  setSearchQuery('');
-                  setActiveFilter('all');
-                  if (!isAllTime && monthTransactions.length === 0 && transactions.length > 0) {
-                    setIsAllTime(true);
-                  }
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={
-                    !isAllTime && monthTransactions.length === 0 && transactions.length > 0
-                      ? 'calendar-outline'
-                      : 'refresh-outline'
-                  }
-                  size={14}
-                  color={colors.primary}
-                />
-                <Text style={styles.resetButtonText}>
-                  {!isAllTime && monthTransactions.length === 0 && transactions.length > 0
-                    ? 'Ver todo el historial'
-                    : 'Restablecer filtros'}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          <>
+            {renderSummaryHeader()}
+            {renderSearchBar()}
+            {renderFilterSection()}
+            {groupedTransactions.length > 0 ? renderTransactionsList() : renderEmptyState()}
+          </>
         )}
       </ScrollView>
 
@@ -498,6 +527,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 110,
+  },
+  contentContainerWide: {
+    maxWidth: 1200,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  wideGridContainer: {
+    flexDirection: 'row',
+    gap: 20,
+    alignItems: 'flex-start',
+  },
+  leftColumn: {
+    flex: 0.42,
+    gap: 16,
+  },
+  rightColumn: {
+    flex: 0.58,
+    gap: 12,
   },
   header: {
     marginBottom: 16,
@@ -702,6 +749,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: colors.primary,
+  },
+  searchBarWide: {
+    marginBottom: 0,
+  },
+  filterSectionWide: {
+    marginBottom: 0,
+  },
+  listContainerWide: {
+    marginTop: 0,
+  },
+  emptyStateContainerWide: {
+    marginTop: 0,
   },
 });
 

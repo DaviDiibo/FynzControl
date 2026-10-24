@@ -6,11 +6,11 @@ import {
   ScrollView,
   Text,
   ActivityIndicator,
-  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { colors } from '../../../src/theme/colors';
+import { useIsWide } from '../../../src/hooks/use-responsive';
 import DashboardHeader from '../../../src/components/dashboard/dashboard-header';
 import BalanceHeroCard from '../../../src/components/dashboard/balance-hero-card';
 import UpcomingDebtsCard from '../../../src/components/dashboard/upcoming-debts-card';
@@ -27,8 +27,7 @@ import {
 
 const DashboardScreen = (): JSX.Element => {
   const router = useRouter();
-  const { width } = useWindowDimensions();
-  const isWide = width >= 768;
+  const isWide = useIsWide(768);
   const [isSyncingInitial, setIsSyncingInitial] = useState<boolean>(() => isInitialSyncing());
 
   useEffect(() => {

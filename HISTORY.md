@@ -7,6 +7,19 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[TRANSACTIONS-RESPONSIVE-2-COLUMN-LAYOUT-001]` (2026-10-23): Layout responsivo en 2 columnas para Movimientos (Transactions) en pantallas de escritorio y tablets:
+  - Archivos intervenidos:
+    * `src/hooks/use-responsive.ts`
+    * `app/(app)/(tabs)/transactions.tsx`
+    * `app/(app)/(tabs)/index.tsx`
+  - Resumen técnico:
+    - Creación del hook reactivo de alto rendimiento `useIsWide(breakpoint = 768)` en `src/hooks/use-responsive.ts` para mitigar re-renders continuos durante el redimensionamiento de ventanas en Tauri Desktop.
+    - Implementación del layout responsivo en 2 columnas en `transactions.tsx`: panel izquierdo con selector de mes, resumen de flujo financiero, buscador y filtros segmentados; panel derecho con feed de transacciones agrupadas y tarjetas de detalle legibles sin fatiga visual.
+    - Contenedor centrado acotado a `maxWidth: 1200`.
+    - Preservación 100% idéntica del flujo vertical para móviles cuando `width < 768px`.
+    - Unificación arquitectónica en `index.tsx` adoptando `useIsWide`.
+  - Verificación y calidad: 53/53 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[DASHBOARD-RESPONSIVE-2-COLUMN-LAYOUT-001]` (2026-10-23): Layout responsivo en 2 columnas para el Dashboard en pantallas de escritorio y tablets:
   - Archivos intervenidos:
     * `app/(app)/(tabs)/index.tsx`
