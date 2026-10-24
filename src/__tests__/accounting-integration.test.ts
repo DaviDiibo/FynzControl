@@ -861,5 +861,91 @@ describe('Integración Contable: Amortizaciones, Cobros, Reversiones y Abonos en
     expect(juniorSummaryAbono2.isMonthSettled).toBe(true);
     expect(juniorSummaryAbono2.chargesCount).toBe(8);
   });
+
+  it('Caso 14: Eliminación permitida de deuda propia normal con cuotas iniciales pagadas (isPreexisting: false) y bloqueo al registrar nuevos pagos', () => {
+    // 1. Crear una tarjeta de crédito en useCardsStore
+    useCardsStore.getState().addCard({
+      name: 'Visa Infinite',
+      bankName: 'Santander',
+      creditLimit: 1000000,
+      closingDay: 15,
+      paymentDay: 1,
+    });
+    const card = useCardsStore.getState().cards[0];
+
+    // 2. Registrar deuda propia normal (isPreexisting: false) con cuotas pactadas y cuotas iniciales pagadas
+    const debt = useDebtsStore.getState().addPersonalDebt({
+      title: 'MacBook Pro M3',
+      entity: card.bankName,
+      category: 'credit_card',
+      debtType: 'credit_card',
+      cardPaymentType: 'installments',
+      cardId: card.id,
+      creditCardId: card.id,
+      totalAmount: 1200000,
+      remainingAmount: 1000000,
+      totalInstallments: 12,
+      paidInstallments: 2,
+      initialPaidInstallments: 2,
+      monthlyPayment: 100000,
+      dueDay: 1,
+      dueDate: 'Día 1 de cada mes',
+      isPreexisting: false,
+      icon: 'laptop-outline',
+    });
+
+    expect(debt.initialPaidInstallments).toBe(2);
+    expect(debt.paidInstallments).toBe(2);
+    expect(debt.totalActualPaid).toBeUndefined();
+    expect(useDebtsStore.getState().personalDebts).toHaveLength(1);
+
+    // 3. Como no tiene pagos nuevos en la app (paidInstallments === initialPaidInstallments y sin totalActualPaid),
+    // la eliminación DEBE ser permitida aunque isPreexisting sea false
+    const deleteResult = useDebtsStore.getState().deletePersonalDebt(debt.id);
+    expect(deleteResult).toBe(true);
+    expect(useDebtsStore.getState().personalDebts).toHaveLength(0);
+
+    // 4. Probar el caso de bloqueo: registrar una deuda similar y registrar un pago real en la app
+    const debtWithPayment = useDebtsStore.getState().addPersonalDebt({
+      title: 'iPhone 16 Pro',
+      entity: card.bankName,
+      category: 'credit_card',
+      debtType: 'credit_card',
+      cardPaymentType: 'installments',
+      cardId: card.id,
+      creditCardId: card.id,
+      totalAmount: 600000,
+      remainingAmount: 400000,
+      totalInstallments: 6,
+      paidInstallments: 2,
+      initialPaidInstallments: 2,
+      monthlyPayment: 100000,
+      dueDay: 1,
+      dueDate: 'Día 1 de cada mes',
+      isPreexisting: false,
+      icon: 'phone-portrait-outline',
+    });
+
+    expect(useDebtsStore.getState().personalDebts).toHaveLength(1);
+
+    // Registrar abono/pago de la siguiente cuota (cuota 3)
+    useDebtsStore.getState().payPersonalDebt(debtWithPayment.id, 100000, {
+      installmentsCount: 1,
+    });
+
+    const updatedDebt = useDebtsStore.getState().personalDebts.find((d) => d.id === debtWithPayment.id)!;
+    expect(updatedDebt.paidInstallments).toBe(3); // 3 > initialPaidInstallments (2)
+    expect(updatedDebt.totalActualPaid).toBe(100000);
+    expect(updatedDebt.remainingAmount).toBe(300000);
+
+    // 5. Intentar eliminar: DEBE ser bloqueada para proteger la integridad contable
+    const deleteBlockedResult = useDebtsStore.getState().deletePersonalDebt(debtWithPayment.id);
+    expect(deleteBlockedResult).toBe(false);
+
+    // 6. La deuda debe persistir en el store
+    const persistentDebt = useDebtsStore.getState().personalDebts.find((d) => d.id === debtWithPayment.id);
+    expect(persistentDebt).toBeDefined();
+    expect(persistentDebt?.remainingAmount).toBe(300000);
+  });
 });
 

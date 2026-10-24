@@ -1,9 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import type { JSX } from 'react';
-import { View, StyleSheet, ScrollView, Text, ActivityIndicator } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Text,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { colors } from '../../../src/theme/colors';
+import { useIsWide } from '../../../src/hooks/use-responsive';
 import DashboardHeader from '../../../src/components/dashboard/dashboard-header';
 import BalanceHeroCard from '../../../src/components/dashboard/balance-hero-card';
 import UpcomingDebtsCard from '../../../src/components/dashboard/upcoming-debts-card';
@@ -20,6 +27,7 @@ import {
 
 const DashboardScreen = (): JSX.Element => {
   const router = useRouter();
+  const isWide = useIsWide(768);
   const [isSyncingInitial, setIsSyncingInitial] = useState<boolean>(() => isInitialSyncing());
 
   useEffect(() => {
@@ -73,43 +81,90 @@ const DashboardScreen = (): JSX.Element => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          isWide && styles.scrollContentWide,
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <DashboardHeader />
-        <BalanceHeroCard
-          balance={netBalance}
-          monthlyIncome={currentMonthIncome}
-          monthlyExpense={currentMonthExpense}
-          currency={currencySymbol}
-        />
-        <UpcomingDebtsCard />
 
-        <QuickActionsGrid
-          onAddIncome={() =>
-            router.push({
-              pathname: '/(app)/(modal)/new-transaction',
-              params: { type: 'income' },
-            })
-          }
-          onAddExpense={() =>
-            router.push({
-              pathname: '/(app)/(modal)/new-transaction',
-              params: { type: 'expense' },
-            })
-          }
-          onCardsPress={() =>
-            router.push('/(app)/(modal)/cards-overview')
-          }
-          onViewAnalytics={() => router.push('/(app)/(tabs)/stats')}
-        />
+        {isWide ? (
+          <View style={styles.wideGridContainer}>
+            <View style={styles.leftColumn}>
+              <BalanceHeroCard
+                balance={netBalance}
+                monthlyIncome={currentMonthIncome}
+                monthlyExpense={currentMonthExpense}
+                currency={currencySymbol}
+              />
+              <QuickActionsGrid
+                onAddIncome={() =>
+                  router.push({
+                    pathname: '/(app)/(modal)/new-transaction',
+                    params: { type: 'income' },
+                  })
+                }
+                onAddExpense={() =>
+                  router.push({
+                    pathname: '/(app)/(modal)/new-transaction',
+                    params: { type: 'expense' },
+                  })
+                }
+                onCardsPress={() =>
+                  router.push('/(app)/(modal)/cards-overview')
+                }
+                onViewAnalytics={() => router.push('/(app)/(tabs)/stats')}
+              />
+            </View>
 
-        <View style={styles.recentTransactionsContainer}>
-          <RecentTransactionsList
-            transactions={recentItems}
-            onViewAll={() => router.push('/(app)/(tabs)/transactions')}
-          />
-        </View>
+            <View style={styles.rightColumn}>
+              <UpcomingDebtsCard />
+              <View style={styles.recentTransactionsContainer}>
+                <RecentTransactionsList
+                  transactions={recentItems}
+                  onViewAll={() => router.push('/(app)/(tabs)/transactions')}
+                />
+              </View>
+            </View>
+          </View>
+        ) : (
+          <>
+            <BalanceHeroCard
+              balance={netBalance}
+              monthlyIncome={currentMonthIncome}
+              monthlyExpense={currentMonthExpense}
+              currency={currencySymbol}
+            />
+            <UpcomingDebtsCard />
+
+            <QuickActionsGrid
+              onAddIncome={() =>
+                router.push({
+                  pathname: '/(app)/(modal)/new-transaction',
+                  params: { type: 'income' },
+                })
+              }
+              onAddExpense={() =>
+                router.push({
+                  pathname: '/(app)/(modal)/new-transaction',
+                  params: { type: 'expense' },
+                })
+              }
+              onCardsPress={() =>
+                router.push('/(app)/(modal)/cards-overview')
+              }
+              onViewAnalytics={() => router.push('/(app)/(tabs)/stats')}
+            />
+
+            <View style={styles.recentTransactionsContainer}>
+              <RecentTransactionsList
+                transactions={recentItems}
+                onViewAll={() => router.push('/(app)/(tabs)/transactions')}
+              />
+            </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -164,6 +219,24 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 40,
+    gap: 20,
+  },
+  scrollContentWide: {
+    maxWidth: 1200,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  wideGridContainer: {
+    flexDirection: 'row',
+    gap: 20,
+    alignItems: 'flex-start',
+  },
+  leftColumn: {
+    flex: 1,
+    gap: 20,
+  },
+  rightColumn: {
+    flex: 1,
     gap: 20,
   },
   recentTransactionsContainer: {

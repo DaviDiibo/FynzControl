@@ -7,6 +7,81 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[PERSONAL-DEBT-DELETE-AND-PREV-INSTALLMENTS-CLEANUP-001]` (2026-10-24): Corrección de eliminación de deudas personales y restricción de cuotas previas en pestaña Deudas:
+  - Archivos intervenidos:
+    * `src/store/debts-store.ts`
+    * `src/__tests__/accounting-integration.test.ts`
+    * `app/(app)/(tabs)/debts.tsx`
+    * `app/(app)/(modal)/new-debt.tsx`
+  - Resumen técnico:
+    - Corrección de validación contable en `deletePersonalDebt` (`src/store/debts-store.ts`) y en el modal de confirmación de eliminación (`debts.tsx`): ahora se evalúa si existen pagos reales registrados en la app (`totalActualPaid > 0` o `paidInstallments > initialPaidInstallments`), permitiendo eliminar deudas creadas con cuotas iniciales sin abonos reales.
+    - Restricción en el alta de deudas (`new-debt.tsx`): los selectores de cuotas previas pagadas se ocultaron y condicionaron a `isLegacyMode`, garantizando que en la pestaña Deudas (`!isLegacyMode`) las deudas se inicialicen siempre con 0 cuotas previas y el 100% del saldo pendiente.
+    - Incorporación del Caso 14 en `src/__tests__/accounting-integration.test.ts` que valida exhaustivamente la eliminación de deudas con cuotas iniciales sin abonos reales y el bloqueo preventivo cuando sí existen pagos reales en la app.
+  - Verificación y calidad: 54/54 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[DEBTS-MULTI-CARD-OVERLAP-FIX-AND-RESPONSIVE-FLEX-001]` (2026-10-24): Erradicación de sobreposición visual multi-tarjeta y layout responsivo con Flexbox en Deudas:
+  - Archivos intervenidos:
+    * `app/(app)/(tabs)/debts.tsx`
+  - Resumen técnico:
+    - Erradicación del bug de colisión y sobreposición visual cuando una persona tiene deudas en más de una tarjeta de crédito en `debts.tsx`.
+    - Sustitución de la pastilla monolítica concatenada por pastillas independientes de tarjeta (`uniqueCardNames.map`), cada una con ancho acotado (`maxWidth: 160`) y truncado `numberOfLines={1}`.
+    - Blindaje defensivo de Flexbox: `minWidth: 0` y `alignItems: 'flex-start'` en `summaryHeaderLeft`, altura calibrada en `personNameAccentBar`, `flexShrink: 0` en badges de estado y cabeceras de grupos de tarjetas.
+    - Implementación de layout responsivo con Flexbox en 2 columnas (`cardsGridWide`, `width: '48.5%'`, `gap: 16`) para préstamos bancarios, préstamos a amigos, resúmenes de terceros y deudas liquidadas en pantallas anchas (`width >= 768px`) con contenedor centrado (`maxWidth: 1200`).
+    - Preservación 100% idéntica del flujo vertical para móviles cuando `width < 768px`.
+  - Verificación y calidad: 53/53 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[DASHBOARD-RECENT-TX-INVALID-DOM-NESTING-FIX-001]` (2026-10-24): Erradicación de advertencia `validateDOMNesting` en Tauri/Web para lista de transacciones recientes:
+  - Archivos intervenidos:
+    * `src/components/dashboard/recent-transactions-list.tsx`
+  - Resumen técnico:
+    - Erradicación del error en React Native Web / Tauri `validateDOMNesting: <button> cannot appear as a descendant of <button>` en `RecentTransactionsList`.
+    - Sustitución del contenedor exterior interactivo `<TouchableOpacity>` por un contenedor estructural pasivo `<View>`, retirando el rol y evento redundantes de eliminación.
+    - Preservación del botón de papelera interior (`styles.deleteButton`) como único disparador de confirmación de borrado.
+    - Paridad y Visual Freeze estricto: 0 alteraciones visuales en móvil, con mejora de UX evitando aperturas accidentales del modal de borrado al hacer scroll sobre la tarjeta.
+  - Verificación y calidad: 53/53 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[STATS-RESPONSIVE-2-COLUMN-LAYOUT-001]` (2026-10-24): Layout responsivo en 2 columnas para la pestaña Estadísticas (Stats) en escritorio y tablets:
+  - Archivos intervenidos:
+    * `app/(app)/(tabs)/stats.tsx`
+  - Resumen técnico:
+    - Implementación de layout responsivo en 2 columnas para la pestaña Estadísticas usando `useIsWide(768)`.
+    - Distribución analítica para escritorio: Columna Izquierda con selector de período (`Mes`, `Trimestre`, `Año`), resumen comparativo de ingresos/gastos y tarjeta de Salud Financiera (`FinancialHealthCard`); Columna Derecha con gráfico de distribución y desglose por categorías (`CategoryBreakdownCard`).
+    - Contenedor centrado acotado a `maxWidth: 1200`.
+    - Preservación 100% intacta del flujo vertical para móviles cuando `width < 768px`.
+  - Verificación y calidad: 53/53 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TRANSACTIONS-RESPONSIVE-2-COLUMN-LAYOUT-001]` (2026-10-23): Layout responsivo en 2 columnas para Movimientos (Transactions) en pantallas de escritorio y tablets:
+  - Archivos intervenidos:
+    * `src/hooks/use-responsive.ts`
+    * `app/(app)/(tabs)/transactions.tsx`
+    * `app/(app)/(tabs)/index.tsx`
+  - Resumen técnico:
+    - Creación del hook reactivo de alto rendimiento `useIsWide(breakpoint = 768)` en `src/hooks/use-responsive.ts` para mitigar re-renders continuos durante el redimensionamiento de ventanas en Tauri Desktop.
+    - Implementación del layout responsivo en 2 columnas en `transactions.tsx`: panel izquierdo con selector de mes, resumen de flujo financiero, buscador y filtros segmentados; panel derecho con feed de transacciones agrupadas y tarjetas de detalle legibles sin fatiga visual.
+    - Contenedor centrado acotado a `maxWidth: 1200`.
+    - Preservación 100% idéntica del flujo vertical para móviles cuando `width < 768px`.
+    - Unificación arquitectónica en `index.tsx` adoptando `useIsWide`.
+  - Verificación y calidad: 53/53 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[DASHBOARD-RESPONSIVE-2-COLUMN-LAYOUT-001]` (2026-10-23): Layout responsivo en 2 columnas para el Dashboard en pantallas de escritorio y tablets:
+  - Archivos intervenidos:
+    * `app/(app)/(tabs)/index.tsx`
+    * `src-tauri/tauri.conf.json`
+  - Resumen técnico:
+    - Implementación de layout responsivo en 2 columnas para el Dashboard usando `useWindowDimensions()` con breakpoint `width >= 768px`.
+    - Distribución equilibrada en pantalla ancha: Columna Izquierda con `BalanceHeroCard` y `QuickActionsGrid`; Columna Derecha con `UpcomingDebtsCard` y `RecentTransactionsList`; contenedor acotado a `maxWidth: 1200` y centrado en monitores grandes.
+    - Preservación 100% intacta del flujo vertical para móviles cuando `width < 768px`.
+    - Calibración de ventana en Tauri a 960x780 (min 460, max 1280) para habilitar experiencia de escritorio fluida.
+  - Verificación y calidad: 53/53 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TAURI-WINDOW-COMPACT-SIZE-LIMITS-001]` (2026-10-23): Calibración compacta y límites de tamaño para ventana de escritorio en Tauri:
+  - Archivos intervenidos:
+    * `src-tauri/tauri.conf.json`
+  - Resumen técnico:
+    - Calibración de dimensiones de ventana nativa de escritorio en Tauri para aspect-ratio tipo smartphone/phablet (`width: 460`, `height: 860`, `center: true`).
+    - Establecimiento de límites de redimensión defensivos (`minWidth: 400`, `minHeight: 680`, `maxWidth: 580`, `maxHeight: 980`) para evitar estiramientos antiestéticos en monitores ultra-anchos y preservar la ergonomía visual mobile-first.
+  - Verificación y calidad: 53/53 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[GIT-DUAL-BRANCH-AND-VERCEL-BUILD-OPTIMIZATION-001]` (2026-10-23): Estrategia de ramas Dual-Branch y optimización de builds en Vercel con smart ignore:
   - Archivos intervenidos:
     * `scripts/vercel-ignore.sh`

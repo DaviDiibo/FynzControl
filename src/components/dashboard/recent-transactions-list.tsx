@@ -203,13 +203,9 @@ const RecentTransactionsList = ({
                 : 'rgba(255, 69, 58, 0.15)';
 
             return (
-              <TouchableOpacity
+              <View
                 key={item.id}
                 style={styles.transactionCard}
-                activeOpacity={0.7}
-                onPress={() => setTransactionToDelete(item)}
-                accessibilityRole="button"
-                accessibilityLabel={`Eliminar ${item.title}`}
               >
                 {/* Lado izquierdo: Contenedor circular con icono */}
                 <View
@@ -272,7 +268,7 @@ const RecentTransactionsList = ({
                     color="rgba(255, 69, 58, 0.65)"
                   />
                 </TouchableOpacity>
-              </TouchableOpacity>
+              </View>
             );
           })}
         </View>

@@ -329,11 +329,11 @@ export const useDebtsStore = create<DebtsState>()(
           target.initialPaidInstallments ??
           (target.isPreexisting ? (target.paidInstallments ?? 0) : 0);
         const currentPaid = target.paidInstallments ?? 0;
-        const hasPayments = target.isPreexisting
+        const hasPayments = target.totalInstallments
           ? (target.totalActualPaid || 0) > 0 || currentPaid > initialPaid
-          : currentPaid > 0 ||
-            (target.totalActualPaid || 0) > 0 ||
-            target.remainingAmount < target.totalAmount;
+          : target.isPreexisting
+          ? (target.totalActualPaid || 0) > 0
+          : (target.totalActualPaid || 0) > 0 || target.remainingAmount < target.totalAmount;
         if (hasPayments) {
           return false;
         }

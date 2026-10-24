@@ -385,9 +385,9 @@ const NewDebtModal = (): JSX.Element => {
   const pctInteres = principal > 0 ? (interesTotal / principal) * 100 : 0;
   const parsedLegacyLoanPaidInstallments = Math.max(0, parseInt(legacyLoanPaidInstallments, 10) || 0);
   const effectivePaidInstallments = isLegacyMode
-    ? parsedLegacyLoanPaidInstallments
-    : isCurrentMonthQuotaPaid
-    ? Math.max(1, parseInt(initialAdvancePaidCount, 10) || 1)
+    ? (isCurrentMonthQuotaPaid
+        ? Math.max(1, parsedLegacyLoanPaidInstallments)
+        : parsedLegacyLoanPaidInstallments)
     : 0;
   const remainingLoanInstallments = Math.max(0, numCuotas - effectivePaidInstallments);
   const remainingLoanTotal = Number((remainingLoanInstallments * cuota).toFixed(2));
@@ -540,20 +540,6 @@ const NewDebtModal = (): JSX.Element => {
           icon: 'cash-outline',
         });
       } else {
-        const advancePaid = isCurrentMonthQuotaPaid
-          ? Math.max(1, parseInt(initialAdvancePaidCount, 10) || 1)
-          : 0;
-
-        if (advancePaid >= numCuotas && numCuotas > 0) {
-          setFormError('Las cuotas ya pagadas deben ser menores al total de cuotas.');
-          return;
-        }
-
-        const remainingInst = Math.max(0, numCuotas - advancePaid);
-        const remainingTotal = advancePaid > 0
-          ? Number((remainingInst * cuota).toFixed(2))
-          : totalPagar;
-
         const createdDebt = addPersonalDebt({
           title: loanConcept.trim(),
           entity: bank,
@@ -561,11 +547,11 @@ const NewDebtModal = (): JSX.Element => {
           debtType: 'installment_loan',
           principalAmount: principal,
           totalAmount: totalPagar,
-          remainingAmount: remainingTotal,
+          remainingAmount: totalPagar,
           totalInstallments: numCuotas,
-          paidInstallments: advancePaid,
-          initialPaidInstallments: advancePaid,
-          lastPaymentDate: advancePaid > 0 ? new Date().toISOString() : undefined,
+          paidInstallments: 0,
+          initialPaidInstallments: 0,
+          lastPaymentDate: undefined,
           isPreexisting: false,
           monthlyPayment: cuota,
           dueDay: parseInt(loanDueDay, 10) || 1,
@@ -1105,94 +1091,96 @@ const NewDebtModal = (): JSX.Element => {
                 </View>
 
                 {/* Selector Cyberpunk: ¿Cuota de este mes ya pagada? */}
-                <View style={styles.advanceQuotaSwitchCard}>
-                  <View style={styles.advanceQuotaSwitchHeader}>
-                    <View style={styles.advanceQuotaSwitchLeft}>
-                      <View
-                        style={[
-                          styles.advanceQuotaIconWrapper,
-                          isCurrentMonthQuotaPaid && styles.advanceQuotaIconWrapperActive,
-                        ]}
-                      >
-                        <Ionicons
-                          name="checkmark-done-circle-outline"
-                          size={18}
-                          color={isCurrentMonthQuotaPaid ? '#00FFA3' : colors.textSecondary}
-                        />
-                      </View>
-                      <View style={styles.advanceQuotaTextCol}>
-                        <Text style={styles.advanceQuotaTitle}>
-                          ¿Cuota de este mes ya pagada?
-                        </Text>
-                        <Text style={styles.advanceQuotaSubtitle}>
-                          {isCurrentMonthQuotaPaid
-                            ? 'Marcada como pagada. Se proyectará el próximo vencimiento al mes siguiente.'
-                            : 'Márcalo si ya abonaste este mes para proyectar el próximo vencimiento.'}
-                        </Text>
-                      </View>
-                    </View>
-                    <TouchableOpacity
-                      style={[
-                        styles.cyberpunkSwitchTrack,
-                        isCurrentMonthQuotaPaid && styles.cyberpunkSwitchTrackActive,
-                      ]}
-                      onPress={() => setIsCurrentMonthQuotaPaid(!isCurrentMonthQuotaPaid)}
-                      activeOpacity={0.8}
-                    >
-                      <View
-                        style={[
-                          styles.cyberpunkSwitchThumb,
-                          isCurrentMonthQuotaPaid && styles.cyberpunkSwitchThumbActive,
-                        ]}
-                      />
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Sub-selector opcional de cuotas adelantadas si está activo y no es legacy */}
-                  {isCurrentMonthQuotaPaid && !isLegacyMode && numCuotas > 1 && (
-                    <View style={styles.advanceInstallmentSubBox}>
-                      <View style={styles.advanceInstallmentRow}>
-                        <Text style={styles.advanceInstallmentLabel}>
-                          Cuotas pagadas hasta la fecha:
-                        </Text>
-                        <View style={styles.advanceInstallmentCounter}>
-                          <TouchableOpacity
-                            style={styles.advanceCounterBtn}
-                            onPress={() => {
-                              const curr = parseInt(initialAdvancePaidCount, 10) || 1;
-                              if (curr > 1) {
-                                setInitialAdvancePaidCount(String(curr - 1));
-                              }
-                            }}
-                            disabled={(parseInt(initialAdvancePaidCount, 10) || 1) <= 1}
-                          >
-                            <Ionicons name="remove" size={14} color="#00FFA3" />
-                          </TouchableOpacity>
-                          <Text style={styles.advanceCounterValue}>
-                            {initialAdvancePaidCount}
+                {isLegacyMode && (
+                  <View style={styles.advanceQuotaSwitchCard}>
+                    <View style={styles.advanceQuotaSwitchHeader}>
+                      <View style={styles.advanceQuotaSwitchLeft}>
+                        <View
+                          style={[
+                            styles.advanceQuotaIconWrapper,
+                            isCurrentMonthQuotaPaid && styles.advanceQuotaIconWrapperActive,
+                          ]}
+                        >
+                          <Ionicons
+                            name="checkmark-done-circle-outline"
+                            size={18}
+                            color={isCurrentMonthQuotaPaid ? '#00FFA3' : colors.textSecondary}
+                          />
+                        </View>
+                        <View style={styles.advanceQuotaTextCol}>
+                          <Text style={styles.advanceQuotaTitle}>
+                            ¿Cuota de este mes ya pagada?
                           </Text>
-                          <TouchableOpacity
-                            style={styles.advanceCounterBtn}
-                            onPress={() => {
-                              const curr = parseInt(initialAdvancePaidCount, 10) || 1;
-                              if (curr < numCuotas - 1) {
-                                setInitialAdvancePaidCount(String(curr + 1));
-                              }
-                            }}
-                            disabled={(parseInt(initialAdvancePaidCount, 10) || 1) >= numCuotas - 1}
-                          >
-                            <Ionicons name="add" size={14} color="#00FFA3" />
-                          </TouchableOpacity>
+                          <Text style={styles.advanceQuotaSubtitle}>
+                            {isCurrentMonthQuotaPaid
+                              ? 'Marcada como pagada. Se proyectará el próximo vencimiento al mes siguiente.'
+                              : 'Márcalo si ya abonaste este mes para proyectar el próximo vencimiento.'}
+                          </Text>
                         </View>
                       </View>
-                      <Text style={styles.advanceInstallmentSubHint}>
-                        {`Se descontarán ${currencySymbol}${formatAmount(
-                          (parseInt(initialAdvancePaidCount, 10) || 1) * cuota
-                        )} del saldo exigible sin generar egresos bancarios ficticios.`}
-                      </Text>
+                      <TouchableOpacity
+                        style={[
+                          styles.cyberpunkSwitchTrack,
+                          isCurrentMonthQuotaPaid && styles.cyberpunkSwitchTrackActive,
+                        ]}
+                        onPress={() => setIsCurrentMonthQuotaPaid(!isCurrentMonthQuotaPaid)}
+                        activeOpacity={0.8}
+                      >
+                        <View
+                          style={[
+                            styles.cyberpunkSwitchThumb,
+                            isCurrentMonthQuotaPaid && styles.cyberpunkSwitchThumbActive,
+                          ]}
+                        />
+                      </TouchableOpacity>
                     </View>
-                  )}
-                </View>
+
+                    {/* Sub-selector opcional de cuotas adelantadas si está activo y no es legacy */}
+                    {isCurrentMonthQuotaPaid && !isLegacyMode && numCuotas > 1 && (
+                      <View style={styles.advanceInstallmentSubBox}>
+                        <View style={styles.advanceInstallmentRow}>
+                          <Text style={styles.advanceInstallmentLabel}>
+                            Cuotas pagadas hasta la fecha:
+                          </Text>
+                          <View style={styles.advanceInstallmentCounter}>
+                            <TouchableOpacity
+                              style={styles.advanceCounterBtn}
+                              onPress={() => {
+                                const curr = parseInt(initialAdvancePaidCount, 10) || 1;
+                                if (curr > 1) {
+                                  setInitialAdvancePaidCount(String(curr - 1));
+                                }
+                              }}
+                              disabled={(parseInt(initialAdvancePaidCount, 10) || 1) <= 1}
+                            >
+                              <Ionicons name="remove" size={14} color="#00FFA3" />
+                            </TouchableOpacity>
+                            <Text style={styles.advanceCounterValue}>
+                              {initialAdvancePaidCount}
+                            </Text>
+                            <TouchableOpacity
+                              style={styles.advanceCounterBtn}
+                              onPress={() => {
+                                const curr = parseInt(initialAdvancePaidCount, 10) || 1;
+                                if (curr < numCuotas - 1) {
+                                  setInitialAdvancePaidCount(String(curr + 1));
+                                }
+                              }}
+                              disabled={(parseInt(initialAdvancePaidCount, 10) || 1) >= numCuotas - 1}
+                            >
+                              <Ionicons name="add" size={14} color="#00FFA3" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                        <Text style={styles.advanceInstallmentSubHint}>
+                          {`Se descontarán ${currencySymbol}${formatAmount(
+                            (parseInt(initialAdvancePaidCount, 10) || 1) * cuota
+                          )} del saldo exigible sin generar egresos bancarios ficticios.`}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
 
                 {/* Tarjeta de Cálculo en Vivo (Acento Neón #00FFA3 / #0A84FF) */}
                 {principal > 0 && numCuotas > 0 && cuota > 0 && (

@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { colors } from '../../../src/theme/colors';
+import { useIsWide } from '../../../src/hooks/use-responsive';
 import FinancialHealthCard from '../../../src/components/stats/financial-health-card';
 import CategoryBreakdownCard, {
   type CategoryExpenseItem,
@@ -61,6 +62,7 @@ const computeDiffText = (current: number, prev: number): ChangeInfo => {
 };
 
 const StatsScreen = (): JSX.Element => {
+  const isWide = useIsWide(768);
   const [period, setPeriod] = useState<PeriodFilter>('current_month');
   const [focusRefreshKey, setFocusRefreshKey] = useState<number>(0);
 
@@ -299,114 +301,155 @@ const StatsScreen = (): JSX.Element => {
   const isIncomeDown = incomeChangeInfo.diff !== null && incomeChangeInfo.diff < 0;
   const isExpenseUp = expenseChangeInfo.diff !== null && expenseChangeInfo.diff > 0;
 
+  const renderSegmentedControl = (): JSX.Element => (
+    <View style={[styles.segmentedControl, isWide && styles.segmentedControlWide]}>
+      {periodOptions.map((opt) => {
+        const isActive = period === opt.id;
+        return (
+          <TouchableOpacity
+            key={opt.id}
+            style={[styles.pill, isActive && styles.pillActive]}
+            onPress={() => setPeriod(opt.id)}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isActive }}
+          >
+            <Text style={[styles.pillText, isActive && styles.pillTextActive]}>
+              {opt.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+
+  const renderSummaryCard = (): JSX.Element => (
+    <View style={[styles.summaryCard, isWide && styles.summaryCardWide]}>
+      {/* Columna 1: Ingresos Totales */}
+      <View style={styles.summaryCol}>
+        <View style={styles.summaryLabelRow}>
+          <Ionicons name="arrow-up-circle-outline" size={16} color={colors.primary} />
+          <Text style={styles.summaryColLabel}>Ingresos Totales</Text>
+        </View>
+        <Text style={[styles.summaryColAmount, styles.incomeAmount]}>
+          {`${currencySymbol}${formatAmount(periodIncome)}`}
+        </Text>
+        <View style={styles.changeBadgePositive}>
+          <Ionicons
+            name={isIncomeDown ? 'trending-down-outline' : 'trending-up-outline'}
+            size={12}
+            color={isIncomeDown ? colors.error : colors.primary}
+          />
+          <Text
+            style={[
+              styles.changeTextPositive,
+              isIncomeDown && { color: colors.error },
+            ]}
+          >
+            {`${incomeChangeInfo.text} vs ant.`}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.verticalDivider} />
+
+      {/* Columna 2: Gastos Totales */}
+      <View style={styles.summaryCol}>
+        <View style={styles.summaryLabelRow}>
+          <Ionicons name="arrow-down-circle-outline" size={16} color={colors.error} />
+          <Text style={styles.summaryColLabel}>Gastos Totales</Text>
+        </View>
+        <Text style={[styles.summaryColAmount, styles.expenseAmount]}>
+          {`${currencySymbol}${formatAmount(periodExpense)}`}
+        </Text>
+        <View style={styles.changeBadgeNegative}>
+          <Ionicons
+            name={isExpenseUp ? 'trending-up-outline' : 'trending-down-outline'}
+            size={12}
+            color={isExpenseUp ? colors.error : '#64D2FF'}
+          />
+          <Text
+            style={[
+              styles.changeTextNegative,
+              isExpenseUp && { color: colors.error },
+            ]}
+          >
+            {`${expenseChangeInfo.text} vs ant.`}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          isWide && styles.scrollContentWide,
+        ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Cabecera */}
-        <View style={styles.header}>
-          <View style={styles.badgeRow}>
-            <View style={styles.badgePulse} />
-            <Text style={styles.badgeText}>INTELIGENCIA DE GASTO</Text>
-          </View>
-          <Text style={styles.headerTitle}>ANÁLISIS FINANCIERO</Text>
-        </View>
-
-        {/* Selector de período por píldoras segmentadas */}
-        <View style={styles.segmentedControl}>
-          {periodOptions.map((opt) => {
-            const isActive = period === opt.id;
-            return (
-              <TouchableOpacity
-                key={opt.id}
-                style={[styles.pill, isActive && styles.pillActive]}
-                onPress={() => setPeriod(opt.id)}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isActive }}
-              >
-                <Text style={[styles.pillText, isActive && styles.pillTextActive]}>
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Tarjeta comparativa rápida (2 columnas: Ingresos vs Gastos) */}
-        <View style={styles.summaryCard}>
-          {/* Columna 1: Ingresos Totales */}
-          <View style={styles.summaryCol}>
-            <View style={styles.summaryLabelRow}>
-              <Ionicons name="arrow-up-circle-outline" size={16} color={colors.primary} />
-              <Text style={styles.summaryColLabel}>Ingresos Totales</Text>
+        <View style={styles.container}>
+          {/* Cabecera */}
+          <View style={styles.header}>
+            <View style={styles.badgeRow}>
+              <View style={styles.badgePulse} />
+              <Text style={styles.badgeText}>INTELIGENCIA DE GASTO</Text>
             </View>
-            <Text style={[styles.summaryColAmount, styles.incomeAmount]}>
-              {`${currencySymbol}${formatAmount(periodIncome)}`}
-            </Text>
-            <View style={styles.changeBadgePositive}>
-              <Ionicons
-                name={isIncomeDown ? 'trending-down-outline' : 'trending-up-outline'}
-                size={12}
-                color={isIncomeDown ? colors.error : colors.primary}
+            <Text style={styles.headerTitle}>ANÁLISIS FINANCIERO</Text>
+          </View>
+
+          {isWide ? (
+            <View style={styles.wideGridContainer}>
+              {/* Columna Izquierda */}
+              <View style={styles.leftColumn}>
+                {renderSegmentedControl()}
+                {renderSummaryCard()}
+                <FinancialHealthCard
+                  status={healthStatus}
+                  savingsRate={savingsRate}
+                  debtToIncomeRatio={debtToIncomeRatio}
+                  netCashflow={periodNet}
+                  currency={currencySymbol}
+                />
+              </View>
+
+              {/* Columna Derecha */}
+              <View style={styles.rightColumn}>
+                <CategoryBreakdownCard
+                  items={dynamicCategoryExpenses}
+                  totalExpense={periodExpense}
+                  currency={currencySymbol}
+                />
+              </View>
+            </View>
+          ) : (
+            <>
+              {/* Selector de período por píldoras segmentadas */}
+              {renderSegmentedControl()}
+
+              {/* Tarjeta comparativa rápida (2 columnas: Ingresos vs Gastos) */}
+              {renderSummaryCard()}
+
+              {/* Diagnóstico Financiero */}
+              <FinancialHealthCard
+                status={healthStatus}
+                savingsRate={savingsRate}
+                debtToIncomeRatio={debtToIncomeRatio}
+                netCashflow={periodNet}
+                currency={currencySymbol}
               />
-              <Text
-                style={[
-                  styles.changeTextPositive,
-                  isIncomeDown && { color: colors.error },
-                ]}
-              >
-                {`${incomeChangeInfo.text} vs ant.`}
-              </Text>
-            </View>
-          </View>
 
-          <View style={styles.verticalDivider} />
-
-          {/* Columna 2: Gastos Totales */}
-          <View style={styles.summaryCol}>
-            <View style={styles.summaryLabelRow}>
-              <Ionicons name="arrow-down-circle-outline" size={16} color={colors.error} />
-              <Text style={styles.summaryColLabel}>Gastos Totales</Text>
-            </View>
-            <Text style={[styles.summaryColAmount, styles.expenseAmount]}>
-              {`${currencySymbol}${formatAmount(periodExpense)}`}
-            </Text>
-            <View style={styles.changeBadgeNegative}>
-              <Ionicons
-                name={isExpenseUp ? 'trending-up-outline' : 'trending-down-outline'}
-                size={12}
-                color={isExpenseUp ? colors.error : '#64D2FF'}
+              {/* Distribución de Gastos */}
+              <CategoryBreakdownCard
+                items={dynamicCategoryExpenses}
+                totalExpense={periodExpense}
+                currency={currencySymbol}
               />
-              <Text
-                style={[
-                  styles.changeTextNegative,
-                  isExpenseUp && { color: colors.error },
-                ]}
-              >
-                {`${expenseChangeInfo.text} vs ant.`}
-              </Text>
-            </View>
-          </View>
+            </>
+          )}
         </View>
-
-        {/* Diagnóstico Financiero */}
-        <FinancialHealthCard
-          status={healthStatus}
-          savingsRate={savingsRate}
-          debtToIncomeRatio={debtToIncomeRatio}
-          netCashflow={periodNet}
-          currency={currencySymbol}
-        />
-
-        {/* Distribución de Gastos */}
-        <CategoryBreakdownCard
-          items={dynamicCategoryExpenses}
-          totalExpense={periodExpense}
-          currency={currencySymbol}
-        />
       </ScrollView>
     </SafeAreaView>
   );
@@ -421,6 +464,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 110,
+  },
+  scrollContentWide: {
+    maxWidth: 1200,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  container: {
+    maxWidth: 1200,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  wideGridContainer: {
+    flexDirection: 'row',
+    gap: 20,
+    alignItems: 'flex-start',
+  },
+  leftColumn: {
+    flex: 0.46,
+    gap: 16,
+  },
+  rightColumn: {
+    flex: 0.54,
+    gap: 16,
   },
   header: {
     marginBottom: 16,
@@ -459,6 +525,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     gap: 4,
   },
+  segmentedControlWide: {
+    marginBottom: 0,
+  },
   pill: {
     flex: 1,
     paddingVertical: 8,
@@ -489,6 +558,9 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
     alignItems: 'center',
+  },
+  summaryCardWide: {
+    marginBottom: 0,
   },
   summaryCol: {
     flex: 1,
