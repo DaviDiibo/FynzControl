@@ -16,9 +16,10 @@
   - 5 Tabs operativas: Dashboard, Movimientos, Deudas, Estadísticas y Ajustes.
   - Flujo modal de transacciones con catálogo segregado de gastos/ingresos y soporte de tarjetas diferidas.
   - Centro de Gestión de Pasivos y Cobros: Préstamos bancarios, préstamos a amigos, y Liquidación Mensual de Terceros (Fases 1 y 2).
-  - Cobertura de Testing (54/54 tests en verde): Suites en `src/__tests__/` con Fake Timers deterministas para ciclos de facturación, amortizaciones contables y utilidades de fechas.
+  - Cobertura de Testing (56/56 tests en verde): Suites en `src/__tests__/` con Fake Timers deterministas para ciclos de facturación, amortizaciones contables y utilidades de fechas.
   - Especificación arquitectónica relacional en `DATABASE_SCHEMA.md` para Supabase/PostgreSQL.
 - **Hitos Recientes Concluidos**:
+  - **Corrección en Reversión de Abonos a Terceros y Paridad de Ingresos (`[THIRD-PARTY-ABONO-REVERSION-BETWEEN-DAYS-001]`)**: Persistencia de `previousLastPaymentDate` y `previousSettledAt` en asignaciones de abonos a terceros para restaurar fechas exactas de cargos al borrar abonos inter-diarios; blindaje contra `NaN` y reseteo de `settled`/fechas; deducción de persona en `deleteTransaction`; paridad de `reimbursement` en `getTotalIncome`/`getCurrentMonthIncome`; Casos 15 y 16 en Jest (56/56 tests en verde, 0 errores TS).
   - **Diseño Responsivo Split-View para Login en Escritorio (`[LOGIN-DESKTOP-RESPONSIVE-SPLIT-VIEW-001]`)**: Integración de `useIsWide(768)` en `app/(auth)/login.tsx` para desktop (Web/Tauri) con split view centrado de 2 columnas (`maxWidth: 960`, panel izq branding/pilares, panel der formulario); móvil (`!isWide`) 100% idéntico e intacto; 54/54 tests en verde (100%), 0 errores TS.
   - **Corrección en Eliminación de Deudas y Restricción de Cuotas Previas (`[PERSONAL-DEBT-DELETE-AND-PREV-INSTALLMENTS-CLEANUP-001]`)**: Validación contable precisa (`totalActualPaid > 0 || paidInstallments > initialPaidInstallments`) en `debts-store.ts` y confirmación en `debts.tsx`; selectores de cuotas previas condicionados a `isLegacyMode` en `new-debt.tsx` (alta en Deudas inicia con 0 cuotas previas y 100% saldo); Caso 14 en `accounting-integration.test.ts`; 54/54 tests en verde (100%), 0 errores TS.
   - **Fix Overlap Multi-Tarjeta y Flex Responsivo en Deudas (`[DEBTS-MULTI-CARD-OVERLAP-FIX-AND-RESPONSIVE-FLEX-001]`)**: Pastillas independientes de tarjeta (`uniqueCardNames.map`, max 160, truncado), blindajes Flexbox (`minWidth: 0`, `flexShrink: 0`) contra colisiones y layout responsivo en 2 columnas (`cardsGridWide`, `width: '48.5%'`, `maxWidth: 1200`) en `debts.tsx`; móvil idéntico; 53/53 tests en verde (100%), 0 errores TS.
@@ -31,6 +32,7 @@
   - Probar la pestaña Deudas en Tauri o avanzar con el Paso 3 (Dock flotante en `_layout.tsx`) en la rama `dev`.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
+- ❌ **NO omitir la restauración de fechas al revertir pagos/abonos**: Al eliminar un abono o pago que amortizó un cargo o deuda, se deben restaurar o limpiar 'lastPaymentDate' y 'settledAt' además de los saldos numéricos para evitar que los selectores de facturación mensual consideren que el cargo ya recibió pagos en el ciclo actual.
 - ❌ **NO desarrollar directamente en rama `main`**: Operar siempre sobre `dev`; mergear hacia `main` únicamente al cerrar bloques grandes de tareas consolidadas y verificadas.
 - ❌ **NO modificar estilos ni layouts visuales preexistentes** a menos que el usuario lo solicite explícitamente (`Visual Freeze`).
 - ❌ **NO usar imports estáticos cruzados entre Stores y Services**: Usar inyección de handlers para romper ciclos de require en Metro.
@@ -51,6 +53,7 @@
 - ❌ **NO permitir cuotas previas en alta de Deudas ni bloquear borrado sin pagos reales en la app**: Las deudas en pestaña Deudas son estrictamente actuales (sin cuotas previas pagadas). Para borrado de deudas, `hasPayments` solo debe ser verdadero si existen desembolsos reales en la app (`totalActualPaid > 0 || paidInstallments > initialPaidInstallments`).
 
 ## 4. Bugs Críticos Resueltos & Blindajes
+- **Inconsistencia Temporal al Revertir Abonos a Terceros**: Resuelto guardando `previousLastPaymentDate`/`previousSettledAt` en `ThirdPartyChargeAllocation` y restaurándolos al eliminar abonos de días previos, evitando que cargos restituidos al 100% sigan figurando como pagados en el mes.
 - **Bloqueo Injustificado de Eliminación de Deudas**: Resuelto evaluando desembolsos reales en la app (`totalActualPaid > 0 || paidInstallments > initialPaidInstallments`) en vez de cuotas iniciales históricas.
 - **Colisión Multi-Tarjeta en Deudas**: Resuelto desglosando pastillas independientes por tarjeta y blindando con `minWidth: 0` y `flexShrink: 0` en `debts.tsx`.
 - **Invalid DOM Nesting en Tauri/Web**: Resuelto sustituyendo `TouchableOpacity` exterior por `View` en `RecentTransactionsList`.

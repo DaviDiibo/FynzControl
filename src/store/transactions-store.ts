@@ -257,14 +257,40 @@ export const useTransactionsStore = create<TransactionsState>()(
           if (tx.thirdPartyAllocations && tx.thirdPartyAllocations.length > 0) {
             useDebtsStore.getState().revertThirdPartyAllocations(tx.thirdPartyAllocations);
           } else if (tx.relatedChargeId) {
-            useDebtsStore.getState().revertThirdPartyChargeCollection(tx.relatedChargeId, tx.amount);
+            const debtsStore = useDebtsStore.getState();
+            if (typeof debtsStore.revertThirdPartyChargeAbono === 'function') {
+              debtsStore.revertThirdPartyChargeAbono(tx.relatedChargeId, tx.amount);
+            } else {
+              debtsStore.revertThirdPartyChargeCollection(tx.relatedChargeId, tx.amount);
+            }
           } else if (
-            (tx.type === 'reimbursement' ||
-              tx.category === 'Cobro Tarjeta Compartida' ||
-              tx.category === 'Reembolso') &&
-            (tx.relatedPersonName || tx.personName)
+            tx.type === 'reimbursement' ||
+            tx.category === 'Cobro Tarjeta Compartida' ||
+            tx.category === 'Reembolso' ||
+            Boolean(tx.relatedPersonName || tx.personName || tx.relatedPersonId)
           ) {
-            const targetPerson = tx.relatedPersonName || tx.personName;
+            let targetPerson = tx.relatedPersonName || tx.personName;
+            if (!targetPerson && tx.relatedPersonId) {
+              targetPerson = useDebtsStore.getState().people.find((p) => p.id === tx.relatedPersonId)?.name;
+            }
+            if (!targetPerson && (tx.title || tx.notes)) {
+              const debtsState = useDebtsStore.getState();
+              const peopleMatch = debtsState.people.find((p) =>
+                (tx.title && tx.title.toLowerCase().includes(p.name.toLowerCase().trim())) ||
+                (tx.notes && tx.notes.toLowerCase().includes(p.name.toLowerCase().trim()))
+              );
+              if (peopleMatch) {
+                targetPerson = peopleMatch.name;
+              } else {
+                const chargeMatch = debtsState.thirdPartyCharges.find((c) =>
+                  (tx.title && tx.title.toLowerCase().includes(c.personName.toLowerCase().trim())) ||
+                  (tx.notes && tx.notes.toLowerCase().includes(c.personName.toLowerCase().trim()))
+                );
+                if (chargeMatch) {
+                  targetPerson = chargeMatch.personName;
+                }
+              }
+            }
             if (targetPerson) {
               useDebtsStore.getState().revertThirdPartyPersonAbono(targetPerson, tx.amount);
             }
@@ -339,7 +365,7 @@ export const useTransactionsStore = create<TransactionsState>()(
 
       getTotalIncome: (): number => {
         return get()
-          .transactions.filter((t) => t.type === 'income')
+          .transactions.filter((t) => t.type === 'income' || t.type === 'reimbursement')
           .reduce((sum, t) => sum + t.amount, 0);
       },
 
@@ -360,7 +386,7 @@ export const useTransactionsStore = create<TransactionsState>()(
 
         return get()
           .transactions.filter((t) => {
-            if (t.type !== 'income') {
+            if (t.type !== 'income' && t.type !== 'reimbursement') {
               return false;
             }
             const txDate = new Date(t.date);

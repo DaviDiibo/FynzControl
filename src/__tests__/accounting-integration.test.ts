@@ -947,5 +947,144 @@ describe('Integración Contable: Amortizaciones, Cobros, Reversiones y Abonos en
     expect(persistentDebt).toBeDefined();
     expect(persistentDebt?.remainingAmount).toBe(300000);
   });
+
+  it('Caso 15: Reversión contable al eliminar abono de tercero entre días distintos (ayer -> hoy)', () => {
+    // 1. Simular fecha "ayer"
+    const yesterday = new Date('2026-10-23T12:00:00Z');
+    jest.setSystemTime(yesterday);
+
+    // 2. Registrar un cargo de tercero en una tarjeta compartida ($120 a 1 cuota)
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Lucía Fernández',
+      cardName: 'Visa Platinum',
+      concept: 'Supermercado compartido',
+      amount: 120,
+      installmentsCount: 1,
+    });
+
+    const initialCharge = useDebtsStore.getState().thirdPartyCharges[0];
+    expect(initialCharge.remainingAmount).toBe(120);
+    expect(initialCharge.settled).toBe(false);
+    expect(initialCharge.lastPaymentDate).toBeUndefined();
+    expect(initialCharge.settledAt).toBeUndefined();
+
+    // 3. Registrar un abono a ese tercero mediante recordMonthlyPersonAbono
+    const { allocations } = useDebtsStore.getState().recordMonthlyPersonAbono('Lucía Fernández', 120);
+    expect(allocations).toHaveLength(1);
+
+    const paidCharge = useDebtsStore.getState().thirdPartyCharges[0];
+    expect(paidCharge.remainingAmount).toBe(0);
+    expect(paidCharge.settled).toBe(true);
+    expect(paidCharge.lastPaymentDate).toBe(yesterday.toISOString());
+    expect(paidCharge.settledAt).toBe(yesterday.toISOString());
+
+    // Registrar la transacción de abono vinculada con thirdPartyAllocations
+    useTransactionsStore.getState().addTransaction({
+      title: 'Abono Lucía Fernández',
+      amount: 120,
+      type: 'reimbursement',
+      category: 'Cobro Tarjeta Compartida',
+      personName: 'Lucía Fernández',
+      relatedPersonName: 'Lucía Fernández',
+      thirdPartyAllocations: allocations,
+    });
+
+    const txs = useTransactionsStore.getState().transactions;
+    expect(txs).toHaveLength(1);
+    const txId = txs[0].id;
+
+    // Verificar que los ingresos globales computan el reembolso
+    expect(useTransactionsStore.getState().getTotalIncome()).toBe(120);
+    expect(useTransactionsStore.getState().getCurrentMonthIncome()).toBe(120);
+
+    // 4. Avanzar fecha a "hoy"
+    const today = new Date('2026-10-24T12:00:00Z');
+    jest.setSystemTime(today);
+
+    // 5. Eliminar la transacción del abono mediante deleteTransaction
+    useTransactionsStore.getState().deleteTransaction(txId);
+    expect(useTransactionsStore.getState().transactions).toHaveLength(0);
+
+    // 6. Comprobaciones de integridad contable:
+    const revertedCharge = useDebtsStore.getState().thirdPartyCharges[0];
+    // 1. El cargo del tercero vuelve al 100% de su saldo original (remainingAmount === totalAmount)
+    expect(revertedCharge.remainingAmount).toBe(120);
+    expect(revertedCharge.remainingAmount).toBe(revertedCharge.totalAmount);
+    // 2. settled vuelve a false
+    expect(revertedCharge.settled).toBe(false);
+    // 3. lastPaymentDate y settledAt quedan limpios (undefined)
+    expect(revertedCharge.lastPaymentDate).toBeUndefined();
+    expect(revertedCharge.settledAt).toBeUndefined();
+    expect(revertedCharge.currentPeriodPaidAmount).toBe(0);
+
+    // 4. Los selectores de facturación mensual del tercero reflejan la deuda completa sin abonos
+    const billingSummaries = useDebtsStore.getState().getThirdPartyMonthlyBillingSummary(today);
+    const luciaSummary = billingSummaries.find((s) => s.personName.toLowerCase().includes('lucía'))!;
+    expect(luciaSummary).toBeDefined();
+    expect(luciaSummary.monthlyDueAmount).toBe(120);
+    expect(luciaSummary.monthlyPaidAmount).toBe(0);
+    expect(luciaSummary.monthlyPendingAmount).toBe(120);
+    expect(luciaSummary.isMonthSettled).toBe(false);
+    expect(luciaSummary.totalRemainingDebt).toBe(120);
+
+    // Verificar también que los balances de transactions-store se revirtieron a 0
+    expect(useTransactionsStore.getState().getTotalIncome()).toBe(0);
+    expect(useTransactionsStore.getState().getCurrentMonthIncome()).toBe(0);
+  });
+
+  it('Caso 16: Reversión contable al eliminar abono de tercero entre días distintos sin allocations (fallback por persona)', () => {
+    // 1. Simular fecha "ayer"
+    const yesterday = new Date('2026-10-23T12:00:00Z');
+    jest.setSystemTime(yesterday);
+
+    // Registrar cargo de tercero
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Diego Torres',
+      cardName: 'Mastercard Black',
+      concept: 'Regalo cumpleaños',
+      amount: 200,
+      installmentsCount: 1,
+    });
+
+    // Registrar abono
+    useDebtsStore.getState().recordMonthlyPersonAbono('Diego Torres', 200);
+    const paidCharge = useDebtsStore.getState().thirdPartyCharges[0];
+    expect(paidCharge.remainingAmount).toBe(0);
+    expect(paidCharge.settled).toBe(true);
+    expect(paidCharge.lastPaymentDate).toBe(yesterday.toISOString());
+
+    // Transacción sin thirdPartyAllocations explícitas (fallback por nombre/persona)
+    useTransactionsStore.getState().addTransaction({
+      title: 'Reembolso Diego Torres',
+      amount: 200,
+      type: 'reimbursement',
+      category: 'Reembolso',
+      personName: 'Diego Torres',
+    });
+
+    const txId = useTransactionsStore.getState().transactions[0].id;
+
+    // 2. Avanzar fecha a "hoy"
+    const today = new Date('2026-10-24T12:00:00Z');
+    jest.setSystemTime(today);
+
+    // 3. Eliminar transacción
+    useTransactionsStore.getState().deleteTransaction(txId);
+
+    // 4. Verificar reversión defensiva
+    const revertedCharge = useDebtsStore.getState().thirdPartyCharges[0];
+    expect(revertedCharge.remainingAmount).toBe(200);
+    expect(revertedCharge.settled).toBe(false);
+    expect(revertedCharge.lastPaymentDate).toBeUndefined();
+    expect(revertedCharge.settledAt).toBeUndefined();
+    expect(revertedCharge.currentPeriodPaidAmount).toBe(0);
+
+    const summary = useDebtsStore.getState().getThirdPartyMonthlyBillingSummary(today);
+    const diegoSummary = summary.find((s) => s.personName.toLowerCase().includes('diego'))!;
+    expect(diegoSummary.monthlyDueAmount).toBe(200);
+    expect(diegoSummary.monthlyPaidAmount).toBe(0);
+    expect(diegoSummary.monthlyPendingAmount).toBe(200);
+    expect(diegoSummary.isMonthSettled).toBe(false);
+  });
 });
 
