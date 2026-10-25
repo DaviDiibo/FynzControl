@@ -7,6 +7,19 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[THIRD-PARTY-ABONO-REVERSION-BETWEEN-DAYS-001]` (2026-10-24): Corrección de reversión de abonos a terceros entre días distintos y paridad matemática en ingresos:
+  - Archivos intervenidos:
+    * `src/store/debts-store.ts`
+    * `src/store/transactions-store.ts`
+    * `src/__tests__/accounting-integration.test.ts`
+  - Resumen técnico:
+    - Persistencia de `previousLastPaymentDate` y `previousSettledAt` en `ThirdPartyChargeAllocation` para restaurar con precisión temporal el estado de los cargos al eliminar transacciones de abonos realizadas en días previos.
+    - Blindaje defensivo contra `NaN` en `revertThirdPartyPersonAbono` y reseteo de `settled`, `settledAt`, `lastPaymentDate` y `currentPeriodPaidAmount` cuando el cargo recupera su saldo íntegro.
+    - Deducción inteligente de persona en `deleteTransaction` para disparar la reversión sin importar desde qué pestaña se elimine la transacción.
+    - Inclusión de `reimbursement` en `getTotalIncome` y `getCurrentMonthIncome` para paridad matemática absoluta entre Dashboard y Movimientos.
+    - Casos 15 y 16 en Jest con simulación temporal determinista (`useFakeTimers` y avance de ayer a hoy) verificando 100% pass (56/56 tests).
+  - Verificación y calidad: 56/56 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[LOGIN-DESKTOP-RESPONSIVE-SPLIT-VIEW-001]` (2026-10-24): Estética de escritorio y diseño responsivo split-view en pantalla de login (Web y Tauri):
   - Archivo intervenido:
     * `app/(auth)/login.tsx`

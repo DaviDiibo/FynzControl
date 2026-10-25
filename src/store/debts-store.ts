@@ -119,6 +119,8 @@ export interface ThirdPartyChargeAllocation {
   previousPaidInstallments: number;
   previousCurrentPeriodPaid: number;
   wasSettled: boolean;
+  previousLastPaymentDate?: string;
+  previousSettledAt?: string;
 }
 
 export interface FriendLoan {
@@ -210,7 +212,8 @@ export interface DebtsState {
   ) => { updatedCharges: { id: string; appliedAmount: number }[]; allocations: ThirdPartyChargeAllocation[] };
   revertThirdPartyAllocations: (allocations: ThirdPartyChargeAllocation[]) => void;
   revertThirdPartyChargeCollection: (chargeId: string, amount: number) => void;
-  revertThirdPartyPersonAbono: (personName: string, amount: number) => void;
+  revertThirdPartyChargeAbono: (chargeId: string, amount: number) => void;
+  revertThirdPartyPersonAbono: (personName: string, amount: number) => boolean;
   settleThirdPartyCharge: (id: string) => void;
   settleThirdPartyChargeByPerson: (personName: string, cardName?: string) => void;
   getThirdPartyMonthlyBillingSummary: (referenceDate?: Date) => ThirdPartyPersonMonthlySummary[];
@@ -773,6 +776,8 @@ export const useDebtsStore = create<DebtsState>()(
               previousPaidInstallments: cargo.paidInstallmentsCount ?? 0,
               previousCurrentPeriodPaid: currentPaidThisCycle,
               wasSettled: Boolean(cargo.settled),
+              previousLastPaymentDate: cargo.lastPaymentDate,
+              previousSettledAt: cargo.settledAt,
             });
           }
         }
@@ -849,13 +854,22 @@ export const useDebtsStore = create<DebtsState>()(
                 ? alloc.previousCurrentPeriodPaid
                 : Math.max(0, (charge.currentPeriodPaidAmount || 0) - alloc.appliedAmount);
 
+            const chargeTotal = charge.totalAmount ?? charge.amount ?? 0;
+            const isFullRemaining = alloc.previousRemaining >= chargeTotal;
+            const shouldClearPaymentInfo = previousCurrentPeriodPaid === 0 || isFullRemaining;
+
+            const restoredLastPaymentDate = shouldClearPaymentInfo
+              ? alloc.previousLastPaymentDate
+              : (alloc.previousLastPaymentDate ?? charge.lastPaymentDate);
+
             return {
               ...charge,
               remainingAmount: alloc.previousRemaining,
               paidInstallmentsCount: previousPaidInstallments,
               currentPeriodPaidAmount: previousCurrentPeriodPaid,
               settled: alloc.wasSettled,
-              settledAt: alloc.wasSettled ? charge.settledAt : undefined,
+              settledAt: alloc.wasSettled ? (alloc.previousSettledAt ?? charge.settledAt) : undefined,
+              lastPaymentDate: restoredLastPaymentDate,
             };
           }),
         }));
@@ -866,28 +880,36 @@ export const useDebtsStore = create<DebtsState>()(
         set((state) => ({
           thirdPartyCharges: state.thirdPartyCharges.map((charge) => {
             if (charge.id !== chargeId) return charge;
-            const newRemaining = Math.min(charge.totalAmount, charge.remainingAmount + amount);
+            const chargeTotal = charge.totalAmount ?? charge.amount ?? 0;
+            const newRemaining = Math.min(chargeTotal, (charge.remainingAmount ?? 0) + amount);
             const newPeriodPaid = Math.max(0, (charge.currentPeriodPaidAmount || 0) - amount);
+            const isFullRemaining = newRemaining >= chargeTotal;
+            const isPeriodPaidZero = newPeriodPaid <= 0;
             const newPaidInstallments = charge.monthlyInstallmentAmount > 0
               ? Math.max(
                   charge.initialPaidInstallments ?? 0,
-                  Math.floor((charge.totalAmount - newRemaining) / charge.monthlyInstallmentAmount)
+                  Math.floor((chargeTotal - newRemaining) / charge.monthlyInstallmentAmount)
                 )
               : charge.paidInstallmentsCount;
             return {
               ...charge,
               remainingAmount: Number(newRemaining.toFixed(2)),
-              currentPeriodPaidAmount: Number(newPeriodPaid.toFixed(2)),
+              currentPeriodPaidAmount: isFullRemaining && isPeriodPaidZero ? 0 : Number(newPeriodPaid.toFixed(2)),
               paidInstallmentsCount: newPaidInstallments,
               settled: false,
               settledAt: undefined,
+              lastPaymentDate: isFullRemaining && isPeriodPaidZero ? undefined : charge.lastPaymentDate,
             };
           }),
         }));
         debtSyncHandlers.onDebtAddedOrUpdated?.();
       },
 
-      revertThirdPartyPersonAbono: (personName: string, amount: number): void => {
+      revertThirdPartyChargeAbono: (chargeId: string, amount: number): void => {
+        get().revertThirdPartyChargeCollection(chargeId, amount);
+      },
+
+      revertThirdPartyPersonAbono: (personName: string, amount: number): boolean => {
         const normalizeStr = (str: string): string =>
           str
             .normalize('NFD')
@@ -906,7 +928,7 @@ export const useDebtsStore = create<DebtsState>()(
           return matchPerson;
         });
 
-        if (candidates.length === 0) return;
+        if (candidates.length === 0) return false;
 
         candidates.sort((a, b) => {
           const aPaid = a.currentPeriodPaidAmount || 0;
@@ -923,10 +945,12 @@ export const useDebtsStore = create<DebtsState>()(
 
         for (const c of candidates) {
           if (remainingToRevert <= 0) break;
-          const maxCanRevert = c.totalAmount - c.remainingAmount;
-          if (maxCanRevert <= 0) continue;
+          const chargeTotal = c.totalAmount ?? c.amount ?? 0;
+          const chargeRemaining = c.remainingAmount ?? 0;
+          const maxCanRevert = Math.max(0, chargeTotal - chargeRemaining);
+          if (maxCanRevert <= 0 || isNaN(maxCanRevert)) continue;
           const toRevert = Math.min(remainingToRevert, maxCanRevert);
-          if (toRevert > 0) {
+          if (toRevert > 0 && !isNaN(toRevert)) {
             const rounded = parseFloat(toRevert.toFixed(2));
             revertMap.set(c.id, rounded);
             remainingToRevert = parseFloat((remainingToRevert - rounded).toFixed(2));
@@ -938,27 +962,37 @@ export const useDebtsStore = create<DebtsState>()(
             thirdPartyCharges: state.thirdPartyCharges.map((charge) => {
               if (!revertMap.has(charge.id)) return charge;
               const revertAmt = revertMap.get(charge.id)!;
-              const newRemaining = Math.min(charge.totalAmount, parseFloat((charge.remainingAmount + revertAmt).toFixed(2)));
-              const newPeriodPaid = Math.max(0, parseFloat(((charge.currentPeriodPaidAmount || 0) - revertAmt).toFixed(2)));
+              const chargeTotal = charge.totalAmount ?? charge.amount ?? 0;
+              const rawRemaining = (charge.remainingAmount ?? 0) + revertAmt;
+              const newRemaining = Math.min(chargeTotal, Math.max(0, parseFloat(rawRemaining.toFixed(2))));
+              const rawPeriodPaid = (charge.currentPeriodPaidAmount || 0) - revertAmt;
+              const newPeriodPaid = Math.max(0, parseFloat(rawPeriodPaid.toFixed(2)));
               const newPaidInstallments = charge.monthlyInstallmentAmount > 0
                 ? Math.max(
                     charge.initialPaidInstallments ?? 0,
-                    Math.floor((charge.totalAmount - newRemaining) / charge.monthlyInstallmentAmount)
+                    Math.floor((chargeTotal - newRemaining) / charge.monthlyInstallmentAmount)
                   )
                 : charge.paidInstallmentsCount;
+
+              const isRestoredToFull = newRemaining >= chargeTotal;
+              const isPeriodPaidZero = newPeriodPaid <= 0;
 
               return {
                 ...charge,
                 remainingAmount: Number(newRemaining.toFixed(2)),
-                currentPeriodPaidAmount: Number(newPeriodPaid.toFixed(2)),
+                currentPeriodPaidAmount: isRestoredToFull && isPeriodPaidZero ? 0 : Number(newPeriodPaid.toFixed(2)),
                 paidInstallmentsCount: newPaidInstallments,
-                settled: false,
-                settledAt: undefined,
+                settled: isRestoredToFull ? false : charge.settled,
+                settledAt: isRestoredToFull ? undefined : charge.settledAt,
+                lastPaymentDate: isRestoredToFull && isPeriodPaidZero ? undefined : charge.lastPaymentDate,
               };
             }),
           }));
           debtSyncHandlers.onDebtAddedOrUpdated?.();
+          return true;
         }
+
+        return false;
       },
 
       settleThirdPartyCharge: (id: string): void => {
