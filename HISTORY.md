@@ -7,6 +7,18 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[SETTINGS-RESPONSIVE-2-COLUMN-LAYOUT-001]` (2026-10-27): Layout responsivo en 2 columnas para la pestaña Ajustes (Settings) en pantallas de escritorio (Tauri y Web):
+  - Archivos intervenidos:
+    * `app/(app)/(tabs)/settings.tsx`
+    * `src/components/settings/settings-section-list.tsx`
+  - Resumen técnico:
+    - Extensión de `SettingsSectionList` con props opcionales `isWide?: boolean` y `userProfileSlot?: React.ReactNode` mediante arrow function y tipado inline estricto.
+    - Implementación de distribución simétrica en 2 columnas (`styles.wideGridContainer`, `flexDirection: 'row'`, `gap: 16`) cuando `isWide === true` (`width >= 768px`): Columna Izquierda con perfil de usuario (`UserProfileCard`), finanzas/moneda y seguridad/privacidad; Columna Derecha con datos/almacenamiento y botón de cierre de sesión.
+    - Centrado horizontal con `maxWidth: 1200` en el contenedor de scroll de `settings.tsx`.
+    - Preservación 100% idéntica del flujo vertical para móviles (`!isWide`), garantizando la directriz estricta de `Visual Freeze`.
+    - Modal de reseteo de base de datos desacoplado del grid para disponibilidad continua en cualquier resolución.
+  - Verificación y calidad: 56/56 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[TABS-DESKTOP-FLOATING-DOCK-001]` (2026-10-27): Implementación de Dock flotante centrado en barra de navegación inferior (Tabs) para pantallas de escritorio (Tauri y Web):
   - Archivo intervenido:
     * `app/(app)/(tabs)/_layout.tsx`

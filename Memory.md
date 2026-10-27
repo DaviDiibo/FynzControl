@@ -13,21 +13,22 @@
 
 ## 2. Estado Activo del Sprint y Foco Inmediato
 - **Módulos Principales Culminados**:
-  - 5 Tabs operativas: Dashboard, Movimientos, Deudas, Estadísticas y Ajustes.
+  - 5 Tabs operativas con paridad móvil y escritorio: Dashboard, Movimientos, Deudas, Estadísticas y Ajustes.
+  - Dock flotante centrado en barra de navegación inferior para pantallas de escritorio.
   - Flujo modal de transacciones con catálogo segregado de gastos/ingresos y soporte de tarjetas diferidas.
   - Centro de Gestión de Pasivos y Cobros: Préstamos bancarios, préstamos a amigos, y Liquidación Mensual de Terceros (Fases 1 y 2).
   - Cobertura de Testing (56/56 tests en verde): Suites en `src/__tests__/` con Fake Timers deterministas para ciclos de facturación, amortizaciones contables y utilidades de fechas.
   - Especificación arquitectónica relacional en `DATABASE_SCHEMA.md` para Supabase/PostgreSQL.
 - **Hitos Recientes Concluidos**:
+  - **Layout Responsivo en 2 Columnas para Ajustes (`[SETTINGS-RESPONSIVE-2-COLUMN-LAYOUT-001]`)**: Distribución simétrica en 2 columnas en `settings.tsx` y `settings-section-list.tsx` con `useIsWide(768)` (columna izq: perfil, finanzas/moneda, seguridad; columna der: datos/almacenamiento, logout; `maxWidth: 1200`); móvil (`!isWide`) 100% idéntico e intacto; 56/56 tests en verde (100%), 0 errores TS.
   - **Dock Flotante Centrado en Navegación de Tabs (`[TABS-DESKTOP-FLOATING-DOCK-001]`)**: Integración de `useIsWide(768)` en `app/(app)/(tabs)/_layout.tsx` para desktop/Tauri/Web con dock flotante centrado (`maxWidth: 540`, `position: 'absolute'`, `bottom: 16`, `borderRadius: 24`, sombra y elevación); móvil (`!isWide`) 100% idéntico e intacto; 56/56 tests en verde (100%), 0 errores TS.
   - **Corrección en Reversión de Abonos a Terceros y Paridad de Ingresos (`[THIRD-PARTY-ABONO-REVERSION-BETWEEN-DAYS-001]`)**: Persistencia de `previousLastPaymentDate` y `previousSettledAt` en asignaciones de abonos a terceros; blindaje contra `NaN` y reseteo de fechas; paridad de `reimbursement` en `getTotalIncome`/`getCurrentMonthIncome`; 56/56 tests en verde.
   - **Diseño Responsivo Split-View para Login en Escritorio (`[LOGIN-DESKTOP-RESPONSIVE-SPLIT-VIEW-001]`)**: Integración de `useIsWide(768)` en `app/(auth)/login.tsx` para desktop (Web/Tauri) con split view centrado de 2 columnas (`maxWidth: 960`); móvil intacto; 54/54 tests en verde.
-  - **Corrección en Eliminación de Deudas (`[PERSONAL-DEBT-DELETE-AND-PREV-INSTALLMENTS-CLEANUP-001]`)**: Validación contable precisa (`totalActualPaid > 0 || paidInstallments > initialPaidInstallments`); cuotas previas en alta restringidas a legacy; 54/54 tests en verde.
-  - **Fix Overlap Multi-Tarjeta y Flex Responsivo en Deudas (`[DEBTS-MULTI-CARD-OVERLAP-FIX-AND-RESPONSIVE-FLEX-001]`)**: Pastillas independientes de tarjeta (`uniqueCardNames.map`, max 160), blindajes Flexbox y layout responsivo 2 columnas en `debts.tsx`; móvil idéntico; 53/53 tests en verde.
+  - **Corrección en Eliminación de Deudas (`[PERSONAL-DEBT-DELETE-AND-PREV-INSTALLMENTS-CLEANUP-001]`)**: Validación contable precisa (`totalActualPaid > 0 || paidInstallments > initialPaidInstallments`); 54/54 tests en verde.
+  - **Fix Overlap Multi-Tarjeta y Flex Responsivo en Deudas (`[DEBTS-MULTI-CARD-OVERLAP-FIX-AND-RESPONSIVE-FLEX-001]`)**: Pastillas independientes de tarjeta, blindajes Flexbox y layout responsivo 2 columnas en `debts.tsx`; móvil idéntico; 53/53 tests en verde.
   - **Layout Responsivo en 2 Columnas para Estadísticas, Movimientos y Dashboard**: Pestañas con `useIsWide(768)` en desktop acotadas a `maxWidth: 1200`; móvil vertical 100% preservado; 53/53 tests en verde.
-  - **Calibración Compacta de Ventana en Tauri (`[TAURI-WINDOW-COMPACT-SIZE-LIMITS-001]`)**: Límites de redimensión y soporte desktop nativo con Tauri v2.
 - **Próximo Foco Inmediato**:
-  - Implementar el layout responsivo en 2 columnas para la pestaña Ajustes (`settings.tsx`) o validar en vivo con `npm run desktop:dev` en la rama `dev`.
+  - Paridad de escritorio completada en las 5 pestañas principales. Avanzar con sincronización Supabase / auditoría de esquemas o consolidar `dev` hacia `main`.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
 - ❌ **NO omitir la restauración de fechas al revertir pagos/abonos**: Restaurar siempre 'lastPaymentDate' y 'settledAt'.
@@ -43,6 +44,7 @@
 - ❌ **NO dar por concluida una tarea sin verificación doble**: Mandatorio `npm test` (100% pass) y `npx tsc --noEmit` (0 errores). Simular fechas con Fake Timers.
 
 ## 4. Bugs Críticos Resueltos & Blindajes
+- **Layout Responsivo en Ajustes**: División semántica en 2 columnas (`wideGridContainer`, `column: flex 1`) balanceando perfil y preferencias con almacenamiento y logout.
 - **Dock Flotante sin Colisión**: Dock flotante en `_layout.tsx` con `bottom: 16` y `position: 'absolute'` acotado a 540dp en pantallas anchas sin afectar móvil.
 - **Inconsistencia Temporal al Revertir Abonos a Terceros**: Resuelto guardando `previousLastPaymentDate`/`previousSettledAt` en `ThirdPartyChargeAllocation`.
 - **Bloqueo Injustificado de Eliminación de Deudas**: Resuelto evaluando desembolsos reales en la app (`totalActualPaid > 0 || paidInstallments > initialPaidInstallments`).

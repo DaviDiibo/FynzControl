@@ -23,13 +23,18 @@ import { authenticateWithBiometrics } from '../../utils/biometrics';
 export type CurrencyOption = CurrencyCode;
 
 export type SettingsSectionListProps = {
+  isWide?: boolean;
+  userProfileSlot?: React.ReactNode;
   onCurrencyChange?: (currency: CurrencyCode) => void;
 };
 
 const CURRENCIES: CurrencyCode[] = ['USD', 'EUR', 'BRL', 'ARS', 'COP', 'MXN'];
 
-const SettingsSectionList = (props: SettingsSectionListProps = {}): JSX.Element => {
-  const { onCurrencyChange } = props;
+export const SettingsSectionList = ({
+  isWide = false,
+  userProfileSlot,
+  onCurrencyChange,
+}: SettingsSectionListProps = {}): JSX.Element => {
   const router = useRouter();
   const logout = useAuthStore((state) => state.logout);
 
@@ -134,234 +139,261 @@ const SettingsSectionList = (props: SettingsSectionListProps = {}): JSX.Element 
     }, 1200);
   };
 
+  const financeCard = (
+    <View style={styles.card}>
+      <Text style={styles.sectionHeader}>FINANZAS & MONEDA</Text>
+
+      <View style={styles.currencyRow}>
+        <View style={styles.rowHeader}>
+          <Ionicons name="cash-outline" size={18} color={colors.primary} />
+          <Text style={styles.rowTitle}>Moneda Principal</Text>
+        </View>
+        <View style={styles.pillsRow}>
+          {CURRENCIES.map((curr) => {
+            const isSelected = currency === curr;
+            return (
+              <TouchableOpacity
+                key={curr}
+                style={[styles.pill, isSelected && styles.pillActive]}
+                onPress={() => handleCurrencySelect(curr)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+              >
+                <Text
+                  style={[
+                    styles.pillText,
+                    isSelected && styles.pillTextActive,
+                  ]}
+                >
+                  {curr}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      <View style={styles.separator} />
+
+      <View style={styles.itemRow}>
+        <View style={styles.itemLeft}>
+          <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+          <Text style={styles.rowTitle}>Ciclo Mensual</Text>
+        </View>
+        <Text style={styles.itemValue}>Inicio de Mes: Día 1</Text>
+      </View>
+    </View>
+  );
+
+  const securityCard = (
+    <View style={styles.card}>
+      <Text style={styles.sectionHeader}>SEGURIDAD & PRIVACIDAD</Text>
+
+      <View style={styles.switchRow}>
+        <View style={styles.itemLeftFlex}>
+          <Ionicons name="eye-off-outline" size={18} color={colors.primary} />
+          <View style={styles.textContainer}>
+            <Text style={styles.rowTitle}>Modo Privacidad</Text>
+            <Text style={styles.rowSubtitle}>Ocultar saldos al iniciar</Text>
+          </View>
+        </View>
+        <Switch
+          value={privacyMode}
+          onValueChange={(val) => setPrivacyMode(val)}
+          thumbColor={privacyMode ? '#00FFA3' : '#8E8E93'}
+          trackColor={{ false: '#2C2C2E', true: 'rgba(0, 255, 163, 0.3)' }}
+        />
+      </View>
+
+      <View style={styles.separator} />
+
+      <View style={styles.switchRow}>
+        <View style={styles.itemLeftFlex}>
+          <Ionicons
+            name="finger-print-outline"
+            size={18}
+            color={colors.primary}
+          />
+          <View style={styles.textContainer}>
+            <Text style={styles.rowTitle}>Bloqueo Biométrico</Text>
+            <Text style={styles.rowSubtitle}>Requerir FaceID / Huella</Text>
+          </View>
+        </View>
+        <Switch
+          value={biometricsEnabled}
+          onValueChange={handleBiometricToggle}
+          thumbColor={biometricsEnabled ? '#00FFA3' : '#8E8E93'}
+          trackColor={{ false: '#2C2C2E', true: 'rgba(0, 255, 163, 0.3)' }}
+        />
+      </View>
+
+      <View style={styles.separator} />
+
+      <View style={styles.itemRow}>
+        <View style={styles.itemLeft}>
+          <Ionicons name="timer-outline" size={18} color={colors.primary} />
+          <Text style={styles.rowTitle}>Tiempo de Sesión</Text>
+        </View>
+        <Text style={styles.itemValue}>Cierre automático: 60 minutos</Text>
+      </View>
+    </View>
+  );
+
+  const dataCard = (
+    <View style={styles.card}>
+      <Text style={styles.sectionHeader}>DATOS & ALMACENAMIENTO</Text>
+
+      <TouchableOpacity
+        style={styles.actionRow}
+        onPress={handleExportBackup}
+        activeOpacity={0.7}
+      >
+        <View style={styles.itemLeft}>
+          <Ionicons name="download-outline" size={18} color={colors.primary} />
+          <Text style={styles.rowTitle}>Exportar Respaldo</Text>
+        </View>
+        <View style={styles.actionRight}>
+          <Text style={styles.actionHint}>JSON / CSV</Text>
+          <Ionicons
+            name="chevron-forward-outline"
+            size={16}
+            color={colors.textSecondary}
+          />
+        </View>
+      </TouchableOpacity>
+
+      <View style={styles.separator} />
+
+      <TouchableOpacity
+        style={styles.legacyRow}
+        onPress={() =>
+          router.push({
+            pathname: '/(app)/(modal)/new-debt',
+            params: { mode: 'legacy' },
+          })
+        }
+        activeOpacity={0.7}
+      >
+        <View style={styles.itemLeftFlex}>
+          <View style={styles.legacyIconBadge}>
+            <Ionicons name="time-outline" size={18} color="#00FFA3" />
+          </View>
+          <View style={styles.textContainer}>
+            <Text style={styles.rowTitle}>
+              Registrar Deudas / Compras Antiguas
+            </Text>
+            <Text style={styles.rowSubtitle}>
+              Ingresa préstamos o compras en cuotas de meses pasados sin afectar tu saldo de hoy.
+            </Text>
+          </View>
+        </View>
+        <View style={styles.actionRight}>
+          <View style={styles.legacyBadge}>
+            <Text style={styles.legacyBadgeText}>[ HISTÓRICO ]</Text>
+          </View>
+          <Ionicons
+            name="chevron-forward-outline"
+            size={16}
+            color={colors.textSecondary}
+          />
+        </View>
+      </TouchableOpacity>
+
+      <View style={styles.separator} />
+
+      <TouchableOpacity
+        style={styles.legacyRow}
+        onPress={() =>
+          router.push({
+            pathname: '/(app)/(modal)/legacy-card-expense',
+          })
+        }
+        activeOpacity={0.7}
+      >
+        <View style={styles.itemLeftFlex}>
+          <View style={styles.cardLegacyIconBadge}>
+            <Ionicons name="card-outline" size={18} color="#0A84FF" />
+          </View>
+          <View style={styles.textContainer}>
+            <Text style={styles.rowTitle}>
+              Compras en Tarjeta (Cuotas Históricas)
+            </Text>
+            <Text style={styles.rowSubtitle}>
+              Ingresa compras a cuotas de meses pasados para calibrar el valor mensual a pagar de tu tarjeta.
+            </Text>
+          </View>
+        </View>
+        <View style={styles.actionRight}>
+          <View style={styles.cardLegacyBadge}>
+            <Text style={styles.cardLegacyBadgeText}>[ TARJETAS ]</Text>
+          </View>
+          <Ionicons
+            name="chevron-forward-outline"
+            size={16}
+            color={colors.textSecondary}
+          />
+        </View>
+      </TouchableOpacity>
+
+      <View style={styles.separator} />
+
+      <TouchableOpacity
+        style={styles.resetRow}
+        onPress={() => setIsResetModalVisible(true)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.itemLeftFlex}>
+          <Ionicons name="flash-outline" size={18} color="#FF9F0A" />
+          <View style={styles.textContainer}>
+            <Text style={[styles.rowTitle, styles.amberText]}>
+              Restablecer Base de Datos (Modo Pruebas)
+            </Text>
+            <Text style={styles.rowSubtitle}>
+              Herramienta temporal para pruebas desde cero.
+            </Text>
+          </View>
+        </View>
+        <View style={styles.devBadge}>
+          <Text style={styles.devBadgeText}>[ DEV / TEST ]</Text>
+        </View>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const logoutButton = (
+    <TouchableOpacity
+      style={styles.logoutButton}
+      onPress={logout}
+      activeOpacity={0.8}
+    >
+      <Ionicons name="log-out-outline" size={20} color="#FF453A" />
+      <Text style={styles.logoutText}>CERRAR SESIÓN</Text>
+    </TouchableOpacity>
+  );
+
   return (
     <View style={styles.container}>
-      {/* Grupo 1: Preferencias Financieras */}
-      <View style={styles.card}>
-        <Text style={styles.sectionHeader}>FINANZAS & MONEDA</Text>
-
-        <View style={styles.currencyRow}>
-          <View style={styles.rowHeader}>
-            <Ionicons name="cash-outline" size={18} color={colors.primary} />
-            <Text style={styles.rowTitle}>Moneda Principal</Text>
+      {isWide ? (
+        <View style={styles.wideGridContainer}>
+          <View style={styles.column}>
+            {userProfileSlot}
+            {financeCard}
+            {securityCard}
           </View>
-          <View style={styles.pillsRow}>
-            {CURRENCIES.map((curr) => {
-              const isSelected = currency === curr;
-              return (
-                <TouchableOpacity
-                  key={curr}
-                  style={[styles.pill, isSelected && styles.pillActive]}
-                  onPress={() => handleCurrencySelect(curr)}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isSelected }}
-                >
-                  <Text
-                    style={[
-                      styles.pillText,
-                      isSelected && styles.pillTextActive,
-                    ]}
-                  >
-                    {curr}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+          <View style={styles.column}>
+            {dataCard}
+            {logoutButton}
           </View>
         </View>
-
-        <View style={styles.separator} />
-
-        <View style={styles.itemRow}>
-          <View style={styles.itemLeft}>
-            <Ionicons name="calendar-outline" size={18} color={colors.primary} />
-            <Text style={styles.rowTitle}>Ciclo Mensual</Text>
-          </View>
-          <Text style={styles.itemValue}>Inicio de Mes: Día 1</Text>
-        </View>
-      </View>
-
-      {/* Grupo 2: Seguridad & Privacidad */}
-      <View style={styles.card}>
-        <Text style={styles.sectionHeader}>SEGURIDAD & PRIVACIDAD</Text>
-
-        <View style={styles.switchRow}>
-          <View style={styles.itemLeftFlex}>
-            <Ionicons name="eye-off-outline" size={18} color={colors.primary} />
-            <View style={styles.textContainer}>
-              <Text style={styles.rowTitle}>Modo Privacidad</Text>
-              <Text style={styles.rowSubtitle}>Ocultar saldos al iniciar</Text>
-            </View>
-          </View>
-          <Switch
-            value={privacyMode}
-            onValueChange={(val) => setPrivacyMode(val)}
-            thumbColor={privacyMode ? '#00FFA3' : '#8E8E93'}
-            trackColor={{ false: '#2C2C2E', true: 'rgba(0, 255, 163, 0.3)' }}
-          />
-        </View>
-
-        <View style={styles.separator} />
-
-        <View style={styles.switchRow}>
-          <View style={styles.itemLeftFlex}>
-            <Ionicons
-              name="finger-print-outline"
-              size={18}
-              color={colors.primary}
-            />
-            <View style={styles.textContainer}>
-              <Text style={styles.rowTitle}>Bloqueo Biométrico</Text>
-              <Text style={styles.rowSubtitle}>Requerir FaceID / Huella</Text>
-            </View>
-          </View>
-          <Switch
-            value={biometricsEnabled}
-            onValueChange={handleBiometricToggle}
-            thumbColor={biometricsEnabled ? '#00FFA3' : '#8E8E93'}
-            trackColor={{ false: '#2C2C2E', true: 'rgba(0, 255, 163, 0.3)' }}
-          />
-        </View>
-
-        <View style={styles.separator} />
-
-        <View style={styles.itemRow}>
-          <View style={styles.itemLeft}>
-            <Ionicons name="timer-outline" size={18} color={colors.primary} />
-            <Text style={styles.rowTitle}>Tiempo de Sesión</Text>
-          </View>
-          <Text style={styles.itemValue}>Cierre automático: 60 minutos</Text>
-        </View>
-      </View>
-
-      {/* Grupo 3: Datos & Sistema */}
-      <View style={styles.card}>
-        <Text style={styles.sectionHeader}>DATOS & ALMACENAMIENTO</Text>
-
-        <TouchableOpacity
-          style={styles.actionRow}
-          onPress={handleExportBackup}
-          activeOpacity={0.7}
-        >
-          <View style={styles.itemLeft}>
-            <Ionicons name="download-outline" size={18} color={colors.primary} />
-            <Text style={styles.rowTitle}>Exportar Respaldo</Text>
-          </View>
-          <View style={styles.actionRight}>
-            <Text style={styles.actionHint}>JSON / CSV</Text>
-            <Ionicons
-              name="chevron-forward-outline"
-              size={16}
-              color={colors.textSecondary}
-            />
-          </View>
-        </TouchableOpacity>
-
-        <View style={styles.separator} />
-
-        <TouchableOpacity
-          style={styles.legacyRow}
-          onPress={() =>
-            router.push({
-              pathname: '/(app)/(modal)/new-debt',
-              params: { mode: 'legacy' },
-            })
-          }
-          activeOpacity={0.7}
-        >
-          <View style={styles.itemLeftFlex}>
-            <View style={styles.legacyIconBadge}>
-              <Ionicons name="time-outline" size={18} color="#00FFA3" />
-            </View>
-            <View style={styles.textContainer}>
-              <Text style={styles.rowTitle}>
-                Registrar Deudas / Compras Antiguas
-              </Text>
-              <Text style={styles.rowSubtitle}>
-                Ingresa préstamos o compras en cuotas de meses pasados sin afectar tu saldo de hoy.
-              </Text>
-            </View>
-          </View>
-          <View style={styles.actionRight}>
-            <View style={styles.legacyBadge}>
-              <Text style={styles.legacyBadgeText}>[ HISTÓRICO ]</Text>
-            </View>
-            <Ionicons
-              name="chevron-forward-outline"
-              size={16}
-              color={colors.textSecondary}
-            />
-          </View>
-        </TouchableOpacity>
-
-        <View style={styles.separator} />
-
-        <TouchableOpacity
-          style={styles.legacyRow}
-          onPress={() =>
-            router.push('/(app)/(modal)/legacy-card-expense' as any)
-          }
-          activeOpacity={0.7}
-        >
-          <View style={styles.itemLeftFlex}>
-            <View style={styles.cardLegacyIconBadge}>
-              <Ionicons name="card-outline" size={18} color="#0A84FF" />
-            </View>
-            <View style={styles.textContainer}>
-              <Text style={styles.rowTitle}>
-                Compras en Tarjeta (Cuotas Históricas)
-              </Text>
-              <Text style={styles.rowSubtitle}>
-                Ingresa compras a cuotas de meses pasados para calibrar el valor mensual a pagar de tu tarjeta.
-              </Text>
-            </View>
-          </View>
-          <View style={styles.actionRight}>
-            <View style={styles.cardLegacyBadge}>
-              <Text style={styles.cardLegacyBadgeText}>[ TARJETAS ]</Text>
-            </View>
-            <Ionicons
-              name="chevron-forward-outline"
-              size={16}
-              color={colors.textSecondary}
-            />
-          </View>
-        </TouchableOpacity>
-
-        <View style={styles.separator} />
-
-        <TouchableOpacity
-          style={styles.resetRow}
-          onPress={() => setIsResetModalVisible(true)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.itemLeftFlex}>
-            <Ionicons name="flash-outline" size={18} color="#FF9F0A" />
-            <View style={styles.textContainer}>
-              <Text style={[styles.rowTitle, styles.amberText]}>
-                Restablecer Base de Datos (Modo Pruebas)
-              </Text>
-              <Text style={styles.rowSubtitle}>
-                Herramienta temporal para pruebas desde cero.
-              </Text>
-            </View>
-          </View>
-          <View style={styles.devBadge}>
-            <Text style={styles.devBadgeText}>[ DEV / TEST ]</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
-
-      {/* Grupo 4: Cierre de Sesión */}
-      <TouchableOpacity
-        style={styles.logoutButton}
-        onPress={logout}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="log-out-outline" size={20} color="#FF453A" />
-        <Text style={styles.logoutText}>CERRAR SESIÓN</Text>
-      </TouchableOpacity>
+      ) : (
+        <>
+          {financeCard}
+          {securityCard}
+          {dataCard}
+          {logoutButton}
+        </>
+      )}
 
       {/* Modal Cyberpunk de Confirmación de Reseteo */}
       <Modal
@@ -426,6 +458,14 @@ const SettingsSectionList = (props: SettingsSectionListProps = {}): JSX.Element 
 const styles = StyleSheet.create({
   container: {
     width: '100%',
+  },
+  wideGridContainer: {
+    flexDirection: 'row',
+    gap: 16,
+    alignItems: 'flex-start',
+  },
+  column: {
+    flex: 1,
   },
   card: {
     backgroundColor: colors.surface,
