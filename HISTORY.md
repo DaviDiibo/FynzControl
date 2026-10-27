@@ -7,6 +7,15 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[DEBTS-RESPONSIVE-BANK-HEADER-CARD-001]` (2026-10-27): Adaptación responsiva de tarjeta/indicador de banco en agrupación de deudas personales:
+  - Archivo intervenido:
+    * `app/(app)/(tabs)/debts.tsx`
+  - Resumen técnico:
+    - Incorporación de clases de estilo condicionales responsivas `bankGroupHeaderCardWide` y `bankGroupHeaderLeftWide` con `useIsWide(768)`.
+    - En `isWide === true` (pantallas de escritorio Tauri y Web), la tarjeta de cabecera de la entidad bancaria adopta `alignSelf: 'flex-start'`, ancho auto-ajustable acotado (`minWidth: 320`, `maxWidth: 480`) y espaciado proporcional (`gap: 20`). Se erradica el estiramiento desproporcionado de 1200px y la franja oscura vacía entre el nombre y el subtotal.
+    - En `isWide === false` (dispositivos móviles y anchos < 768px), se preserva al 100% el estilo estático original (`width: '100%'`, `justifyContent: 'space-between'`), cumpliendo la directriz estricta de `Visual Freeze`.
+  - Verificación y calidad: 56/56 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[SETTINGS-RESPONSIVE-2-COLUMN-LAYOUT-001]` (2026-10-27): Layout responsivo en 2 columnas para la pestaña Ajustes (Settings) en pantallas de escritorio (Tauri y Web):
   - Archivos intervenidos:
     * `app/(app)/(tabs)/settings.tsx`
