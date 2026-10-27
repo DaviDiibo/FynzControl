@@ -7,6 +7,15 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[TABS-DESKTOP-FLOATING-DOCK-001]` (2026-10-27): Implementación de Dock flotante centrado en barra de navegación inferior (Tabs) para pantallas de escritorio (Tauri y Web):
+  - Archivo intervenido:
+    * `app/(app)/(tabs)/_layout.tsx`
+  - Resumen técnico:
+    - Integración de `useIsWide(768)` en `TabsLayout` para adaptar la barra de navegación inferior en pantallas anchas (Tauri WebView2 y Web).
+    - En `isWide === true`, `tabBarStyle` se transforma en un Dock flotante centrado con `position: 'absolute'`, `bottom: 16`, `maxWidth: 540`, `width: '100%'`, `marginHorizontal: 'auto'`, `borderRadius: 24`, bordes completos (`borderWidth: 1`, `borderColor: '#2C2C2E'`), sombra suave y elevación (`elevation: 10`, `shadowOpacity: 0.4`, `shadowRadius: 16`), altura de `64dp` y `overflow: 'hidden'`.
+    - En `isWide === false` (dispositivos móviles y anchos < 768px), se preserva al 100% el estilo estático original con las safe areas de iOS (`height: 88`) y Android (`height: 60 + insets.bottom`), cumpliendo la directriz estricta de `Visual Freeze`.
+  - Verificación y calidad: 56/56 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[THIRD-PARTY-ABONO-REVERSION-BETWEEN-DAYS-001]` (2026-10-24): Corrección de reversión de abonos a terceros entre días distintos y paridad matemática en ingresos:
   - Archivos intervenidos:
     * `src/store/debts-store.ts`
