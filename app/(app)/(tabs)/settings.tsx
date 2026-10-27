@@ -5,16 +5,28 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../src/theme/colors';
 import { useAuthStore } from '../../../src/store/auth-store';
+import { useIsWide } from '../../../src/hooks/use-responsive';
 import UserProfileCard from '../../../src/components/settings/user-profile-card';
 import SettingsSectionList from '../../../src/components/settings/settings-section-list';
 
 const SettingsScreen = (): JSX.Element => {
   const user = useAuthStore((state) => state.user);
+  const isWide = useIsWide(768);
+
+  const userProfileCard = (
+    <UserProfileCard
+      name={user?.name?.trim() || user?.email?.split('@')[0] || 'Usuario'}
+      email={user?.email || 'Sin correo asociado'}
+    />
+  );
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          isWide && styles.scrollContentWide,
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Cabecera */}
@@ -26,14 +38,17 @@ const SettingsScreen = (): JSX.Element => {
           <Text style={styles.headerTitle}>AJUSTES DEL SISTEMA</Text>
         </View>
 
-        {/* Tarjeta de Perfil de Usuario */}
-        <UserProfileCard
-          name={user?.name?.trim() || user?.email?.split('@')[0] || 'Usuario'}
-          email={user?.email || 'Sin correo asociado'}
-        />
-
-        {/* Lista de Secciones de Ajustes */}
-        <SettingsSectionList />
+        {isWide ? (
+          <SettingsSectionList
+            isWide
+            userProfileSlot={userProfileCard}
+          />
+        ) : (
+          <>
+            {userProfileCard}
+            <SettingsSectionList />
+          </>
+        )}
 
         {/* Versión de la app */}
         <View style={styles.footer}>
@@ -55,6 +70,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 110,
+  },
+  scrollContentWide: {
+    maxWidth: 1200,
+    width: '100%',
+    alignSelf: 'center',
   },
   header: {
     marginBottom: 16,
