@@ -235,7 +235,7 @@ export const SettingsSectionList = ({
           <Ionicons name="timer-outline" size={18} color={colors.primary} />
           <Text style={styles.rowTitle}>Tiempo de Sesión</Text>
         </View>
-        <Text style={styles.itemValue}>Cierre automático: 60 minutos</Text>
+        <Text style={styles.itemValue}>Sesión: Persistente (Segura)</Text>
       </View>
     </View>
   );

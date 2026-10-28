@@ -1117,8 +1117,8 @@ const DebtsScreen = (): JSX.Element => {
                 return (
                   <View key={group.entityName} style={styles.bankGroupWrapper}>
                     {/* Encabezado de Entidad Bancaria / Acreedor */}
-                    <View style={styles.bankGroupHeaderCard}>
-                      <View style={styles.bankGroupHeaderLeft}>
+                    <View style={[styles.bankGroupHeaderCard, isWide && styles.bankGroupHeaderCardWide]}>
+                      <View style={[styles.bankGroupHeaderLeft, isWide && styles.bankGroupHeaderLeftWide]}>
                         <View style={styles.bankGroupIconWrapper}>
                           <Ionicons name="business-outline" size={15} color="#00FFA3" />
                         </View>
@@ -5414,11 +5414,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     marginBottom: 10,
   },
+  bankGroupHeaderCardWide: {
+    alignSelf: 'flex-start',
+    minWidth: 320,
+    maxWidth: 480,
+    width: 'auto',
+    gap: 20,
+  },
   bankGroupHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     flex: 1,
+  },
+  bankGroupHeaderLeftWide: {
+    flex: 0,
+    flexShrink: 1,
   },
   bankGroupIconWrapper: {
     width: 32,

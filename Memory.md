@@ -20,17 +20,16 @@
   - Cobertura de Testing (56/56 tests en verde): Suites en `src/__tests__/` con Fake Timers deterministas para ciclos de facturación, amortizaciones contables y utilidades de fechas.
   - Especificación arquitectónica relacional en `DATABASE_SCHEMA.md` para Supabase/PostgreSQL.
 - **Hitos Recientes Concluidos**:
-  - **Layout Responsivo en 2 Columnas para Ajustes (`[SETTINGS-RESPONSIVE-2-COLUMN-LAYOUT-001]`)**: Distribución simétrica en 2 columnas en `settings.tsx` y `settings-section-list.tsx` con `useIsWide(768)` (columna izq: perfil, finanzas/moneda, seguridad; columna der: datos/almacenamiento, logout; `maxWidth: 1200`); móvil (`!isWide`) 100% idéntico e intacto; 56/56 tests en verde (100%), 0 errores TS.
-  - **Dock Flotante Centrado en Navegación de Tabs (`[TABS-DESKTOP-FLOATING-DOCK-001]`)**: Integración de `useIsWide(768)` en `app/(app)/(tabs)/_layout.tsx` para desktop/Tauri/Web con dock flotante centrado (`maxWidth: 540`, `position: 'absolute'`, `bottom: 16`, `borderRadius: 24`, sombra y elevación); móvil (`!isWide`) 100% idéntico e intacto; 56/56 tests en verde (100%), 0 errores TS.
-  - **Corrección en Reversión de Abonos a Terceros y Paridad de Ingresos (`[THIRD-PARTY-ABONO-REVERSION-BETWEEN-DAYS-001]`)**: Persistencia de `previousLastPaymentDate` y `previousSettledAt` en asignaciones de abonos a terceros; blindaje contra `NaN` y reseteo de fechas; paridad de `reimbursement` en `getTotalIncome`/`getCurrentMonthIncome`; 56/56 tests en verde.
-  - **Diseño Responsivo Split-View para Login en Escritorio (`[LOGIN-DESKTOP-RESPONSIVE-SPLIT-VIEW-001]`)**: Integración de `useIsWide(768)` en `app/(auth)/login.tsx` para desktop (Web/Tauri) con split view centrado de 2 columnas (`maxWidth: 960`); móvil intacto; 54/54 tests en verde.
-  - **Corrección en Eliminación de Deudas (`[PERSONAL-DEBT-DELETE-AND-PREV-INSTALLMENTS-CLEANUP-001]`)**: Validación contable precisa (`totalActualPaid > 0 || paidInstallments > initialPaidInstallments`); 54/54 tests en verde.
-  - **Fix Overlap Multi-Tarjeta y Flex Responsivo en Deudas (`[DEBTS-MULTI-CARD-OVERLAP-FIX-AND-RESPONSIVE-FLEX-001]`)**: Pastillas independientes de tarjeta, blindajes Flexbox y layout responsivo 2 columnas en `debts.tsx`; móvil idéntico; 53/53 tests en verde.
-  - **Layout Responsivo en 2 Columnas para Estadísticas, Movimientos y Dashboard**: Pestañas con `useIsWide(768)` en desktop acotadas a `maxWidth: 1200`; móvil vertical 100% preservado; 53/53 tests en verde.
+  - **Sesión Persistente y Auto-Refresh de Tokens (`[PERSISTENT-AUTH-SESSION-AND-AUTO-REFRESH-001]`)**: Erradicación del cierre destructivo por inactividad de 60 minutos en `src/utils/session.ts`; conexión del ciclo de vida `AppState` con `supabase.auth.startAutoRefresh`/`stopAutoRefresh` en `src/lib/supabase.ts`; bloqueo seguro por PIN tras 15 minutos en background (`lockApp()`); 56/56 tests en verde (100%), 0 errores TS.
+  - **Indicador Bancario Responsivo Auto-Ajustable en Deudas (`[DEBTS-RESPONSIVE-BANK-HEADER-CARD-001]`)**: Acotación de `bankGroupHeaderCard` con `alignSelf: 'flex-start'`, `minWidth: 320`, `maxWidth: 480` y `gap: 20` en `debts.tsx` con `useIsWide(768)`; móvil (`!isWide`) 100% intacto; 56/56 tests en verde.
+  - **Layout Responsivo en 2 Columnas para Ajustes (`[SETTINGS-RESPONSIVE-2-COLUMN-LAYOUT-001]`)**: Distribución simétrica en 2 columnas en `settings.tsx` y `settings-section-list.tsx` con `useIsWide(768)`; 56/56 tests en verde.
+  - **Dock Flotante Centrado en Navegación de Tabs (`[TABS-DESKTOP-FLOATING-DOCK-001]`)**: Integración de `useIsWide(768)` en `app/(app)/(tabs)/_layout.tsx` para desktop/Tauri/Web con dock flotante centrado (`maxWidth: 540`); 56/56 tests en verde.
+  - **Corrección en Reversión de Abonos a Terceros y Paridad de Ingresos (`[THIRD-PARTY-ABONO-REVERSION-BETWEEN-DAYS-001]`)**: Persistencia de fechas en asignaciones de abonos a terceros; 56/56 tests en verde.
 - **Próximo Foco Inmediato**:
-  - Paridad de escritorio completada en las 5 pestañas principales. Avanzar con sincronización Supabase / auditoría de esquemas o consolidar `dev` hacia `main`.
+  - Validar flujo de autenticación y persistencia en producción / merge hacia `main`.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
+- ❌ **NO destruir la sesión (`logout()`) por inactividad en segundo plano**: Las sesiones se mantienen persistentes con rotación de JWT/Refresh Token en Supabase; la inactividad solo debe activar bloqueo por PIN (`lockApp()`).
 - ❌ **NO omitir la restauración de fechas al revertir pagos/abonos**: Restaurar siempre 'lastPaymentDate' y 'settledAt'.
 - ❌ **NO desarrollar directamente en rama `main`**: Operar siempre sobre `dev`; mergear hacia `main` únicamente al cerrar bloques consolidados.
 - ❌ **NO modificar estilos ni layouts visuales preexistentes** a menos que el usuario lo solicite explícitamente (`Visual Freeze`).
@@ -44,13 +43,11 @@
 - ❌ **NO dar por concluida una tarea sin verificación doble**: Mandatorio `npm test` (100% pass) y `npx tsc --noEmit` (0 errores). Simular fechas con Fake Timers.
 
 ## 4. Bugs Críticos Resueltos & Blindajes
-- **Layout Responsivo en Ajustes**: División semántica en 2 columnas (`wideGridContainer`, `column: flex 1`) balanceando perfil y preferencias con almacenamiento y logout.
+- **Cierre Prematuro de Sesión por Inactividad**: Erradicado `logout()` forzoso a los 60 min en `session.ts`; sincronizado `startAutoRefresh`/`stopAutoRefresh` con `AppState` en `supabase.ts`.
+- **Indicador Bancario Responsivo en Deudas**: `bankGroupHeaderCard` auto-ajustable con `alignSelf: 'flex-start'`, `minWidth: 320`, `maxWidth: 480` en `debts.tsx`.
+- **Layout Responsivo en Ajustes**: División semántica en 2 columnas balanceando perfil/preferencias con datos/logout.
 - **Dock Flotante sin Colisión**: Dock flotante en `_layout.tsx` con `bottom: 16` y `position: 'absolute'` acotado a 540dp en pantallas anchas sin afectar móvil.
 - **Inconsistencia Temporal al Revertir Abonos a Terceros**: Resuelto guardando `previousLastPaymentDate`/`previousSettledAt` en `ThirdPartyChargeAllocation`.
-- **Bloqueo Injustificado de Eliminación de Deudas**: Resuelto evaluando desembolsos reales en la app (`totalActualPaid > 0 || paidInstallments > initialPaidInstallments`).
-- **Colisión Multi-Tarjeta en Deudas**: Resuelto con pastillas independientes por tarjeta y blindajes Flexbox.
-- **Invalid DOM Nesting en Tauri/Web**: Resuelto sustituyendo `TouchableOpacity` exterior por `View` en `RecentTransactionsList`.
-- **Destello de Ceros al Iniciar**: Resuelto reteniendo el Splash Screen nativo hasta confirmar rehidratación local (`hasHydrated`).
 
 ## 5. Referencia Histórica
 - Para la bitácora histórica completa de tareas concluidas, archivos modificados y trazabilidad técnica, consultar bajo demanda: `HISTORY.md`.

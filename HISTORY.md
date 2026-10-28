@@ -7,6 +7,27 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[PERSISTENT-AUTH-SESSION-AND-AUTO-REFRESH-001]` (2026-10-28): Implementación de sesión de autenticación persistente y segura con auto-refresco en Supabase y bloqueo por PIN:
+  - Archivos intervenidos:
+    * `src/utils/session.ts`
+    * `src/lib/supabase.ts`
+    * `src/components/settings/settings-section-list.tsx`
+  - Resumen técnico:
+    - Erradicación de la expulsión destructiva forzosa por inactividad de 60 minutos en `src/utils/session.ts`. La sesión de Supabase ahora permanece persistente y renovable continuamente.
+    - Implementación de bloqueo defensivo de pantalla por PIN (`lockApp()`) ante inactividad en segundo plano mayor a 15 minutos (`INACTIVITY_LOCK_MS = 15 * 60 * 1000`), protegiendo la privacidad sin destruir credenciales ni purgar stores de datos.
+    - Conexión del ciclo de vida de la aplicación mediante `AppState.addEventListener` en `src/lib/supabase.ts` activando `supabase.auth.startAutoRefresh()` en primer plano (`active`) y `stopAutoRefresh()` en background, previniendo expiraciones no deseadas de JWT en Web y Móvil.
+    - Actualización informativa de etiqueta en Ajustes (`settings-section-list.tsx`) a *"Sesión: Persistente (Segura)"*.
+  - Verificación y calidad: 56/56 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[DEBTS-RESPONSIVE-BANK-HEADER-CARD-001]` (2026-10-27): Adaptación responsiva de tarjeta/indicador de banco en agrupación de deudas personales:
+  - Archivo intervenido:
+    * `app/(app)/(tabs)/debts.tsx`
+  - Resumen técnico:
+    - Incorporación de clases de estilo condicionales responsivas `bankGroupHeaderCardWide` y `bankGroupHeaderLeftWide` con `useIsWide(768)`.
+    - En `isWide === true` (pantallas de escritorio Tauri y Web), la tarjeta de cabecera de la entidad bancaria adopta `alignSelf: 'flex-start'`, ancho auto-ajustable acotado (`minWidth: 320`, `maxWidth: 480`) y espaciado proporcional (`gap: 20`). Se erradica el estiramiento desproporcionado de 1200px y la franja oscura vacía entre el nombre y el subtotal.
+    - En `isWide === false` (dispositivos móviles y anchos < 768px), se preserva al 100% el estilo estático original (`width: '100%'`, `justifyContent: 'space-between'`), cumpliendo la directriz estricta de `Visual Freeze`.
+  - Verificación y calidad: 56/56 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[SETTINGS-RESPONSIVE-2-COLUMN-LAYOUT-001]` (2026-10-27): Layout responsivo en 2 columnas para la pestaña Ajustes (Settings) en pantallas de escritorio (Tauri y Web):
   - Archivos intervenidos:
     * `app/(app)/(tabs)/settings.tsx`

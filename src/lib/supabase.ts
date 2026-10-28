@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { Platform, AppState } from 'react-native';
 
 const supabaseUrl: string =
   process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://adzfhzseviuchmazynct.supabase.co';
@@ -54,3 +54,12 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     flowType: 'pkce',
   },
 });
+
+AppState.addEventListener('change', (state) => {
+  if (state === 'active') {
+    supabase.auth.startAutoRefresh();
+  } else {
+    supabase.auth.stopAutoRefresh();
+  }
+});
+
