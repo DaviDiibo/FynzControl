@@ -20,15 +20,17 @@
   - Cobertura de Testing (56/56 tests en verde): Suites en `src/__tests__/` con Fake Timers deterministas para ciclos de facturación, amortizaciones contables y utilidades de fechas.
   - Especificación arquitectónica relacional en `DATABASE_SCHEMA.md` para Supabase/PostgreSQL.
 - **Hitos Recientes Concluidos**:
-  - **Sesión Persistente y Auto-Refresh de Tokens (`[PERSISTENT-AUTH-SESSION-AND-AUTO-REFRESH-001]`)**: Erradicación del cierre destructivo por inactividad de 60 minutos en `src/utils/session.ts`; conexión del ciclo de vida `AppState` con `supabase.auth.startAutoRefresh`/`stopAutoRefresh` en `src/lib/supabase.ts`; bloqueo seguro por PIN tras 15 minutos en background (`lockApp()`); 56/56 tests en verde (100%), 0 errores TS.
-  - **Indicador Bancario Responsivo Auto-Ajustable en Deudas (`[DEBTS-RESPONSIVE-BANK-HEADER-CARD-001]`)**: Acotación de `bankGroupHeaderCard` con `alignSelf: 'flex-start'`, `minWidth: 320`, `maxWidth: 480` y `gap: 20` en `debts.tsx` con `useIsWide(768)`; móvil (`!isWide`) 100% intacto; 56/56 tests en verde.
+  - **Erradicación de Redundancia y Blindaje de Cabecera Bancaria en Deudas (`[DEBTS-BANK-GROUP-HEADER-REDUNDANCY-FIX-001]`)**: Ocultamiento de `bankGroupHeaderCard` cuando solo existe 1 préstamo o 1 banco; eliminación de `flex: 0, flexShrink: 1` y blindaje Flexbox (`minWidth: 0`, `numberOfLines={1}`); diseño sutil sin tarjeta pesada en desktop; 56/56 tests en verde (100%), 0 errores TS.
+  - **Sesión Persistente y Auto-Refresh de Tokens (`[PERSISTENT-AUTH-SESSION-AND-AUTO-REFRESH-001]`)**: Erradicación del cierre destructivo por inactividad de 60 minutos en `src/utils/session.ts`; conexión del ciclo de vida `AppState` con `supabase.auth.startAutoRefresh`/`stopAutoRefresh` en `src/lib/supabase.ts`; bloqueo seguro por PIN tras 15 minutos en background (`lockApp()`); 56/56 tests en verde.
   - **Layout Responsivo en 2 Columnas para Ajustes (`[SETTINGS-RESPONSIVE-2-COLUMN-LAYOUT-001]`)**: Distribución simétrica en 2 columnas en `settings.tsx` y `settings-section-list.tsx` con `useIsWide(768)`; 56/56 tests en verde.
   - **Dock Flotante Centrado en Navegación de Tabs (`[TABS-DESKTOP-FLOATING-DOCK-001]`)**: Integración de `useIsWide(768)` en `app/(app)/(tabs)/_layout.tsx` para desktop/Tauri/Web con dock flotante centrado (`maxWidth: 540`); 56/56 tests en verde.
   - **Corrección en Reversión de Abonos a Terceros y Paridad de Ingresos (`[THIRD-PARTY-ABONO-REVERSION-BETWEEN-DAYS-001]`)**: Persistencia de fechas en asignaciones de abonos a terceros; 56/56 tests en verde.
 - **Próximo Foco Inmediato**:
-  - Validar flujo de autenticación y persistencia en producción / merge hacia `main`.
+  - Validar visualmente en producción / merge hacia `main`.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
+- ❌ **NO mostrar tarjetas de agrupación intermedias para 1 solo ítem**: Ocultar cabeceras redundantes cuando no hay múltiples entidades a comparar.
+- ❌ **NO usar `flex: 0, flexShrink: 1` sin `minWidth` en Flexbox**: Provoca colapso vertical de texto en Web/Tauri.
 - ❌ **NO destruir la sesión (`logout()`) por inactividad en segundo plano**: Las sesiones se mantienen persistentes con rotación de JWT/Refresh Token en Supabase; la inactividad solo debe activar bloqueo por PIN (`lockApp()`).
 - ❌ **NO omitir la restauración de fechas al revertir pagos/abonos**: Restaurar siempre 'lastPaymentDate' y 'settledAt'.
 - ❌ **NO desarrollar directamente en rama `main`**: Operar siempre sobre `dev`; mergear hacia `main` únicamente al cerrar bloques consolidados.
@@ -43,8 +45,8 @@
 - ❌ **NO dar por concluida una tarea sin verificación doble**: Mandatorio `npm test` (100% pass) y `npx tsc --noEmit` (0 errores). Simular fechas con Fake Timers.
 
 ## 4. Bugs Críticos Resueltos & Blindajes
+- **Redundancia y Colapso de Tarjeta Bancaria**: Ocultamiento de cabecera bancaria en caso de 1 solo crédito y blindaje Flexbox (`minWidth: 0`, `numberOfLines={1}`) en `debts.tsx`.
 - **Cierre Prematuro de Sesión por Inactividad**: Erradicado `logout()` forzoso a los 60 min en `session.ts`; sincronizado `startAutoRefresh`/`stopAutoRefresh` con `AppState` en `supabase.ts`.
-- **Indicador Bancario Responsivo en Deudas**: `bankGroupHeaderCard` auto-ajustable con `alignSelf: 'flex-start'`, `minWidth: 320`, `maxWidth: 480` en `debts.tsx`.
 - **Layout Responsivo en Ajustes**: División semántica en 2 columnas balanceando perfil/preferencias con datos/logout.
 - **Dock Flotante sin Colisión**: Dock flotante en `_layout.tsx` con `bottom: 16` y `position: 'absolute'` acotado a 540dp en pantallas anchas sin afectar móvil.
 - **Inconsistencia Temporal al Revertir Abonos a Terceros**: Resuelto guardando `previousLastPaymentDate`/`previousSettledAt` en `ThirdPartyChargeAllocation`.
