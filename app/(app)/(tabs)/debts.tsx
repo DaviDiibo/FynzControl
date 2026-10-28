@@ -1114,31 +1114,34 @@ const DebtsScreen = (): JSX.Element => {
 
             {groupedPersonalDebts.length > 0 ? (
               groupedPersonalDebts.map((group) => {
+                const showBankHeader = groupedPersonalDebts.length > 1 || group.debts.length > 1;
                 return (
                   <View key={group.entityName} style={styles.bankGroupWrapper}>
                     {/* Encabezado de Entidad Bancaria / Acreedor */}
-                    <View style={[styles.bankGroupHeaderCard, isWide && styles.bankGroupHeaderCardWide]}>
-                      <View style={[styles.bankGroupHeaderLeft, isWide && styles.bankGroupHeaderLeftWide]}>
-                        <View style={styles.bankGroupIconWrapper}>
-                          <Ionicons name="business-outline" size={15} color="#00FFA3" />
+                    {showBankHeader && (
+                      <View style={[styles.bankGroupHeaderCard, isWide && styles.bankGroupHeaderCardWide]}>
+                        <View style={[styles.bankGroupHeaderLeft, isWide && styles.bankGroupHeaderLeftWide]}>
+                          <View style={styles.bankGroupIconWrapper}>
+                            <Ionicons name="business-outline" size={15} color="#00FFA3" />
+                          </View>
+                          <View style={styles.bankGroupInfoCol}>
+                            <Text style={styles.bankGroupNameText} numberOfLines={1}>
+                              {group.entityName}
+                            </Text>
+                            <Text style={styles.bankGroupSubtitleText} numberOfLines={1}>
+                              {group.debts.length}{' '}
+                              {group.debts.length === 1 ? 'préstamo activo' : 'préstamos activos'}
+                            </Text>
+                          </View>
                         </View>
-                        <View style={styles.bankGroupInfoCol}>
-                          <Text style={styles.bankGroupNameText} numberOfLines={1}>
-                            {group.entityName}
-                          </Text>
-                          <Text style={styles.bankGroupSubtitleText}>
-                            {group.debts.length}{' '}
-                            {group.debts.length === 1 ? 'préstamo activo' : 'préstamos activos'}
+                        <View style={styles.bankGroupTotalBadge}>
+                          <Text style={styles.bankGroupTotalBadgeLabel}>SUBTOTAL</Text>
+                          <Text style={styles.bankGroupTotalBadgeAmount}>
+                            {currencySymbol}{formatAmount(group.totalRemaining)}
                           </Text>
                         </View>
                       </View>
-                      <View style={styles.bankGroupTotalBadge}>
-                        <Text style={styles.bankGroupTotalBadgeLabel}>SUBTOTAL</Text>
-                        <Text style={styles.bankGroupTotalBadgeAmount}>
-                          {currencySymbol}{formatAmount(group.totalRemaining)}
-                        </Text>
-                      </View>
-                    </View>
+                    )}
 
                     {/* Préstamos individuales ordenados de menor a mayor saldo */}
                     <View style={[styles.cardsGrid, isWide && styles.cardsGridWide]}>
@@ -5415,21 +5418,26 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   bankGroupHeaderCardWide: {
-    alignSelf: 'flex-start',
-    minWidth: 320,
-    maxWidth: 480,
-    width: 'auto',
-    gap: 20,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: '#252529',
+    borderRadius: 0,
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+    marginBottom: 12,
+    width: '100%',
   },
   bankGroupHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     flex: 1,
+    minWidth: 0,
   },
   bankGroupHeaderLeftWide: {
-    flex: 0,
-    flexShrink: 1,
+    flex: 1,
+    minWidth: 0,
   },
   bankGroupIconWrapper: {
     width: 32,
@@ -5443,6 +5451,7 @@ const styles = StyleSheet.create({
   },
   bankGroupInfoCol: {
     flex: 1,
+    minWidth: 0,
   },
   bankGroupNameText: {
     fontSize: 14,
@@ -5457,6 +5466,7 @@ const styles = StyleSheet.create({
   },
   bankGroupTotalBadge: {
     alignItems: 'flex-end',
+    flexShrink: 0,
   },
   bankGroupTotalBadgeLabel: {
     fontSize: 9,

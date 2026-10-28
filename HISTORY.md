@@ -7,6 +7,16 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[DEBTS-BANK-GROUP-HEADER-REDUNDANCY-FIX-001]` (2026-10-28): Erradicación de redundancia visual y blindaje flexbox en encabezado de banco en pestaña Deudas:
+  - Archivo intervenido:
+    * `app/(app)/(tabs)/debts.tsx`
+  - Resumen técnico:
+    - Ocultamiento inteligente del encabezado de entidad bancaria (`bankGroupHeaderCard`) cuando existe 1 único préstamo o 1 sola entidad bancaria activa (`groupedPersonalDebts.length > 1 || group.debts.length > 1`), eliminando el efecto tosco de "tarjeta encimada sobre tarjeta" y redundancia de datos (nombre de banco y subtotal idéntico).
+    - Erradicación de la regla defectuosa `flex: 0, flexShrink: 1` en `bankGroupHeaderLeftWide` que provocaba el colapso vertical carácter por carácter en Web y Tauri.
+    - Blindaje de Flexbox horizontal con `flex: 1, minWidth: 0` en `bankGroupHeaderLeft`, `bankGroupHeaderLeftWide` e `bankGroupInfoCol`, junto con `flexShrink: 0` en `bankGroupTotalBadge` y `numberOfLines={1}` en textos para garantizar diseño horizontal y fluido sin desbordamientos ni saltos de línea antiestéticos.
+    - Transformación en pantallas de escritorio (`isWide`) a separador sutil de subsección (`backgroundColor: 'transparent'`, `borderBottomWidth: 1`, `borderBottomColor: '#252529'`, `width: '100%'`).
+  - Verificación y calidad: 56/56 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[PERSISTENT-AUTH-SESSION-AND-AUTO-REFRESH-001]` (2026-10-28): Implementación de sesión de autenticación persistente y segura con auto-refresco en Supabase y bloqueo por PIN:
   - Archivos intervenidos:
     * `src/utils/session.ts`
