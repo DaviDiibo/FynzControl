@@ -7,6 +7,30 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[MODAL-CARDS-LEGACY-DESKTOP-STYLING-001]` (2026-10-29): Estilización y adaptación de modales de tarjetas y consumos históricos para escritorio (Tauri y Web):
+  - Archivos intervenidos:
+    * `app/(app)/(modal)/cards-overview.tsx`
+    * `app/(app)/(modal)/legacy-card-expense.tsx`
+  - Resumen técnico:
+    - Integración de `useIsWide(768)` para transformar las vistas a pantalla completa en tarjetas modales flotantes centradas (`maxWidth: 680` en `cards-overview.tsx` y `maxWidth: 580` en `legacy-card-expense.tsx`, esquinas `borderRadius: 20`, bordes `#2C2C2E`, fondo `#1E1E1E`, elevación y sombra premium).
+    - Montaje de backdrop translúcido (`rgba(0, 0, 0, 0.72)`) con dismiss al hacer clic fuera de la tarjeta (`activeOpacity={1}`, `router.back()`).
+    - Listener global para la tecla `Escape` en plataforma Web y Tauri (con gestión de cierre secuencial si hay submodales abiertos en `cards-overview`).
+    - Ocultamiento de la barra táctil móvil de arrastre (`dragIndicator`) en escritorio.
+    - Preservación íntegra al 100% de la presentación móvil en iOS (`SafeAreaView`) y Android (`androidBackdrop` + bottom sheet), cumpliendo con la directriz de `Visual Freeze`.
+  - Verificación y calidad: 56/56 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[MODAL-TRANSPARENT-STACKS-DESKTOP-FIX-001]` (2026-10-29): Erradicación de fondo gris opaco y habilitación de transparencia real en modales Web y Tauri:
+  - Archivos intervenidos:
+    * `app/(app)/_layout.tsx`
+    * `app/(app)/(modal)/_layout.tsx`
+  - Resumen técnico:
+    - Configuración explícita de `presentation: Platform.OS === 'ios' ? 'card' : 'transparentModal'` y `animation: Platform.OS === 'ios' ? 'default' : 'fade'` en el Stack anidado `(modal)/_layout.tsx`.
+    - Asignación de `contentStyle: { backgroundColor: Platform.OS === 'ios' ? colors.background : 'transparent' }` en ambos niveles del Stack.
+    - Erradicación definitiva de la caja opaca gris claro (`#F2F2F2`) inyectada por omisión por el componente de fondo de React Navigation Web, permitiendo que la vista inferior (Dashboard, Movimientos, Deudas) permanezca 100% visible a través del backdrop oscuro translúcido `rgba(0, 0, 0, 0.72)`.
+    - Registro formal de todas las pantallas en el Stack de modales (`new-transaction`, `new-debt`, `cards-overview`, `legacy-card-expense`).
+    - Preservación íntegra de los comportamientos móviles en iOS (modal sheet) y Android (bottom sheet).
+  - Verificación y calidad: 56/56 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[MODAL-NEW-DEBT-DESKTOP-STYLING-001]` (2026-10-29): Estilización y adaptación de modal de nueva deuda y préstamos para escritorio (Tauri y Web):
   - Archivo intervenido:
     * `app/(app)/(modal)/new-debt.tsx`

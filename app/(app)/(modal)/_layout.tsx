@@ -7,6 +7,8 @@ const ModalLayout = (): JSX.Element => {
   return (
     <Stack
       screenOptions={{
+        presentation: Platform.OS === 'ios' ? 'card' : 'transparentModal',
+        animation: Platform.OS === 'ios' ? 'default' : 'fade',
         headerShown: false,
         contentStyle: {
           backgroundColor: Platform.OS === 'ios' ? colors.background : 'transparent',
@@ -15,6 +17,8 @@ const ModalLayout = (): JSX.Element => {
     >
       <Stack.Screen name="new-transaction" options={{ headerShown: false }} />
       <Stack.Screen name="new-debt" options={{ headerShown: false }} />
+      <Stack.Screen name="cards-overview" options={{ headerShown: false }} />
+      <Stack.Screen name="legacy-card-expense" options={{ headerShown: false }} />
     </Stack>
   );
 };
