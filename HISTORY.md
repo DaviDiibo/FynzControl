@@ -7,6 +7,17 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[MODAL-NEW-DEBT-DESKTOP-STYLING-001]` (2026-10-29): Estilización y adaptación de modal de nueva deuda y préstamos para escritorio (Tauri y Web):
+  - Archivo intervenido:
+    * `app/(app)/(modal)/new-debt.tsx`
+  - Resumen técnico:
+    - Integración de `useIsWide(768)` para transformar el formulario plano de pantalla completa en una tarjeta modal centrada (`maxWidth: 620`, `maxHeight: '92%'`, `borderRadius: 20`, bordes `#2C2C2E`, fondo `#1E1E1E`, elevación y sombra premium), calibrando el ancho para permitir la distribución ergonómica de las 3 pestañas (*Deuda Propia*, *Préstamo a Amigo*, *Gasto en Tarjeta*).
+    - Montaje de backdrop translúcido (`rgba(0, 0, 0, 0.72)`) que vislumbra la vista inferior y permite cerrar el modal haciendo clic fuera de la tarjeta (`activeOpacity={1}`, `router.back()`).
+    - Incorporación de listener global para la tecla `Escape` en plataforma Web y Tauri.
+    - Ocultamiento de la barra táctil de arrastre (`dragIndicator`) en escritorio.
+    - Preservación íntegra al 100% de la presentación móvil en iOS (`SafeAreaView`) y Android (`androidBackdrop` + bottom sheet), cumpliendo estrictamente con la regla de `Visual Freeze`.
+  - Verificación y calidad: 56/56 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[MODAL-NEW-TRANSACTION-DESKTOP-STYLING-001]` (2026-10-29): Estilización y adaptación de modal de nueva transacción para escritorio (Tauri y Web):
   - Archivo intervenido:
     * `app/(app)/(modal)/new-transaction.tsx`

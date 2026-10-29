@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { JSX } from 'react';
 import {
   View,
@@ -18,6 +18,7 @@ import { useDebtsStore } from '../../../src/store/debts-store';
 import { useCardsStore } from '../../../src/store/cards-store';
 import { useSettingsStore } from '../../../src/store/settings-store';
 import { useTransactionsStore } from '../../../src/store/transactions-store';
+import { useIsWide } from '../../../src/hooks/use-responsive';
 
 const formatAmount = (val: number): string =>
   val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -153,7 +154,20 @@ const TAB_CONFIG: Record<
 };
 
 const NewDebtModal = (): JSX.Element => {
+  const isWide = useIsWide(768);
   const params = useLocalSearchParams<{ mode?: string }>();
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const handleKeyDown = (e: KeyboardEvent): void => {
+        if (e.key === 'Escape') {
+          router.back();
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [router]);
   const isLegacyMode = params.mode === 'legacy';
   const addTransaction = useTransactionsStore((state) => state.addTransaction);
 
@@ -763,12 +777,14 @@ const NewDebtModal = (): JSX.Element => {
       style={styles.keyboardContainer}
     >
       {/* Indicador de arrastre */}
-      <View style={styles.dragIndicatorContainer}>
-        <View style={styles.dragIndicator} />
-      </View>
+      {!isWide && (
+        <View style={styles.dragIndicatorContainer}>
+          <View style={styles.dragIndicator} />
+        </View>
+      )}
 
       {/* Cabecera */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWide && styles.desktopHeader]}>
         <View style={styles.headerTitleRow}>
           <Ionicons
             name={isLegacyMode ? 'time-outline' : 'add-circle'}
@@ -2191,6 +2207,23 @@ const NewDebtModal = (): JSX.Element => {
     </KeyboardAvoidingView>
   );
 
+  if (isWide) {
+    return (
+      <View style={styles.desktopOverlay}>
+        <TouchableOpacity
+          style={styles.desktopBackdropTouchable}
+          activeOpacity={1}
+          onPress={() => router.back()}
+          accessibilityLabel="Cerrar modal"
+          accessibilityRole="button"
+        />
+        <View style={styles.desktopCardContainer}>
+          {modalFormContent}
+        </View>
+      </View>
+    );
+  }
+
   if (Platform.OS === 'android') {
     return (
       <View style={styles.androidBackdrop}>
@@ -2219,6 +2252,35 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  desktopOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+  },
+  desktopBackdropTouchable: {
+    ...StyleSheet.absoluteFill,
+  },
+  desktopCardContainer: {
+    width: '100%',
+    maxWidth: 620,
+    maxHeight: '92%',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.6,
+    shadowRadius: 28,
+    elevation: 16,
+  },
+  desktopHeader: {
+    paddingTop: 16,
   },
   androidBackdrop: {
     flex: 1,
