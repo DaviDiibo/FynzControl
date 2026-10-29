@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { Platform } from 'react-native';
 import { Stack, Redirect } from 'expo-router';
 import { useAuthStore } from '../../src/store/auth-store';
+import { colors } from '../../src/theme/colors';
 
 const AppLayout = (): JSX.Element => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -17,8 +18,11 @@ const AppLayout = (): JSX.Element => {
         name="(modal)"
         options={{
           presentation: Platform.OS === 'ios' ? 'modal' : 'transparentModal',
-          animation: Platform.OS === 'ios' ? 'default' : 'slide_from_bottom',
+          animation: Platform.OS === 'ios' ? 'default' : 'fade',
           headerShown: false,
+          contentStyle: {
+            backgroundColor: Platform.OS === 'ios' ? colors.background : 'transparent',
+          },
         }}
       />
     </Stack>

@@ -15,20 +15,21 @@
 - **Módulos Principales Culminados**:
   - 5 Tabs operativas con paridad móvil y escritorio: Dashboard, Movimientos, Deudas, Estadísticas y Ajustes.
   - Dock flotante centrado en barra de navegación inferior para pantallas de escritorio.
-  - Card Modals responsivos centrados para transacciones (`new-transaction.tsx`) y deudas (`new-debt.tsx`).
+  - Card Modals responsivos centrados con transparencia real sobre la vista previa inferior.
   - Centro de Gestión de Pasivos y Cobros: Préstamos bancarios, préstamos a amigos, y Liquidación Mensual de Terceros (Fases 1 y 2).
   - Cobertura de Testing (56/56 tests en verde): Suites en `src/__tests__/` con Fake Timers deterministas para ciclos de facturación, amortizaciones contables y utilidades de fechas.
   - Especificación arquitectónica relacional en `DATABASE_SCHEMA.md` para Supabase/PostgreSQL.
 - **Hitos Recientes Concluidos**:
-  - **Estilización Desktop para Modal de Nueva Deuda (`[MODAL-NEW-DEBT-DESKTOP-STYLING-001]`)**: Diálogo flotante centrado con `maxWidth: 620`, `maxHeight: '92%'`, backdrop `rgba(0,0,0,0.72)` con tap-outside y tecla `Escape` en Web/Tauri; móvil (`!isWide`) 100% intacto; 56/56 tests en verde (100%), 0 errores TS.
-  - **Estilización Desktop para Modal de Nueva Transacción (`[MODAL-NEW-TRANSACTION-DESKTOP-STYLING-001]`)**: Diálogo flotante centrado con `maxWidth: 580`, `maxHeight: '92%'`, backdrop translúcido y tecla `Escape`; móvil intacto; 56/56 tests en verde.
+  - **Transparencia Real y Erradicación del Fondo Gris en Modales (`[MODAL-TRANSPARENT-STACKS-DESKTOP-FIX-001]`)**: Configuración de `presentation: 'transparentModal'` y `contentStyle: { backgroundColor: 'transparent' }` en `(modal)/_layout.tsx` y `(app)/_layout.tsx`; erradica el fondo gris `#F2F2F2` inyectado por React Navigation Web; la pantalla previa permanece visible bajo el backdrop; 56/56 tests en verde (100%), 0 errores TS.
+  - **Estilización Desktop para Modal de Nueva Deuda (`[MODAL-NEW-DEBT-DESKTOP-STYLING-001]`)**: Diálogo flotante centrado con `maxWidth: 620`, `maxHeight: '92%'`, backdrop `rgba(0,0,0,0.72)` y tecla `Escape` en Web/Tauri; 56/56 tests en verde.
+  - **Estilización Desktop para Modal de Nueva Transacción (`[MODAL-NEW-TRANSACTION-DESKTOP-STYLING-001]`)**: Diálogo flotante centrado con `maxWidth: 580`, `maxHeight: '92%'`, backdrop translúcido y tecla `Escape`; 56/56 tests en verde.
   - **Limpieza Selectiva de Gastos y Deudas (`[SELECTIVE-DATABASE-CLEANUP-EXPENSES-DEBTS-001]`)**: Sustitución de `AsyncStorage.clear()` por purga selectiva en `settings-section-list.tsx`; preservación al 100% de `cards`, `banks`, `people`, perfiles y auth; 56/56 tests en verde.
   - **Erradicación de Redundancia y Blindaje de Cabecera Bancaria en Deudas (`[DEBTS-BANK-GROUP-HEADER-REDUNDANCY-FIX-001]`)**: Ocultamiento de `bankGroupHeaderCard` cuando solo existe 1 préstamo o 1 banco; 56/56 tests en verde.
-  - **Sesión Persistente y Auto-Refresh de Tokens (`[PERSISTENT-AUTH-SESSION-AND-AUTO-REFRESH-001]`)**: Erradicación del cierre destructivo por inactividad de 60 minutos en `src/utils/session.ts`; conexión con Supabase; 56/56 tests en verde.
 - **Próximo Foco Inmediato**:
-  - Consolidar y desplegar hacia `main` (producción) o avanzar con siguientes refinamientos.
+  - Subtarea 2: Estilización desktop de modales restantes (`cards-overview.tsx` y `legacy-card-expense.tsx`).
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
+- ❌ **NO omitir `presentation: 'transparentModal'` en Stacks anidados de modales en Web**: De lo contrario, React Navigation inyecta un fondo gris opaco `#F2F2F2` que tapa la vista inferior.
 - ❌ **NO mostrar modales a pantalla completa plana en escritorio**: Usar contenedor centrado tipo diálogo flotante (`maxWidth: 580-620`, backdrop translúcido, `Escape`).
 - ❌ **NO usar `AsyncStorage.clear()` para reseteos**: Destruye tarjetas, bancos, contactos y credenciales; usar purga granular selectiva por store.
 - ❌ **NO mostrar tarjetas de agrupación intermedias para 1 solo ítem**: Ocultar cabeceras redundantes cuando no hay múltiples entidades a comparar.
@@ -45,10 +46,10 @@
 - ❌ **NO dar por concluida una tarea sin verificación doble**: Mandatorio `npm test` (100% pass) y `npx tsc --noEmit` (0 errores). Simular fechas con Fake Timers.
 
 ## 4. Bugs Críticos Resueltos & Blindajes
+- **Fondo Gris Opaco en Modales Web**: Anulado el fondo `#F2F2F2` con `presentation: 'transparentModal'` y `contentStyle: { backgroundColor: 'transparent' }` en Stacks anidados.
 - **Modales Estirados en Web/Tauri**: Diálogos flotantes centrados con backdrop translúcido y cierre exterior en `new-transaction.tsx` (580px) y `new-debt.tsx` (620px).
 - **Limpieza Selectiva sin Pérdida de Tarjetas/Personas**: Reemplazado `AsyncStorage.clear()` por borrado acotado a transacciones y deudas locales y remotas en Supabase, preservando `cards`, `banks` y `people`.
 - **Redundancia y Colapso de Tarjeta Bancaria**: Ocultamiento de cabecera bancaria en caso de 1 solo crédito y blindaje Flexbox (`minWidth: 0`, `numberOfLines={1}`) en `debts.tsx`.
-- **Cierre Prematuro de Sesión por Inactividad**: Erradicado `logout()` forzoso a los 60 min en `session.ts`; sincronizado `startAutoRefresh`/`stopAutoRefresh` con `AppState` en `supabase.ts`.
 
 ## 5. Referencia Histórica
 - Para la bitácora histórica completa de tareas concluidas, archivos modificados y trazabilidad técnica, consultar bajo demanda: `HISTORY.md`.
