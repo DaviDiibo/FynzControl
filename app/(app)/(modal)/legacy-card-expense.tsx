@@ -18,9 +18,11 @@ import { useCardsStore, type CreditCard } from '../../../src/store/cards-store';
 import { useDebtsStore } from '../../../src/store/debts-store';
 import { useSettingsStore } from '../../../src/store/settings-store';
 import { getInstallmentProgressInfo } from '../../../src/utils/date-helpers';
+import { useIsWide } from '../../../src/hooks/use-responsive';
 
 const LegacyCardExpenseModal = (): JSX.Element => {
   const router = useRouter();
+  const isWide = useIsWide(768);
 
   // Stores
   const cards = useCardsStore((state) => state.cards);
@@ -43,6 +45,18 @@ const LegacyCardExpenseModal = (): JSX.Element => {
       setSelectedCardId(defaultCard?.id ?? cards[0]?.id ?? null);
     }
   }, [cards, selectedCardId]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const handleKeyDown = (e: KeyboardEvent): void => {
+        if (e.key === 'Escape') {
+          router.back();
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [router]);
 
   const selectedCard = useMemo((): CreditCard | undefined => {
     return cards.find((c) => c.id === selectedCardId);
@@ -180,30 +194,36 @@ const LegacyCardExpenseModal = (): JSX.Element => {
     router.back();
   };
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
-        style={styles.keyboardAvoid}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 48 : 0}
-      >
-        {/* Cabecera Cyberpunk */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Volver"
-          >
-            <Ionicons name="arrow-back" size={22} color={colors.text} />
-          </TouchableOpacity>
-          <View style={styles.headerTitleContainer}>
-            <Text style={styles.title}>COMPRA HISTÓRICA EN TARJETA</Text>
-            <Text style={styles.subtitle}>Calibrar cuotas preexistentes</Text>
-          </View>
-          <View style={styles.headerRightPlaceholder} />
+  const modalFormContent = (
+    <KeyboardAvoidingView
+      style={styles.keyboardAvoid}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 48 : 0}
+    >
+      {/* Indicador de arrastre para mobile modal sheet */}
+      {!isWide && (
+        <View style={styles.dragIndicatorContainer}>
+          <View style={styles.dragIndicator} />
         </View>
+      )}
+
+      {/* Cabecera Cyberpunk */}
+      <View style={[styles.header, isWide && styles.desktopHeader]}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Volver"
+        >
+          <Ionicons name="arrow-back" size={22} color={colors.text} />
+        </TouchableOpacity>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.title}>COMPRA HISTÓRICA EN TARJETA</Text>
+          <Text style={styles.subtitle}>Calibrar cuotas preexistentes</Text>
+        </View>
+        <View style={styles.headerRightPlaceholder} />
+      </View>
 
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -487,6 +507,45 @@ const LegacyCardExpenseModal = (): JSX.Element => {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+  );
+
+  if (isWide) {
+    return (
+      <View style={styles.desktopOverlay}>
+        <TouchableOpacity
+          style={styles.desktopBackdropTouchable}
+          activeOpacity={1}
+          onPress={() => router.back()}
+          accessibilityLabel="Cerrar modal"
+          accessibilityRole="button"
+        />
+        <View style={styles.desktopCardContainer}>
+          {modalFormContent}
+        </View>
+      </View>
+    );
+  }
+
+  if (Platform.OS === 'android') {
+    return (
+      <View style={styles.androidBackdrop}>
+        <TouchableOpacity
+          style={styles.androidBackdropTouchable}
+          activeOpacity={1}
+          onPress={() => router.back()}
+          accessibilityLabel="Cerrar modal"
+          accessibilityRole="button"
+        />
+        <View style={styles.androidSheetContainer}>
+          {modalFormContent}
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      {modalFormContent}
     </SafeAreaView>
   );
 };
@@ -495,6 +554,62 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#121212',
+  },
+  desktopOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+  },
+  desktopBackdropTouchable: {
+    ...StyleSheet.absoluteFill,
+  },
+  desktopCardContainer: {
+    width: '100%',
+    maxWidth: 580,
+    maxHeight: '90%',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.6,
+    shadowRadius: 28,
+    elevation: 16,
+  },
+  desktopHeader: {
+    paddingTop: 16,
+    backgroundColor: '#1E1E1E',
+  },
+  androidBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  androidBackdropTouchable: {
+    height: 56,
+  },
+  androidSheetContainer: {
+    flex: 1,
+    backgroundColor: '#121212',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#2C2C2E',
+    overflow: 'hidden',
+  },
+  dragIndicatorContainer: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  dragIndicator: {
+    width: 36,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#3A3A3C',
   },
   keyboardAvoid: {
     flex: 1,

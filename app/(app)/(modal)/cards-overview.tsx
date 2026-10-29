@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { JSX } from 'react';
 import {
   View,
@@ -23,9 +23,11 @@ import { DeleteCardModal } from '../../../src/components/cards/delete-card-modal
 import { DeleteBankModal } from '../../../src/components/cards/delete-bank-modal';
 import { CardPaymentModal } from '../../../src/components/cards/card-payment-modal';
 import { getCardBillingCycleDates } from '../../../src/utils/date-helpers';
+import { useIsWide } from '../../../src/hooks/use-responsive';
 
 const CardsOverviewModal = (): JSX.Element => {
   const router = useRouter();
+  const isWide = useIsWide(768);
 
   // Stores
   const personalDebts = useDebtsStore((state) => state.personalDebts);
@@ -76,6 +78,30 @@ const CardsOverviewModal = (): JSX.Element => {
   const [isBankDropdownOpen, setIsBankDropdownOpen] = useState<boolean>(false);
   const [isAddingNewBankInline, setIsAddingNewBankInline] = useState<boolean>(false);
   const [newBankNameInline, setNewBankNameInline] = useState<string>('');
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const handleKeyDown = (e: KeyboardEvent): void => {
+        if (e.key === 'Escape') {
+          if (cardPendingDelete) {
+            setCardPendingDelete(null);
+            return;
+          }
+          if (bankPendingDelete) {
+            setBankPendingDelete(null);
+            return;
+          }
+          if (payingCard) {
+            setPayingCard(null);
+            return;
+          }
+          router.back();
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [router, cardPendingDelete, bankPendingDelete, payingCard]);
 
   const currencySymbol =
     currencyCode === 'EUR' ? '€' : currencyCode === 'BRL' ? 'R$' : '$';
@@ -389,30 +415,36 @@ const CardsOverviewModal = (): JSX.Element => {
       ).length
     : 0;
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
-        style={styles.keyboardAvoid}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        {/* Cabecera del modal */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.title}>Tarjetas y Créditos</Text>
-            <Text style={styles.subtitle}>
-              Visión integral de pasivos y cupos bancarios
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={styles.closeButton}
-            activeOpacity={0.7}
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            accessibilityLabel="Cerrar modal"
-          >
-            <Ionicons name="close" size={24} color={colors.text} />
-          </TouchableOpacity>
+  const modalFormContent = (
+    <KeyboardAvoidingView
+      style={styles.keyboardAvoid}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      {/* Indicador de arrastre para mobile modal sheet */}
+      {!isWide && (
+        <View style={styles.dragIndicatorContainer}>
+          <View style={styles.dragIndicator} />
         </View>
+      )}
+
+      {/* Cabecera del modal */}
+      <View style={[styles.header, isWide && styles.desktopHeader]}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.title}>Tarjetas y Créditos</Text>
+          <Text style={styles.subtitle}>
+            Visión integral de pasivos y cupos bancarios
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.closeButton}
+          activeOpacity={0.7}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Cerrar modal"
+        >
+          <Ionicons name="close" size={24} color={colors.text} />
+        </TouchableOpacity>
+      </View>
 
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -1222,8 +1254,11 @@ const CardsOverviewModal = (): JSX.Element => {
             </View>
         </View>
       </ScrollView>
-      </KeyboardAvoidingView>
+    </KeyboardAvoidingView>
+  );
 
+  const subModals = (
+    <>
       <DeleteCardModal
         visible={cardPendingDelete !== null}
         card={cardPendingDelete}
@@ -1274,6 +1309,49 @@ const CardsOverviewModal = (): JSX.Element => {
         onClose={() => setPayingCard(null)}
         onSuccess={() => setPayingCard(null)}
       />
+    </>
+  );
+
+  if (isWide) {
+    return (
+      <View style={styles.desktopOverlay}>
+        <TouchableOpacity
+          style={styles.desktopBackdropTouchable}
+          activeOpacity={1}
+          onPress={() => router.back()}
+          accessibilityLabel="Cerrar modal"
+          accessibilityRole="button"
+        />
+        <View style={styles.desktopCardContainer}>
+          {modalFormContent}
+        </View>
+        {subModals}
+      </View>
+    );
+  }
+
+  if (Platform.OS === 'android') {
+    return (
+      <View style={styles.androidBackdrop}>
+        <TouchableOpacity
+          style={styles.androidBackdropTouchable}
+          activeOpacity={1}
+          onPress={() => router.back()}
+          accessibilityLabel="Cerrar modal"
+          accessibilityRole="button"
+        />
+        <View style={styles.androidSheetContainer}>
+          {modalFormContent}
+        </View>
+        {subModals}
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      {modalFormContent}
+      {subModals}
     </SafeAreaView>
   );
 };
@@ -1282,6 +1360,61 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  desktopOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+  },
+  desktopBackdropTouchable: {
+    ...StyleSheet.absoluteFill,
+  },
+  desktopCardContainer: {
+    width: '100%',
+    maxWidth: 680,
+    maxHeight: '92%',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.6,
+    shadowRadius: 28,
+    elevation: 16,
+  },
+  desktopHeader: {
+    paddingTop: 16,
+  },
+  androidBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  androidBackdropTouchable: {
+    height: 56,
+  },
+  androidSheetContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    overflow: 'hidden',
+  },
+  dragIndicatorContainer: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  dragIndicator: {
+    width: 36,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#3A3A3C',
   },
   keyboardAvoid: {
     flex: 1,
