@@ -24,6 +24,7 @@ import { useTransactionsStore } from '../../../src/store/transactions-store';
 import { useDebtsStore } from '../../../src/store/debts-store';
 import { useCardsStore } from '../../../src/store/cards-store';
 import { useSettingsStore } from '../../../src/store/settings-store';
+import { useIsWide } from '../../../src/hooks/use-responsive';
 
 type OperationType = 'expense' | 'income';
 
@@ -44,6 +45,7 @@ const TYPE_CONFIG = {
 
 const NewTransactionModal = (): JSX.Element => {
   const router = useRouter();
+  const isWide = useIsWide(768);
   const { addTransaction } = useTransactionsStore();
   const {
     personalDebts,
@@ -65,6 +67,18 @@ const NewTransactionModal = (): JSX.Element => {
   const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
   const [selectedLoanId, setSelectedLoanId] = useState<string | null>(null);
   const [notes, setNotes] = useState<string>('');
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const handleKeyDown = (e: KeyboardEvent): void => {
+        if (e.key === 'Escape') {
+          router.back();
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [router]);
 
   const { cards, addCard, banks, addBank } = useCardsStore();
   const currency = useSettingsStore((state) => state.currency);
@@ -303,12 +317,14 @@ const NewTransactionModal = (): JSX.Element => {
       style={styles.keyboardContainer}
     >
         {/* Drag Indicator Bar */}
-        <View style={styles.dragIndicatorContainer}>
-          <View style={styles.dragIndicator} />
-        </View>
+        {!isWide && (
+          <View style={styles.dragIndicatorContainer}>
+            <View style={styles.dragIndicator} />
+          </View>
+        )}
 
         {/* Header Row */}
-        <View style={styles.header}>
+        <View style={[styles.header, isWide && styles.desktopHeader]}>
           <Text style={styles.headerTitle}>REGISTRAR OPERACIÓN</Text>
           <TouchableOpacity
             style={styles.closeButton}
@@ -1125,6 +1141,23 @@ const NewTransactionModal = (): JSX.Element => {
       </KeyboardAvoidingView>
   );
 
+  if (isWide) {
+    return (
+      <View style={styles.desktopOverlay}>
+        <TouchableOpacity
+          style={styles.desktopBackdropTouchable}
+          activeOpacity={1}
+          onPress={() => router.back()}
+          accessibilityLabel="Cerrar modal"
+          accessibilityRole="button"
+        />
+        <View style={styles.desktopCardContainer}>
+          {modalFormContent}
+        </View>
+      </View>
+    );
+  }
+
   if (Platform.OS === 'android') {
     return (
       <View style={styles.androidBackdrop}>
@@ -1153,6 +1186,35 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  desktopOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+  },
+  desktopBackdropTouchable: {
+    ...StyleSheet.absoluteFill,
+  },
+  desktopCardContainer: {
+    width: '100%',
+    maxWidth: 580,
+    maxHeight: '92%',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.6,
+    shadowRadius: 28,
+    elevation: 16,
+  },
+  desktopHeader: {
+    paddingTop: 16,
   },
   androidBackdrop: {
     flex: 1,

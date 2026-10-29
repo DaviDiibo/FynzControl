@@ -17,7 +17,7 @@ import { useAuthStore } from '../../store/auth-store';
 import { useSettingsStore, CurrencyCode } from '../../store/settings-store';
 import { useTransactionsStore } from '../../store/transactions-store';
 import { useDebtsStore } from '../../store/debts-store';
-import { useCardsStore } from '../../store/cards-store';
+import { supabase } from '../../lib/supabase';
 import { authenticateWithBiometrics } from '../../utils/biometrics';
 
 export type CurrencyOption = CurrencyCode;
@@ -91,46 +91,35 @@ export const SettingsSectionList = ({
   };
 
   const handleExecuteFullReset = async (): Promise<void> => {
-    try {
-      // 1. Limpieza de persistencia en Zustand
-      await Promise.allSettled([
-        useTransactionsStore.persist?.clearStorage?.(),
-        useDebtsStore.persist?.clearStorage?.(),
-        useCardsStore.persist?.clearStorage?.(),
-      ]);
+    // 1. Limpieza remota en Supabase si el usuario está autenticado
+    const userId = useAuthStore.getState().user?.id;
+    if (userId) {
+      try {
+        await Promise.allSettled([
+          supabase.from('transactions').delete().eq('user_id', userId),
+          supabase.from('third_party_card_charges').delete().eq('user_id', userId),
+          supabase.from('friend_loans').delete().eq('user_id', userId),
+          supabase.from('personal_debts').delete().eq('user_id', userId),
+        ]);
+      } catch (error) {
+        console.error('Error al limpiar registros remotos en Supabase:', error);
+      }
+    }
 
-      // 2. Borrado explícito de claves y vaciado de almacenamiento nativo
-      const storageKeys = [
-        'controlfynz-debts-storage-v2',
-        'controlfynz-transactions-storage-v2',
-        'controlfynz-cards-storage',
-        'controlfynz-debts-storage',
-        'controlfynz-transactions-storage',
-      ];
+    try {
+      // 2. Limpieza de claves de almacenamiento obsoletas de transacciones y deudas
       await Promise.allSettled([
-        AsyncStorage.multiRemove(storageKeys),
-        AsyncStorage.clear(),
+        AsyncStorage.removeItem('controlfynz-transactions-storage-v2'),
+        AsyncStorage.removeItem('controlfynz-transactions-storage'),
+        AsyncStorage.removeItem('controlfynz-debts-storage'),
       ]);
     } catch {
       // Captura silenciosa defensiva
     }
 
-    // 3. Vaciado exhaustivo de estados en memoria (incluyendo contactos y bancos)
-    useTransactionsStore.getState().clearAllTransactions?.();
-    useTransactionsStore.setState({ transactions: [] });
-
-    useDebtsStore.getState().clearAllDebts?.();
-    useDebtsStore.setState({
-      personalDebts: [],
-      thirdPartyCharges: [],
-      friendLoans: [],
-      people: [],
-    });
-
-    useCardsStore.setState({
-      cards: [],
-      banks: [],
-    });
+    // 3. Limpieza selectiva de stores locales preservando personas, tarjetas, bancos y sesión
+    useTransactionsStore.getState().clearAllTransactions();
+    useDebtsStore.getState().clearAllDebts();
 
     setResetSuccessMessage(true);
     setTimeout(() => {
@@ -347,15 +336,15 @@ export const SettingsSectionList = ({
           <Ionicons name="flash-outline" size={18} color="#FF9F0A" />
           <View style={styles.textContainer}>
             <Text style={[styles.rowTitle, styles.amberText]}>
-              Restablecer Base de Datos (Modo Pruebas)
+              Limpiar Gastos y Deudas
             </Text>
             <Text style={styles.rowSubtitle}>
-              Herramienta temporal para pruebas desde cero.
+              Vaciar transacciones y préstamos preservando tarjetas y contactos
             </Text>
           </View>
         </View>
         <View style={styles.devBadge}>
-          <Text style={styles.devBadgeText}>[ DEV / TEST ]</Text>
+          <Text style={styles.devBadgeText}>[ LIMPIEZA ]</Text>
         </View>
       </TouchableOpacity>
     </View>
@@ -410,23 +399,23 @@ export const SettingsSectionList = ({
           <View style={styles.modalCard}>
             <View style={styles.modalBadge}>
               <Text style={styles.modalBadgeText}>
-                [ HERRAMIENTA TEMPORAL DE PRUEBAS ]
+                [ LIMPIEZA SELECTIVA DE DATOS ]
               </Text>
             </View>
 
             <Text style={styles.modalTitle}>
-              RESTABLECER TODA LA BASE DE DATOS LOCAL
+              ¿VACIAR GASTOS Y DEUDAS?
             </Text>
 
             <Text style={styles.modalMessage}>
-              {'⚠️ Esta función es exclusiva para la fase de pruebas y construcción del proyecto.\n\nSe vaciarán al 100% todas las transacciones, deudas, abonos y tarjetas para permitirte ingresar datos limpios desde cero.'}
+              Esta acción eliminará todos los gastos, ingresos, transacciones y deudas registradas. Tus tarjetas de crédito, bancos, contactos y cuenta de usuario se mantendrán intactos.
             </Text>
 
             {resetSuccessMessage ? (
               <View style={styles.modalSuccessContainer}>
                 <Ionicons name="checkmark-circle" size={24} color="#00FFA3" />
                 <Text style={styles.modalSuccessText}>
-                  ✅ Base de datos restablecida a cero con éxito
+                  ✅ Gastos y deudas vaciados con éxito
                 </Text>
               </View>
             ) : (
@@ -444,7 +433,7 @@ export const SettingsSectionList = ({
                   onPress={handleExecuteFullReset}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.modalConfirmText}>VACIAR TODO A CERO</Text>
+                  <Text style={styles.modalConfirmText}>VACIAR GASTOS Y DEUDAS</Text>
                 </TouchableOpacity>
               </View>
             )}
