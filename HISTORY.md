@@ -7,6 +7,17 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[SELECTIVE-DATABASE-CLEANUP-EXPENSES-DEBTS-001]` (2026-10-29): Implementación de limpieza selectiva de gastos y deudas en aplicación y Supabase:
+  - Archivo intervenido:
+    * `src/components/settings/settings-section-list.tsx`
+  - Resumen técnico:
+    - Sustitución del borrado total ciego (`AsyncStorage.clear()`) por una rutina de limpieza granular selectiva.
+    - Preservación íntegra al 100% de tarjetas de crédito (`cards`), bancos (`banks`), contactos/personas (`people`), cuentas de usuario (`auth.users` / `profiles`) y configuraciones personales.
+    - Vaciado específico de gastos e ingresos (`useTransactionsStore.clearAllTransactions()`) y deudas bancarias, préstamos a amigos y consumos diferidos (`useDebtsStore.clearAllDebts()`).
+    - Integración de borrado remoto directo en Supabase (`transactions`, `third_party_card_charges`, `friend_loans`, `personal_debts`) acotado por `user_id` para los usuarios autenticados, previniendo resincronizaciones accidentales tipo zombie.
+    - Actualización de textos, títulos y advertencias en el modal interactivo de la pantalla de Ajustes.
+  - Verificación y calidad: 56/56 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[DEBTS-BANK-GROUP-HEADER-REDUNDANCY-FIX-001]` (2026-10-28): Erradicación de redundancia visual y blindaje flexbox en encabezado de banco en pestaña Deudas:
   - Archivo intervenido:
     * `app/(app)/(tabs)/debts.tsx`
