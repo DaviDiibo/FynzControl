@@ -1,6 +1,13 @@
 import React from 'react';
 import type { JSX } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  useWindowDimensions,
+  Platform,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 
@@ -8,6 +15,8 @@ export type DebtsSummaryProps = {
   totalDebt?: number;
   personalDebt?: number; // Mi deuda real neta
   thirdPartyDebt?: number; // Total a cargo de terceros
+  friendLoansTotal?: number; // Préstamos a amigos por cobrar
+  thirdPartyChargesTotal?: number; // Compras compartidas de terceros por cobrar
   monthCommitment?: number;
   totalOriginal?: number;
   currency?: string;
@@ -26,17 +35,159 @@ const DebtsSummaryCard = ({
   totalDebt = 8050.0,
   personalDebt = 7450.0,
   thirdPartyDebt = 600.0,
+  friendLoansTotal = 0,
+  thirdPartyChargesTotal = 0,
   monthCommitment = 1550.0,
   totalOriginal = 15500.0,
   currency = '$',
   onPressPersonal,
   onPressThirdParty,
 }: DebtsSummaryProps): JSX.Element => {
+  const { width } = useWindowDimensions();
+  const isWide = width >= 768;
+
   const paidAmount = Math.max(0, totalOriginal - totalDebt);
   const progressPercentage =
     totalOriginal > 0 ? Math.round((paidAmount / totalOriginal) * 100) : 0;
   const clampedProgress = Math.min(100, Math.max(0, progressPercentage));
 
+  // Diseño para pantallas anchas (Web y Tauri >= 768px): 3 columnas KPI
+  if (isWide) {
+    return (
+      <View style={styles.wideRow}>
+        {/* Bloque 1: Deuda Bancaria Total y progreso de amortización */}
+        <TouchableOpacity
+          style={styles.wideCard}
+          onPress={onPressPersonal}
+          disabled={!onPressPersonal}
+          activeOpacity={onPressPersonal ? 0.8 : 1}
+        >
+          <View style={styles.topAccentBar} />
+
+          <View style={styles.headerRow}>
+            <View style={styles.cyberBadge}>
+              <View style={styles.greenDot} />
+              <Text style={styles.cyberBadgeText}>DEUDA BANCARIA TOTAL</Text>
+            </View>
+            <View style={styles.currencyBadge}>
+              <Text style={styles.currencyBadgeText}>{currency} USD</Text>
+            </View>
+          </View>
+
+          <View style={styles.amountContainer}>
+            <Text style={styles.currencySymbol}>{currency}</Text>
+            <Text style={styles.totalDebtText}>{formatAmount(personalDebt ?? totalDebt)}</Text>
+          </View>
+
+          <View style={styles.progressContainer}>
+            <View style={styles.progressTextRow}>
+              <Text style={styles.progressLabel}>Amortización de Pasivos</Text>
+              <Text style={styles.progressPercentageText}>{progressPercentage}% Pagado</Text>
+            </View>
+
+            <View style={styles.progressBarTrack}>
+              <View style={[styles.progressBarFill, { width: `${clampedProgress}%` }]} />
+            </View>
+
+            <View style={styles.progressMetricsRow}>
+              <Text style={styles.progressDetailText}>
+                Liquidado: {currency} {formatAmount(paidAmount)}
+              </Text>
+              <Text style={styles.progressDetailText}>
+                Inicial: {currency} {formatAmount(totalOriginal)}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        {/* Bloque 2: Cuentas por Cobrar con desglose de Préstamos y Compras Compartidas */}
+        <TouchableOpacity
+          style={styles.wideCard}
+          onPress={onPressThirdParty}
+          disabled={!onPressThirdParty}
+          activeOpacity={onPressThirdParty ? 0.8 : 1}
+        >
+          <View style={[styles.topAccentBar, { backgroundColor: '#0A84FF' }]} />
+
+          <View style={styles.headerRow}>
+            <View style={[styles.cyberBadge, styles.blueCyberBadge]}>
+              <Ionicons name="arrow-undo-outline" size={11} color="#0A84FF" />
+              <Text style={[styles.cyberBadgeText, { color: '#0A84FF' }]}>CUENTAS POR COBRAR</Text>
+            </View>
+            {onPressThirdParty && (
+              <View style={styles.linkHintRow}>
+                <Text style={styles.linkHintText}>Ver detalle</Text>
+                <Ionicons name="chevron-forward" size={12} color="#0A84FF" />
+              </View>
+            )}
+          </View>
+
+          <View style={styles.amountContainer}>
+            <Text style={[styles.currencySymbol, { color: '#0A84FF' }]}>{currency}</Text>
+            <Text style={styles.totalDebtText}>{formatAmount(thirdPartyDebt)}</Text>
+          </View>
+
+          <View style={styles.wideBreakdownContainer}>
+            <View style={styles.wideBreakdownItem}>
+              <View style={styles.breakdownLabelRow}>
+                <Text style={styles.breakdownEmoji}>👥</Text>
+                <Text style={styles.breakdownLabel}>Préstamos Amigos</Text>
+              </View>
+              <Text style={styles.wideBreakdownAmount}>
+                {currency} {formatAmount(friendLoansTotal)}
+              </Text>
+            </View>
+
+            <View style={styles.wideBreakdownDivider} />
+
+            <View style={styles.wideBreakdownItem}>
+              <View style={styles.breakdownLabelRow}>
+                <Text style={styles.breakdownEmoji}>🤝</Text>
+                <Text style={styles.breakdownLabelHighlight}>Compras Compartidas</Text>
+              </View>
+              <Text style={styles.thirdPartyDebtText}>
+                {currency} {formatAmount(thirdPartyChargesTotal)}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        {/* Bloque 3: Compromiso Exigible de este mes */}
+        <View style={styles.wideCard}>
+          <View style={[styles.topAccentBar, { backgroundColor: '#FF9F0A' }]} />
+
+          <View style={styles.headerRow}>
+            <View style={[styles.cyberBadge, styles.amberCyberBadge]}>
+              <Ionicons name="calendar-outline" size={11} color="#FF9F0A" />
+              <Text style={[styles.cyberBadgeText, { color: '#FF9F0A' }]}>COMPROMISO DEL MES</Text>
+            </View>
+            <View style={styles.activeCycleBadge}>
+              <Text style={styles.activeCycleBadgeText}>Ciclo actual</Text>
+            </View>
+          </View>
+
+          <View style={styles.amountContainer}>
+            <Text style={[styles.currencySymbol, { color: '#FF9F0A' }]}>{currency}</Text>
+            <Text style={styles.totalDebtText}>{formatAmount(monthCommitment)}</Text>
+          </View>
+
+          <View style={styles.commitmentContextCard}>
+            <View style={styles.calendarIconContainerAmber}>
+              <Ionicons name="cash-outline" size={16} color="#FF9F0A" />
+            </View>
+            <View style={styles.commitmentContextTextCol}>
+              <Text style={styles.commitmentContextTitle}>Cuotas y pagos pactados</Text>
+              <Text style={styles.commitmentContextDesc}>
+                Monto presupuestado exigible para el servicio de tus deudas este período
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  // Preservación 100% de la estructura y apariencia móvil preexistente (Visual Freeze)
   return (
     <View style={styles.card}>
       {/* Detalle visual superior de acento cibernético */}
@@ -151,6 +302,25 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     gap: 14,
   },
+  wideRow: {
+    flexDirection: 'row',
+    gap: 14,
+    width: '100%',
+    alignItems: 'stretch',
+  },
+  wideCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 18,
+    position: 'relative',
+    overflow: 'hidden',
+    justifyContent: 'space-between',
+    gap: 14,
+    cursor: Platform.OS === 'web' ? 'pointer' : undefined,
+  },
   topAccentBar: {
     position: 'absolute',
     top: 0,
@@ -175,6 +345,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+  },
+  blueCyberBadge: {
+    backgroundColor: 'rgba(10, 132, 255, 0.08)',
+    borderColor: 'rgba(10, 132, 255, 0.25)',
+  },
+  amberCyberBadge: {
+    backgroundColor: 'rgba(255, 159, 10, 0.08)',
+    borderColor: 'rgba(255, 159, 10, 0.25)',
   },
   greenDot: {
     width: 6,
@@ -201,6 +379,16 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
+  linkHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  linkHintText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0A84FF',
+  },
   amountContainer: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -213,7 +401,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   totalDebtText: {
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: '800',
     color: colors.text,
     letterSpacing: -0.5,
@@ -231,6 +419,7 @@ const styles = StyleSheet.create({
   breakdownCol: {
     flex: 1,
     gap: 4,
+    cursor: Platform.OS === 'web' ? 'pointer' : undefined,
   },
   breakdownDivider: {
     width: 1,
@@ -267,6 +456,30 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     color: colors.primary,
+  },
+  wideBreakdownContainer: {
+    backgroundColor: '#161616',
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  wideBreakdownItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  wideBreakdownAmount: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  wideBreakdownDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    width: '100%',
   },
   commitmentRow: {
     flexDirection: 'row',
@@ -308,6 +521,54 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     color: colors.text,
+  },
+  activeCycleBadge: {
+    backgroundColor: '#161616',
+    borderColor: colors.border,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  activeCycleBadgeText: {
+    color: '#FF9F0A',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  commitmentContextCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#161616',
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  calendarIconContainerAmber: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 159, 10, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  commitmentContextTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  commitmentContextTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.text,
+    letterSpacing: 0.3,
+  },
+  commitmentContextDesc: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    lineHeight: 13,
   },
   progressContainer: {
     gap: 8,
