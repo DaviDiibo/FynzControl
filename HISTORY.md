@@ -7,6 +7,19 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[DEBTS-WEB-TAURI-IMPROVEMENTS-PHASE1-001]` (2026-10-29): Mejoras de ergonomía, KPIs en 3 columnas y atajos de teclado para Web y Tauri en Gestión de Deudas:
+  - Archivos intervenidos:
+    * `src/components/debts/debts-summary-card.tsx`
+    * `app/(app)/(tabs)/debts.tsx`
+  - Resumen técnico:
+    - Rediseño responsivo en `debts-summary-card.tsx` con `useWindowDimensions` (`isWide >= 768`): panel superior en 3 columnas de KPIs ejecutivos (Bloque 1: Deuda Bancaria Total y progreso de amortización; Bloque 2: Cuentas por Cobrar con desglose de Préstamos a amigos y Compras compartidas; Bloque 3: Compromiso Exigible del mes con badges de estado).
+    - Preservación íntegra al 100% de la tarjeta móvil (`!isWide`), cumpliendo estrictamente la regla de `Visual Freeze`.
+    - Píldoras de filtro en `debts.tsx`: en `isWide`, reemplazo del `ScrollView` horizontal por contenedor flex (`flexDirection: 'row', flexWrap: 'wrap', gap: 10`), eliminando el incómodo scroll horizontal con ratón en escritorio.
+    - Acotamiento responsivo del buscador en `isWide` con `maxWidth: 420` para evitar estiramiento desproporcionado en pantallas anchas.
+    - Atajo global de teclado 'Escape' en Web/Tauri (`Platform.OS === 'web'`) para cerrar limpiamente cualquier modal activo (abonos, pagos, liquidaciones y confirmaciones).
+    - Asignación condicional de `cursor: 'pointer'` en elementos interactivos clave (píldoras, botones de pago/abono, toggle de compras agrupadas y acciones rápidas).
+  - Verificación y calidad: 56/56 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[MODAL-CARDS-LEGACY-DESKTOP-STYLING-001]` (2026-10-29): Estilización y adaptación de modales de tarjetas y consumos históricos para escritorio (Tauri y Web):
   - Archivos intervenidos:
     * `app/(app)/(modal)/cards-overview.tsx`

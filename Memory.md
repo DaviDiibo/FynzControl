@@ -20,13 +20,13 @@
   - Cobertura de Testing (56/56 tests en verde): Suites en `src/__tests__/` con Fake Timers deterministas para ciclos de facturación, amortizaciones contables y utilidades de fechas.
   - Especificación arquitectónica relacional en `DATABASE_SCHEMA.md` para Supabase/PostgreSQL.
 - **Hitos Recientes Concluidos**:
+  - **Mejoras Web y Tauri para Gestión de Deudas - Fase 1 (`[DEBTS-WEB-TAURI-IMPROVEMENTS-PHASE1-001]`)**: Panel de 3 columnas de KPIs en `debts-summary-card.tsx` (Bancos + amortización, Cuentas por Cobrar con desglose, Compromiso del Mes), filtros en fila responsiva sin scroll horizontal con ratón, buscador acotado (`maxWidth: 420`), atajo global de tecla `Escape` para modales y `cursor: 'pointer'` en elementos interactivos; móvil (`!isWide`) 100% intacto; 56/56 tests en verde (100%), 0 errores TS.
   - **Estilización Desktop para Cards Overview y Legacy Card Expense (`[MODAL-CARDS-LEGACY-DESKTOP-STYLING-001]`)**: Tarjetas flotantes centradas en `cards-overview.tsx` (`maxWidth: 680`) y `legacy-card-expense.tsx` (`maxWidth: 580`), backdrop `rgba(0,0,0,0.72)` y tecla `Escape` en Web/Tauri; móvil (`!isWide`) 100% intacto; 56/56 tests en verde (100%), 0 errores TS.
   - **Transparencia Real y Erradicación del Fondo Gris en Modales (`[MODAL-TRANSPARENT-STACKS-DESKTOP-FIX-001]`)**: Configuración de `presentation: 'transparentModal'` y `contentStyle: { backgroundColor: 'transparent' }` en `(modal)/_layout.tsx` y `(app)/_layout.tsx`; erradica el fondo gris `#F2F2F2` inyectado por React Navigation Web; la pantalla previa permanece visible bajo el backdrop; 56/56 tests en verde.
   - **Estilización Desktop para Modal de Nueva Deuda (`[MODAL-NEW-DEBT-DESKTOP-STYLING-001]`)**: Diálogo flotante centrado con `maxWidth: 620`, `maxHeight: '92%'`, backdrop `rgba(0,0,0,0.72)` y tecla `Escape` en Web/Tauri; 56/56 tests en verde.
   - **Estilización Desktop para Modal de Nueva Transacción (`[MODAL-NEW-TRANSACTION-DESKTOP-STYLING-001]`)**: Diálogo flotante centrado con `maxWidth: 580`, `maxHeight: '92%'`, backdrop translúcido y tecla `Escape`; 56/56 tests en verde.
-  - **Limpieza Selectiva de Gastos y Deudas (`[SELECTIVE-DATABASE-CLEANUP-EXPENSES-DEBTS-001]`)**: Sustitución de `AsyncStorage.clear()` por purga selectiva en `settings-section-list.tsx`; 56/56 tests en verde.
 - **Próximo Foco Inmediato**:
-  - Consolidar y desplegar hacia `main` (producción) o avanzar con siguientes refinamientos.
+  - Evaluar Fase 2 de mejoras en Deudas (modales de pago/abono con ancho desktop de 540-580px y distribución en 2 columnas) o consolidar y desplegar hacia `main`.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
 - ❌ **NO omitir `presentation: 'transparentModal'` en Stacks anidados de modales en Web**: De lo contrario, React Navigation inyecta un fondo gris opaco `#F2F2F2` que tapa la vista inferior.

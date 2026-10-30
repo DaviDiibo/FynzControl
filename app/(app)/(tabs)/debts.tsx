@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { JSX } from 'react';
 import {
   View,
@@ -878,6 +878,26 @@ const DebtsScreen = (): JSX.Element => {
     }
   };
 
+  // Atajo de teclado Escape en Web y Tauri para cerrar modales activos
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const handleKeyDown = (e: KeyboardEvent): void => {
+        if (e.key === 'Escape') {
+          handleCloseAbonoModal();
+          handleCloseThirdPartyAbonoModal();
+          handleCloseDebtPaymentModal();
+          setChargeToDelete(null);
+          setPersonalDebtToDelete(null);
+          setFriendLoanToDelete(null);
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+  }, []);
+
   const handleSetThirdPartyCoverMonth = (): void => {
     if (!selectedSummaryForAbono) return;
     setThirdPartyAbonoAmount(
@@ -933,6 +953,85 @@ const DebtsScreen = (): JSX.Element => {
     setThirdPartyAbonoError(null);
   };
 
+  const renderPillsContent = (): JSX.Element => (
+    <>
+      <TouchableOpacity
+        style={[styles.pill, filter === 'all' && styles.pillActive]}
+        onPress={() => setFilter('all')}
+        activeOpacity={0.7}
+      >
+        <Text style={[styles.pillText, filter === 'all' && styles.pillTextActive]}>
+          Todas
+        </Text>
+        <View style={[styles.countBadge, filter === 'all' && styles.countBadgeActive]}>
+          <Text style={[styles.countBadgeText, filter === 'all' && styles.countBadgeTextActive]}>
+            {countAll}
+          </Text>
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.pill, filter === 'personal' && styles.pillActive]}
+        onPress={() => setFilter('personal')}
+        activeOpacity={0.7}
+      >
+        <Ionicons
+          name="cash-outline"
+          size={13}
+          color={filter === 'personal' ? '#00FFA3' : colors.textSecondary}
+        />
+        <Text style={[styles.pillText, filter === 'personal' && { color: '#00FFA3', fontWeight: '700' }]}>
+          Préstamos Bancarios
+        </Text>
+        <View style={[styles.countBadge, filter === 'personal' && { backgroundColor: 'rgba(0, 255, 163, 0.25)' }]}>
+          <Text style={[styles.countBadgeText, filter === 'personal' && { color: '#00FFA3' }]}>
+            {countPersonal}
+          </Text>
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.pill, filter === 'receivables' && styles.pillActive]}
+        onPress={() => setFilter('receivables')}
+        activeOpacity={0.7}
+      >
+        <Ionicons
+          name="arrow-undo-outline"
+          size={13}
+          color={filter === 'receivables' ? colors.primary : colors.textSecondary}
+        />
+        <Text style={[styles.pillText, filter === 'receivables' && styles.pillTextActive]}>
+          Por Cobrar
+        </Text>
+        <View style={[styles.countBadge, filter === 'receivables' && styles.countBadgeActive]}>
+          <Text style={[styles.countBadgeText, filter === 'receivables' && styles.countBadgeTextActive]}>
+            {countReceivables}
+          </Text>
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.pill, filter === 'settled' && styles.pillActive]}
+        onPress={() => setFilter('settled')}
+        activeOpacity={0.7}
+      >
+        <Ionicons
+          name="archive-outline"
+          size={13}
+          color={filter === 'settled' ? colors.primary : colors.textSecondary}
+        />
+        <Text style={[styles.pillText, filter === 'settled' && styles.pillTextActive]}>
+          Liquidadas
+        </Text>
+        <View style={[styles.countBadge, filter === 'settled' && styles.countBadgeActive]}>
+          <Text style={[styles.countBadgeText, filter === 'settled' && styles.countBadgeTextActive]}>
+            {countSettled}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    </>
+  );
+
   const parsedThirdPartyAmount = parseFloat(thirdPartyAbonoAmount);
   const isThirdPartyAbonoDisabled =
     !selectedSummaryForAbono ||
@@ -972,6 +1071,8 @@ const DebtsScreen = (): JSX.Element => {
           totalDebt={totalPersonalDebt}
           personalDebt={totalPersonalDebt}
           thirdPartyDebt={totalReceivable}
+          friendLoansTotal={totalFriendLoansReceivable}
+          thirdPartyChargesTotal={totalThirdPartyChargesReceivable}
           monthCommitment={monthCommitment}
           totalOriginal={totalOriginal}
           currency={currencySymbol}
@@ -980,7 +1081,7 @@ const DebtsScreen = (): JSX.Element => {
         />
 
         {/* Buscador de entidades y personas */}
-        <View style={styles.searchBar}>
+        <View style={[styles.searchBar, isWide && styles.searchBarWide]}>
           <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
           <TextInput
             style={styles.searchInput}
@@ -1005,86 +1106,19 @@ const DebtsScreen = (): JSX.Element => {
         </View>
 
         {/* Filtros segmentados por píldoras */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.pillsContainer}
-        >
-          <TouchableOpacity
-            style={[styles.pill, filter === 'all' && styles.pillActive]}
-            onPress={() => setFilter('all')}
-            activeOpacity={0.7}
+        {isWide ? (
+          <View style={styles.pillsContainerWide}>
+            {renderPillsContent()}
+          </View>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.pillsContainer}
           >
-            <Text style={[styles.pillText, filter === 'all' && styles.pillTextActive]}>
-              Todas
-            </Text>
-            <View style={[styles.countBadge, filter === 'all' && styles.countBadgeActive]}>
-              <Text style={[styles.countBadgeText, filter === 'all' && styles.countBadgeTextActive]}>
-                {countAll}
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.pill, filter === 'personal' && styles.pillActive]}
-            onPress={() => setFilter('personal')}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="cash-outline"
-              size={13}
-              color={filter === 'personal' ? '#00FFA3' : colors.textSecondary}
-            />
-            <Text style={[styles.pillText, filter === 'personal' && { color: '#00FFA3', fontWeight: '700' }]}>
-              Préstamos Bancarios
-            </Text>
-            <View style={[styles.countBadge, filter === 'personal' && { backgroundColor: 'rgba(0, 255, 163, 0.25)' }]}>
-              <Text style={[styles.countBadgeText, filter === 'personal' && { color: '#00FFA3' }]}>
-                {countPersonal}
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.pill, filter === 'receivables' && styles.pillActive]}
-            onPress={() => setFilter('receivables')}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="arrow-undo-outline"
-              size={13}
-              color={filter === 'receivables' ? colors.primary : colors.textSecondary}
-            />
-            <Text style={[styles.pillText, filter === 'receivables' && styles.pillTextActive]}>
-              Por Cobrar
-            </Text>
-            <View style={[styles.countBadge, filter === 'receivables' && styles.countBadgeActive]}>
-              <Text style={[styles.countBadgeText, filter === 'receivables' && styles.countBadgeTextActive]}>
-                {countReceivables}
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.pill, filter === 'settled' && styles.pillActive]}
-            onPress={() => setFilter('settled')}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="archive-outline"
-              size={13}
-              color={filter === 'settled' ? colors.primary : colors.textSecondary}
-            />
-            <Text style={[styles.pillText, filter === 'settled' && styles.pillTextActive]}>
-              Liquidadas
-            </Text>
-            <View style={[styles.countBadge, filter === 'settled' && styles.countBadgeActive]}>
-              <Text style={[styles.countBadgeText, filter === 'settled' && styles.countBadgeTextActive]}>
-                {countSettled}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        </ScrollView>
+            {renderPillsContent()}
+          </ScrollView>
+        )}
 
         {/* Empty state general cuando no hay ninguna deuda activa */}
         {filter === 'all' && !hasAnyActive && (
@@ -3425,6 +3459,15 @@ const styles = StyleSheet.create({
     color: colors.text,
     letterSpacing: -0.5,
   },
+  searchBarWide: {
+    maxWidth: 420,
+  },
+  pillsContainerWide: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    alignItems: 'center',
+  },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3447,6 +3490,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   pill: {
+    cursor: Platform.OS === 'web' ? 'pointer' : undefined,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -3983,6 +4027,7 @@ const styles = StyleSheet.create({
     color: '#00FFA3',
   },
   payDebtButton: {
+    cursor: Platform.OS === 'web' ? 'pointer' : undefined,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -4081,6 +4126,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   collectButton: {
+    cursor: Platform.OS === 'web' ? 'pointer' : undefined,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -4803,6 +4849,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   toggleBreakdownButton: {
+    cursor: Platform.OS === 'web' ? 'pointer' : undefined,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -5097,6 +5144,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   recordThirdPartyAbonoButton: {
+    cursor: Platform.OS === 'web' ? 'pointer' : undefined,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -5263,6 +5311,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   loanDeleteButton: {
+    cursor: Platform.OS === 'web' ? 'pointer' : undefined,
     padding: 6,
     borderRadius: 8,
     backgroundColor: 'rgba(255, 69, 58, 0.1)',
