@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { JSX } from 'react';
 import {
   View,
@@ -12,13 +12,16 @@ import { useRouter } from 'expo-router';
 import { colors } from '../../../src/theme/colors';
 import { useIsWide } from '../../../src/hooks/use-responsive';
 import DashboardHeader from '../../../src/components/dashboard/dashboard-header';
-import BalanceHeroCard from '../../../src/components/dashboard/balance-hero-card';
+import BalanceHeroCard, {
+  type BankAccountSummary,
+} from '../../../src/components/dashboard/balance-hero-card';
 import UpcomingDebtsCard from '../../../src/components/dashboard/upcoming-debts-card';
 import QuickActionsGrid from '../../../src/components/dashboard/quick-actions-grid';
 import RecentTransactionsList, {
   type RecentTransaction,
 } from '../../../src/components/dashboard/recent-transactions-list';
 import { useTransactionsStore } from '../../../src/store/transactions-store';
+import { useCardsStore } from '../../../src/store/cards-store';
 import { useSettingsStore } from '../../../src/store/settings-store';
 import {
   subscribeToInitialSync,
@@ -45,21 +48,100 @@ const DashboardScreen = (): JSX.Element => {
     state.getCurrentMonthExpense()
   );
   const netBalance = useTransactionsStore((state) => state.getNetBalance());
+  const getBankComputedBalance = useTransactionsStore(
+    (state) => state.getBankComputedBalance
+  );
+  const getBankCustodyAmount = useTransactionsStore(
+    (state) => state.getBankCustodyAmount
+  );
+
+  const banks = useCardsStore((state) => state.banks);
   const currencyCode = useSettingsStore((state) => state.currency);
 
   const currencySymbol =
     currencyCode === 'EUR' ? '€' : currencyCode === 'BRL' ? 'R$' : '$';
 
-  const recentItems: RecentTransaction[] = transactions.slice(0, 5).map((t) => ({
-    id: t.id,
-    title: t.title,
-    category: t.category,
-    icon: t.icon,
-    type: t.type,
-    amount: t.amount,
-    dateFormatted: t.dateFormatted,
-    currency: currencySymbol,
-  }));
+  // Resumen computado de cuentas bancarias y liquidez disponible
+  const bankSummaries = useMemo<BankAccountSummary[]>(() => {
+    // 1. Cómputo de saldos por banco registrado
+    const computedList: BankAccountSummary[] = (banks || []).map((b) => {
+      const bal = getBankComputedBalance(b.id, b.initialBalance);
+      const custody = getBankCustodyAmount(b.id);
+      return {
+        id: b.id,
+        name: b.name,
+        balance: bal,
+        percentage: 0,
+        custodyAmount: custody > 0 ? custody : undefined,
+      };
+    });
+
+    // 2. Transacciones no asignadas a un banco específico (Efectivo / Otras cuentas)
+    const unassignedBalance = transactions.reduce((acc, tx) => {
+      if (tx.bankId) return acc;
+      // Las compras con tarjeta de crédito sin banco no reducen liquidez de efectivo hasta pagarse
+      if (tx.paymentMethod === 'credit_card') return acc;
+      if (tx.type === 'income' || tx.type === 'reimbursement') {
+        return acc + tx.amount;
+      }
+      if (tx.type === 'expense' || tx.type === 'card_payment') {
+        return acc - tx.amount;
+      }
+      return acc;
+    }, 0);
+
+    // Si existe liquidez no bancarizada o no hay bancos registrados pero sí transacciones
+    if (unassignedBalance !== 0 || computedList.length === 0) {
+      const fallbackAmount =
+        computedList.length === 0 && unassignedBalance === 0
+          ? netBalance
+          : unassignedBalance;
+
+      if (fallbackAmount !== 0 || computedList.length === 0) {
+        computedList.push({
+          id: 'unassigned_cash',
+          name: 'Efectivo / Otros',
+          balance: fallbackAmount,
+          percentage: 0,
+        });
+      }
+    }
+
+    // 3. Cálculo de porcentajes sobre la liquidez positiva total
+    const totalPositive = computedList.reduce(
+      (sum, item) => sum + (item.balance > 0 ? item.balance : 0),
+      0
+    );
+
+    return computedList.map((item) => ({
+      ...item,
+      percentage:
+        totalPositive > 0 && item.balance > 0
+          ? Number(((item.balance / totalPositive) * 100).toFixed(1))
+          : 0,
+    }));
+  }, [banks, transactions, getBankComputedBalance, getBankCustodyAmount, netBalance]);
+
+  // Liquidez total real sumando cuentas y saldos disponibles
+  const totalLiquidBalance = useMemo<number>(() => {
+    if (bankSummaries.length > 0) {
+      return bankSummaries.reduce((sum, b) => sum + b.balance, 0);
+    }
+    return netBalance;
+  }, [bankSummaries, netBalance]);
+
+  const recentItems: RecentTransaction[] = useMemo(() => {
+    return transactions.slice(0, 5).map((t) => ({
+      id: t.id,
+      title: t.title,
+      category: t.category,
+      icon: t.icon,
+      type: t.type,
+      amount: t.amount,
+      dateFormatted: t.dateFormatted,
+      currency: currencySymbol,
+    }));
+  }, [transactions, currencySymbol]);
 
   if (isSyncingInitial) {
     return (
@@ -93,10 +175,18 @@ const DashboardScreen = (): JSX.Element => {
           <View style={styles.wideGridContainer}>
             <View style={styles.leftColumn}>
               <BalanceHeroCard
-                balance={netBalance}
+                balance={totalLiquidBalance}
                 monthlyIncome={currentMonthIncome}
                 monthlyExpense={currentMonthExpense}
                 currency={currencySymbol}
+                banks={bankSummaries}
+                onBankPress={(_bankId) =>
+                  router.push('/(app)/(modal)/cards-overview')
+                }
+                onAddBankPress={() =>
+                  router.push('/(app)/(modal)/cards-overview')
+                }
+                isWide={isWide}
               />
               <QuickActionsGrid
                 onAddIncome={() =>
@@ -131,10 +221,18 @@ const DashboardScreen = (): JSX.Element => {
         ) : (
           <>
             <BalanceHeroCard
-              balance={netBalance}
+              balance={totalLiquidBalance}
               monthlyIncome={currentMonthIncome}
               monthlyExpense={currentMonthExpense}
               currency={currencySymbol}
+              banks={bankSummaries}
+              onBankPress={(_bankId) =>
+                router.push('/(app)/(modal)/cards-overview')
+              }
+              onAddBankPress={() =>
+                router.push('/(app)/(modal)/cards-overview')
+              }
+              isWide={isWide}
             />
             <UpcomingDebtsCard />
 

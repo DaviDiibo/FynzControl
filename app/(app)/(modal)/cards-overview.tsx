@@ -301,24 +301,64 @@ const CardsOverviewModal = (): JSX.Element => {
     }, 0);
 
     // A.2 Consumos de terceros vinculados a la tarjeta
-    const linkedThirdPartyCharges = thirdPartyCharges.filter(
-      (c) =>
-        (c.cardId === card.id ||
-          (c.cardName && card.name && c.cardName.toLowerCase() === card.name.toLowerCase())) &&
-        !c.settled
-    );
+    const isDateInCurrentBillingCycle = (dateStr?: string): boolean => {
+      if (!dateStr) return false;
+      const dt = new Date(dateStr);
+      if (isNaN(dt.getTime())) return false;
+      const d = dt.getDate();
+      const m = dt.getMonth();
+      const y = dt.getFullYear();
+      let billMonth = m;
+      let billYear = y;
+      if (d >= cardClosingDay) {
+        billMonth = m + 1;
+        if (billMonth > 11) {
+          billMonth = 0;
+          billYear = y + 1;
+        }
+      }
+      return (
+        (billMonth === currentMonth && billYear === currentYear) ||
+        (m === currentMonth && y === currentYear)
+      );
+    };
+
+    const linkedThirdPartyCharges = thirdPartyCharges.filter((c) => {
+      const isMatchingCard =
+        c.cardId === card.id ||
+        (c.cardName && card.name && c.cardName.toLowerCase() === card.name.toLowerCase());
+      if (!isMatchingCard) return false;
+
+      const isUnsettledWithRemaining = !c.settled && (c.remainingAmount ?? 0) > 0;
+      const isSettledInCurrentCycle =
+        (c.settled || (c.remainingAmount ?? 0) <= 0) &&
+        (isDateInCurrentBillingCycle(c.settledAt) ||
+          isDateInCurrentBillingCycle(c.lastPaymentDate) ||
+          (c.currentPeriodPaidAmount ?? 0) > 0);
+
+      return isUnsettledWithRemaining || isSettledInCurrentCycle;
+    });
 
     const thirdPartyMonthDue = linkedThirdPartyCharges.reduce((acc, c) => {
-      const rem = c.remainingAmount ?? 0;
-      const count = c.installmentsCount ?? 1;
-      if (count <= 1) {
-        return acc + rem;
+      if (!c.settled && (c.remainingAmount ?? 0) > 0) {
+        const rem = c.remainingAmount ?? 0;
+        const count = c.installmentsCount ?? 1;
+        const normalQuota =
+          count <= 1
+            ? (c.totalAmount || c.amount || rem)
+            : (c.monthlyInstallmentAmount && c.monthlyInstallmentAmount > 0
+                ? c.monthlyInstallmentAmount
+                : rem);
+        return acc + Math.min(rem, normalQuota);
+      } else {
+        const retainedQuota =
+          c.currentPeriodPaidAmount && c.currentPeriodPaidAmount > 0
+            ? c.currentPeriodPaidAmount
+            : (c.installmentsCount ?? 1) <= 1
+            ? (c.totalAmount || c.amount || 0)
+            : (c.monthlyInstallmentAmount || c.totalAmount || c.amount || 0);
+        return acc + retainedQuota;
       }
-      const monthly =
-        c.monthlyInstallmentAmount && c.monthlyInstallmentAmount > 0
-          ? c.monthlyInstallmentAmount
-          : rem;
-      return acc + Math.min(rem, monthly);
     }, 0);
 
     // A.3 Compras directas del período de facturación actual de transactions
