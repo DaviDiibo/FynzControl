@@ -1294,7 +1294,11 @@ const DebtsScreen = (): JSX.Element => {
                           color="#00FFA3"
                         />
                         <Text style={styles.installmentsProgressTextNeon}>
-                          Cuota {item.paidInstallments ?? 0} de {item.totalInstallments} pagadas · Restan {(item.totalInstallments ?? 0) - (item.paidInstallments ?? 0)}
+                          {isSettled
+                            ? `Cuota ${item.totalInstallments} de ${item.totalInstallments} • Saldada`
+                            : isUpToDate
+                            ? `Cuota ${Math.max(1, item.paidInstallments ?? 1)} de ${item.totalInstallments} • Cubierta · Restan ${(item.totalInstallments ?? 0) - (item.paidInstallments ?? 0)}`
+                            : `Cuota ${Math.min(item.totalInstallments ?? 1, (item.paidInstallments ?? 0) + 1)} de ${item.totalInstallments} • Pendiente · Restan ${(item.totalInstallments ?? 0) - (item.paidInstallments ?? 0)}`}
                         </Text>
                       </View>
                     )}
@@ -1643,16 +1647,17 @@ const DebtsScreen = (): JSX.Element => {
                                                 )
                                               );
 
+                                                            const isFullyCovered =
+                                          Boolean(charge.settled) || charge.remainingAmount <= 0;
                                         const isMonthCovered =
-                                          pendingThisMonth <= 0 || charge.remainingAmount <= 0;
+                                          isFullyCovered || pendingThisMonth <= 0;
                                         const isSingle = charge.installmentsCount <= 1;
-                                        const currentInstallment =
-                                          charge.remainingAmount <= 0
-                                            ? charge.installmentsCount
-                                            : Math.min(
-                                                (charge.paidInstallmentsCount || 0) + 1,
-                                                charge.installmentsCount
-                                              );
+
+                                        const quotaText = isFullyCovered
+                                          ? `Cuota ${charge.installmentsCount} de ${charge.installmentsCount} • Saldada`
+                                          : isMonthCovered
+                                          ? `Cuota ${Math.max(1, charge.paidInstallmentsCount || 1)} de ${charge.installmentsCount} • Cubierta`
+                                          : `Cuota ${Math.min(charge.installmentsCount, (charge.paidInstallmentsCount || 0) + 1)} de ${charge.installmentsCount} • Pendiente`;
 
                                         const covInfo = getThirdPartyCoverageInfo(charge);
 
@@ -1693,8 +1698,8 @@ const DebtsScreen = (): JSX.Element => {
                                                 <View style={styles.chargeInstallmentsBadge}>
                                                   <Ionicons name="repeat-outline" size={12} color="#64D2FF" />
                                                   <Text style={styles.chargeInstallmentsBadgeText}>
-                                                    Cuota {currentInstallment} de {charge.installmentsCount}
-                                                  </Text>
+                                                  {quotaText}
+                                                </Text>
                                                 </View>
                                               )}
                                               <Text style={styles.chargeMonthlyAmountText}>

@@ -6,6 +6,7 @@ import {
 } from '../store/transactions-store';
 import { useDebtsStore } from '../store/debts-store';
 import { useCardsStore } from '../store/cards-store';
+import { toDeterministicUuid } from '../lib/sync-adapters';
 
 describe('Integración Contable: Amortizaciones, Cobros, Reversiones y Abonos en Dos Fases', () => {
   beforeEach(() => {
@@ -1085,6 +1086,158 @@ describe('Integración Contable: Amortizaciones, Cobros, Reversiones y Abonos en
     expect(diegoSummary.monthlyPaidAmount).toBe(0);
     expect(diegoSummary.monthlyPendingAmount).toBe(200);
     expect(diegoSummary.isMonthSettled).toBe(false);
+  });
+
+  it('Fase 1: Gasto de tercero con múltiples cuotas y pagos previos: saldar última cuota y revertir abono reactiva settled: false', () => {
+    // 1. Cargo con 3 cuotas de $100 ($300 total) y 2 cuotas ya saldadas históricamente
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Camila Reyes',
+      cardName: 'Visa Platinum',
+      concept: 'Laptop Cuotas',
+      amount: 300,
+      installmentsCount: 3,
+      monthlyInstallmentAmount: 100,
+      initialPaidInstallments: 2,
+      remainingAmount: 100,
+    });
+
+    const initialCharge = useDebtsStore.getState().thirdPartyCharges[0];
+    expect(initialCharge.remainingAmount).toBe(100);
+    expect(initialCharge.paidInstallmentsCount).toBe(2);
+    expect(initialCharge.settled).toBe(false);
+
+    // 2. Saldar la última cuota ($100)
+    const { allocations } = useDebtsStore.getState().recordMonthlyPersonAbono('Camila Reyes', 100);
+    const settledCharge = useDebtsStore.getState().thirdPartyCharges[0];
+    expect(settledCharge.remainingAmount).toBe(0);
+    expect(settledCharge.paidInstallmentsCount).toBe(3);
+    expect(settledCharge.settled).toBe(true);
+    expect(settledCharge.settledAt).toBeDefined();
+
+    // 3. Registrar transacción de reembolso con thirdPartyAllocations
+    useTransactionsStore.getState().addTransaction({
+      title: 'Abono Camila Reyes cuota 3',
+      amount: 100,
+      type: 'reimbursement',
+      category: 'Cobro Tarjeta Compartida',
+      personName: 'Camila Reyes',
+      thirdPartyAllocations: allocations,
+    });
+
+    const txId = useTransactionsStore.getState().transactions[0].id;
+
+    // 4. Eliminar la transacción de reembolso
+    useTransactionsStore.getState().deleteTransaction(txId);
+
+    // 5. Verificar que el cargo vuelve a settled: false, settledAt: undefined, remainingAmount: 100, paidInstallmentsCount: 2
+    const revertedCharge = useDebtsStore.getState().thirdPartyCharges[0];
+    expect(revertedCharge.remainingAmount).toBe(100);
+    expect(revertedCharge.settled).toBe(false);
+    expect(revertedCharge.settledAt).toBeUndefined();
+    expect(revertedCharge.paidInstallmentsCount).toBe(2);
+  });
+
+  it('Fase 1: Reversión mediante deleteTransaction con fallback cuando allocations no coinciden', () => {
+    // 1. Cargo de 3 cuotas con 2 cuotas ya pagadas
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Mariana López',
+      cardName: 'Mastercard Black',
+      concept: 'Celular',
+      amount: 600,
+      installmentsCount: 3,
+      monthlyInstallmentAmount: 200,
+      initialPaidInstallments: 2,
+      remainingAmount: 200,
+    });
+
+    // 2. Saldar la última cuota de $200
+    useDebtsStore.getState().recordMonthlyPersonAbono('Mariana López', 200);
+    const settledCharge = useDebtsStore.getState().thirdPartyCharges[0];
+    expect(settledCharge.remainingAmount).toBe(0);
+    expect(settledCharge.settled).toBe(true);
+
+    // 3. Crear transacción con allocations no coincidentes (simulando desincronización de IDs)
+    useTransactionsStore.getState().addTransaction({
+      title: 'Abono Mariana Celular',
+      amount: 200,
+      type: 'reimbursement',
+      category: 'Reembolso',
+      personName: 'Mariana López',
+      thirdPartyAllocations: [
+        {
+          chargeId: 'non-matching-uuid-1234',
+          appliedAmount: 200,
+          previousRemaining: 200,
+          previousPaidInstallments: 2,
+          previousCurrentPeriodPaid: 0,
+          wasSettled: false,
+        },
+      ],
+    });
+
+    const txId = useTransactionsStore.getState().transactions[0].id;
+
+    // 4. Eliminar transacción (debe entrar por fallback al fallar revertThirdPartyAllocations)
+    useTransactionsStore.getState().deleteTransaction(txId);
+
+    // 5. Verificar que el cargo de Mariana fue revertido correctamente vía fallback
+    const revertedCharge = useDebtsStore.getState().thirdPartyCharges[0];
+    expect(revertedCharge.remainingAmount).toBe(200);
+    expect(revertedCharge.settled).toBe(false);
+    expect(revertedCharge.settledAt).toBeUndefined();
+    expect(revertedCharge.paidInstallmentsCount).toBe(2);
+  });
+
+  it('Fase 1: revertThirdPartyAllocations soporta matching por ID directo y por toDeterministicUuid', () => {
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Lucas Paz',
+      cardName: 'Visa',
+      concept: 'Pasajes',
+      amount: 500,
+      installmentsCount: 2,
+      monthlyInstallmentAmount: 250,
+    });
+
+    const charge = useDebtsStore.getState().thirdPartyCharges.find((c) => c.personName === 'Lucas Paz')!;
+    useDebtsStore.getState().recordThirdPartyInstallmentAbono(charge.id, 250);
+    useDebtsStore.getState().recordThirdPartyInstallmentAbono(charge.id, 250);
+
+    const chargeSaldado = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === charge.id)!;
+    expect(chargeSaldado.remainingAmount).toBe(0);
+    expect(chargeSaldado.settled).toBe(true);
+
+    // Reversión usando toDeterministicUuid
+    const detUuid = toDeterministicUuid(charge.id);
+    const didRevert = useDebtsStore.getState().revertThirdPartyAllocations([
+      {
+        chargeId: detUuid,
+        appliedAmount: 250,
+        previousRemaining: 250,
+        previousPaidInstallments: 1,
+        previousCurrentPeriodPaid: 250,
+        wasSettled: false,
+      },
+    ]);
+
+    expect(didRevert).toBe(true);
+    const chargeRevertido = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === charge.id)!;
+    expect(chargeRevertido.remainingAmount).toBe(250);
+    expect(chargeRevertido.settled).toBe(false);
+    expect(chargeRevertido.settledAt).toBeUndefined();
+    expect(chargeRevertido.paidInstallmentsCount).toBe(1);
+
+    // Retorna false si no encuentra ningún cargo
+    const didRevertNone = useDebtsStore.getState().revertThirdPartyAllocations([
+      {
+        chargeId: 'completely-unknown-id',
+        appliedAmount: 100,
+        previousRemaining: 100,
+        previousPaidInstallments: 0,
+        previousCurrentPeriodPaid: 0,
+        wasSettled: false,
+      },
+    ]);
+    expect(didRevertNone).toBe(false);
   });
 });
 

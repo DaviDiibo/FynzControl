@@ -211,6 +211,266 @@ export interface InstallmentProgressInfo {
   progressPercent: number; // 0 - 100
 }
 
+export interface CardBillingPeriodInput {
+  closingDay?: number;
+  paymentDay?: number;
+  cutOffDay?: number;
+}
+
+export interface ProjectedBillingPeriodResult extends CardBillingCycleDates {
+  offsetMonths: number;
+  statementMonth: number; // 0 a 11
+  statementYear: number;
+  statementMonthName: string; // ej. "Octubre"
+  periodLabel: string; // ej. "Actual", "Próximo Mes", "+2 Meses"
+}
+
+export const getProjectedCardBillingPeriod = (
+  card: CardBillingPeriodInput,
+  offsetMonths: number = 0,
+  baseDate: Date = new Date()
+): ProjectedBillingPeriodResult => {
+  const refYear = baseDate.getFullYear();
+  const refMonth = baseDate.getMonth();
+  const refDay = baseDate.getDate();
+
+  const closingDay = card.closingDay ?? card.cutOffDay ?? 20;
+  const paymentDay = card.paymentDay ?? card.cutOffDay ?? 5;
+
+  const getLastDayOfMonth = (year: number, month: number): number =>
+    new Date(year, month + 1, 0).getDate();
+
+  let targetClosingMonth = refMonth + offsetMonths;
+  let targetClosingYear = refYear;
+  while (targetClosingMonth > 11) {
+    targetClosingMonth -= 12;
+    targetClosingYear += 1;
+  }
+  while (targetClosingMonth < 0) {
+    targetClosingMonth += 12;
+    targetClosingYear -= 1;
+  }
+
+  const maxDayClosingMonth = getLastDayOfMonth(targetClosingYear, targetClosingMonth);
+  const effectiveClosingDay = Math.min(closingDay, maxDayClosingMonth);
+  const closingDate = new Date(targetClosingYear, targetClosingMonth, effectiveClosingDay);
+
+  let targetPaymentMonth = targetClosingMonth;
+  let targetPaymentYear = targetClosingYear;
+
+  if (paymentDay <= closingDay) {
+    targetPaymentMonth += 1;
+    if (targetPaymentMonth > 11) {
+      targetPaymentMonth = 0;
+      targetPaymentYear += 1;
+    }
+  }
+
+  const maxDayPaymentMonth = getLastDayOfMonth(targetPaymentYear, targetPaymentMonth);
+  const effectivePaymentDay = Math.min(paymentDay, maxDayPaymentMonth);
+  const paymentDueDate = new Date(targetPaymentYear, targetPaymentMonth, effectivePaymentDay);
+
+  const refMidnight = new Date(refYear, refMonth, refDay, 0, 0, 0, 0);
+  const closingMidnight = new Date(
+    closingDate.getFullYear(),
+    closingDate.getMonth(),
+    closingDate.getDate(),
+    0, 0, 0, 0
+  );
+  const paymentMidnight = new Date(
+    paymentDueDate.getFullYear(),
+    paymentDueDate.getMonth(),
+    paymentDueDate.getDate(),
+    0, 0, 0, 0
+  );
+
+  const daysUntilClosing = Math.round(
+    (closingMidnight.getTime() - refMidnight.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  const daysUntilPayment = Math.round(
+    (paymentMidnight.getTime() - refMidnight.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  const closingFormatted = `${effectiveClosingDay} ${MONTH_NAMES_ES[targetClosingMonth] ?? ''} ${targetClosingYear}`;
+  const paymentDueFormatted = `${effectivePaymentDay} ${MONTH_NAMES_ES[targetPaymentMonth] ?? ''} ${targetPaymentYear}`;
+  const statementMonthName = FULL_MONTH_NAMES_ES[targetClosingMonth] ?? '';
+  const cycleStatementMonthName = `Extracto ${statementMonthName} ${targetClosingYear}`;
+  const urgencyStatus = getUrgencyStatus(daysUntilPayment);
+
+  const phase: CardCyclePhase =
+    offsetMonths === 0
+      ? refDay <= effectiveClosingDay
+        ? 'accumulating'
+        : 'payment_pending'
+      : 'accumulating';
+
+  const phaseLabel =
+    offsetMonths === 0
+      ? phase === 'accumulating'
+        ? 'Acumulando consumos'
+        : 'Pago pendiente'
+      : 'Proyección futura';
+
+  const periodLabel =
+    offsetMonths === 0
+      ? 'Actual'
+      : offsetMonths === 1
+      ? 'Próximo Mes'
+      : `+${offsetMonths} Meses`;
+
+  return {
+    closingDate,
+    closingFormatted,
+    daysUntilClosing,
+    paymentDueDate,
+    paymentDueFormatted,
+    daysUntilPayment,
+    phase,
+    phaseLabel,
+    cycleStatementMonthName,
+    urgencyStatus,
+    offsetMonths,
+    statementMonth: targetClosingMonth,
+    statementYear: targetClosingYear,
+    statementMonthName,
+    periodLabel,
+  };
+};
+
+export const isOneTimeExpenseInPeriod = (
+  expenseDate: string | Date,
+  closingDay: number,
+  offsetMonths: number = 0,
+  referenceDate: Date = new Date()
+): boolean => {
+  const txDate = typeof expenseDate === 'string' ? new Date(expenseDate) : expenseDate;
+  if (isNaN(txDate.getTime())) return false;
+
+  const refYear = referenceDate.getFullYear();
+  const refMonth = referenceDate.getMonth();
+
+  let targetStatementMonth = refMonth + offsetMonths;
+  let targetStatementYear = refYear;
+  while (targetStatementMonth > 11) {
+    targetStatementMonth -= 12;
+    targetStatementYear += 1;
+  }
+  while (targetStatementMonth < 0) {
+    targetStatementMonth += 12;
+    targetStatementYear -= 1;
+  }
+
+  const d = txDate.getDate();
+  const m = txDate.getMonth();
+  const y = txDate.getFullYear();
+
+  let billMonth = m;
+  let billYear = y;
+  if (d >= closingDay) {
+    billMonth = m + 1;
+    if (billMonth > 11) {
+      billMonth = 0;
+      billYear = y + 1;
+    }
+  }
+
+  return billMonth === targetStatementMonth && billYear === targetStatementYear;
+};
+
+export interface ProjectedInstallmentInfo {
+  isActiveInPeriod: boolean;
+  installmentNumber: number;
+  totalInstallments: number;
+  projectedAmount: number;
+  badgeLabel: string;
+  periodLabel: string;
+}
+
+export const getEffectivePaidInstallments = (
+  totalAmount: number,
+  remainingAmount: number,
+  monthlyAmount: number,
+  totalInstallments: number,
+  storedPaidCount?: number
+): number => {
+  if (totalInstallments <= 0) return 0;
+  if (remainingAmount <= 0.0001) return totalInstallments;
+  const rawStored = Math.max(0, storedPaidCount ?? 0);
+  if (monthlyAmount <= 0) return Math.min(totalInstallments, rawStored);
+  const amortized = Math.max(0, totalAmount - remainingAmount);
+  const paidByAmount = Math.round(parseFloat((amortized / monthlyAmount).toFixed(4)));
+  return Math.min(totalInstallments, Math.max(rawStored, paidByAmount));
+};
+
+export const getProjectedInstallmentInfo = (
+  totalInstallments: number,
+  paidInstallmentsCount: number = 0,
+  monthlyAmount: number,
+  offsetMonths: number = 0,
+  settled: boolean = false,
+  isCurrentPeriodPaid?: boolean
+): ProjectedInstallmentInfo => {
+  const periodLabel =
+    offsetMonths === 0 ? 'Actual' : offsetMonths === 1 ? 'Próximo Mes' : `+${offsetMonths} Meses`;
+
+  if (settled || totalInstallments <= 0) {
+    return {
+      isActiveInPeriod: false,
+      installmentNumber: 0,
+      totalInstallments,
+      projectedAmount: 0,
+      badgeLabel: '',
+      periodLabel,
+    };
+  }
+
+  const effectivePaidCount = isCurrentPeriodPaid
+    ? Math.max(1, paidInstallmentsCount)
+    : paidInstallmentsCount;
+
+  if (offsetMonths === 0) {
+    const isTerminated = paidInstallmentsCount >= totalInstallments;
+    const installmentNumber = isCurrentPeriodPaid
+      ? effectivePaidCount
+      : Math.min(totalInstallments, Math.max(1, paidInstallmentsCount + 1));
+
+    const badgeLabel =
+      isCurrentPeriodPaid === true
+        ? `Cuota ${installmentNumber} de ${totalInstallments} • Cubierta`
+        : isCurrentPeriodPaid === false
+        ? `Cuota ${installmentNumber} de ${totalInstallments} • Pendiente`
+        : `Cuota ${installmentNumber} de ${totalInstallments}`;
+
+    return {
+      isActiveInPeriod: !isTerminated,
+      installmentNumber,
+      totalInstallments,
+      projectedAmount: isTerminated ? 0 : monthlyAmount,
+      badgeLabel,
+      periodLabel,
+    };
+  }
+
+  const installmentNumber = isCurrentPeriodPaid
+    ? effectivePaidCount + offsetMonths
+    : paidInstallmentsCount + offsetMonths + 1;
+
+  const isActive = installmentNumber <= totalInstallments;
+
+  const badgeLabel = isActive
+    ? `Cuota ${installmentNumber} de ${totalInstallments} • ${periodLabel}`
+    : '';
+
+  return {
+    isActiveInPeriod: isActive,
+    installmentNumber: isActive ? installmentNumber : 0,
+    totalInstallments,
+    projectedAmount: isActive ? monthlyAmount : 0,
+    badgeLabel,
+    periodLabel,
+  };
+};
+
 export const getCardBillingCycleDates = (
   closingDay: number,
   paymentDay: number,
@@ -292,28 +552,57 @@ export const getCardBillingCycleDates = (
 
 export const getInstallmentProgressInfo = (
   totalInstallments: number,
-  paidInstallments: number = 0
+  paidInstallments: number = 0,
+  isCurrentPeriodPaid?: boolean
 ): InstallmentProgressInfo => {
   const isSettled = totalInstallments > 0 && paidInstallments >= totalInstallments;
-  const currentInstallment = isSettled
-    ? totalInstallments
-    : Math.min(totalInstallments, Math.max(1, (paidInstallments || 0) + 1));
-  const remainingInstallments = Math.max(0, totalInstallments - (paidInstallments || 0));
+
+  let currentInstallment: number;
+  let currentInstallmentLabel: string;
+  const effectivePaid = isCurrentPeriodPaid
+    ? Math.min(totalInstallments, Math.max(1, paidInstallments || 0))
+    : paidInstallments || 0;
+
+  if (isSettled) {
+    currentInstallment = totalInstallments;
+    currentInstallmentLabel = `${totalInstallments} de ${totalInstallments} cubiertas`;
+  } else if (isCurrentPeriodPaid === true) {
+    currentInstallment = Math.max(1, paidInstallments);
+    currentInstallmentLabel = `Cuota ${currentInstallment} de ${totalInstallments} • Cubierta`;
+  } else if (isCurrentPeriodPaid === false) {
+    currentInstallment = Math.min(totalInstallments, Math.max(1, (paidInstallments || 0) + 1));
+    currentInstallmentLabel = `Cuota ${currentInstallment} de ${totalInstallments} • Pendiente`;
+  } else {
+    currentInstallment = Math.min(totalInstallments, Math.max(1, (paidInstallments || 0) + 1));
+    currentInstallmentLabel = `Cuota ${currentInstallment} de ${totalInstallments}`;
+  }
+
+  const remainingInstallments = isSettled
+    ? 0
+    : isCurrentPeriodPaid
+    ? Math.max(0, totalInstallments - effectivePaid)
+    : Math.max(0, totalInstallments - (paidInstallments || 0));
+
   const progressPercent =
     totalInstallments > 0
-      ? Math.min(100, Math.round(((paidInstallments || 0) / totalInstallments) * 100))
+      ? Math.min(
+          100,
+          Math.round(
+            ((isCurrentPeriodPaid ? effectivePaid : (paidInstallments || 0)) / totalInstallments) * 100
+          )
+        )
       : 0;
-  const currentInstallmentLabel = isSettled
-    ? `${totalInstallments} de ${totalInstallments} cubiertas`
-    : `Cuota ${currentInstallment} de ${totalInstallments}`;
+
   const progressLabel = isSettled
     ? 'Completada'
+    : isCurrentPeriodPaid
+    ? `${effectivePaid} pagadas · Restan ${remainingInstallments} cuotas`
     : `${paidInstallments} pagadas · Restan ${remainingInstallments} cuotas`;
 
   return {
     currentInstallment,
     totalInstallments,
-    paidInstallments,
+    paidInstallments: isCurrentPeriodPaid ? effectivePaid : paidInstallments,
     remainingInstallments,
     isSettled,
     currentInstallmentLabel,

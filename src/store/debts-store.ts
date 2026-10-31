@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { StateStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { toDeterministicUuid } from '../lib/sync-adapters';
 
 // Memoria fallback en caso de retraso en enlace nativo
 const memoryStorage = new Map<string, string>();
@@ -210,7 +211,7 @@ export interface DebtsState {
     cardId?: string,
     personId?: string
   ) => { updatedCharges: { id: string; appliedAmount: number }[]; allocations: ThirdPartyChargeAllocation[] };
-  revertThirdPartyAllocations: (allocations: ThirdPartyChargeAllocation[]) => void;
+  revertThirdPartyAllocations: (allocations: ThirdPartyChargeAllocation[]) => boolean;
   revertThirdPartyChargeCollection: (chargeId: string, amount: number) => void;
   revertThirdPartyChargeAbono: (chargeId: string, amount: number) => void;
   revertThirdPartyPersonAbono: (personName: string, amount: number) => boolean;
@@ -308,7 +309,7 @@ export const useDebtsStore = create<DebtsState>()(
           lastPaymentDate:
             debt.lastPaymentDate !== undefined
               ? debt.lastPaymentDate
-              : paidInstallments > 0
+              : !debt.isPreexisting && paidInstallments > 0
               ? new Date().toISOString()
               : undefined,
           remainingAmount: remaining,
@@ -536,15 +537,31 @@ export const useDebtsStore = create<DebtsState>()(
           charge.monthlyInstallmentAmount !== undefined && charge.monthlyInstallmentAmount > 0
             ? charge.monthlyInstallmentAmount
             : Math.round((charge.amount / installments) * 100) / 100;
+        const explicitPaid =
+          charge.initialPaidInstallments !== undefined
+            ? charge.initialPaidInstallments
+            : charge.paidInstallmentsCount;
+        const derivedPaidFromRemaining =
+          charge.remainingAmount !== undefined && monthlyAmount > 0
+            ? Math.min(
+                installments,
+                Math.max(
+                  0,
+                  Math.round(
+                    parseFloat(
+                      ((charge.amount - charge.remainingAmount) / monthlyAmount).toFixed(4)
+                    )
+                  )
+                )
+              )
+            : 0;
         const prePaidInstallments =
           installments > 1
             ? Math.min(
                 installments,
                 Math.max(
                   0,
-                  charge.initialPaidInstallments !== undefined
-                    ? charge.initialPaidInstallments
-                    : charge.paidInstallmentsCount || 0
+                  explicitPaid !== undefined ? explicitPaid : derivedPaidFromRemaining
                 )
               )
             : 0;
@@ -602,7 +619,14 @@ export const useDebtsStore = create<DebtsState>()(
             const newPaidInstallments = charge.monthlyInstallmentAmount > 0
               ? Math.min(
                   charge.installmentsCount,
-                  Math.floor((charge.totalAmount - newRemaining) / charge.monthlyInstallmentAmount)
+                  Math.max(
+                    0,
+                    Math.round(
+                      parseFloat(
+                        ((charge.totalAmount - newRemaining) / charge.monthlyInstallmentAmount).toFixed(4)
+                      )
+                    )
+                  )
                 )
               : charge.paidInstallmentsCount;
             return {
@@ -804,7 +828,14 @@ export const useDebtsStore = create<DebtsState>()(
               cargo.monthlyInstallmentAmount > 0
                 ? Math.min(
                     cargo.installmentsCount,
-                    Math.floor((cargo.totalAmount - newRemaining) / cargo.monthlyInstallmentAmount)
+                    Math.max(
+                      0,
+                      Math.round(
+                        parseFloat(
+                          ((cargo.totalAmount - newRemaining) / cargo.monthlyInstallmentAmount).toFixed(4)
+                        )
+                      )
+                    )
                   )
                 : cargo.paidInstallmentsCount;
             if (isFullySettled) {
@@ -833,17 +864,33 @@ export const useDebtsStore = create<DebtsState>()(
         return { updatedCharges, allocations };
       },
 
-      revertThirdPartyAllocations: (allocations: ThirdPartyChargeAllocation[]): void => {
-        if (!allocations || allocations.length === 0) return;
+      revertThirdPartyAllocations: (allocations: ThirdPartyChargeAllocation[]): boolean => {
+        if (!allocations || allocations.length === 0) return false;
         const allocMap = new Map<string, ThirdPartyChargeAllocation>();
         for (const a of allocations) {
+          if (!a || !a.chargeId) continue;
           allocMap.set(a.chargeId, a);
+          try {
+            allocMap.set(toDeterministicUuid(a.chargeId), a);
+          } catch {
+            // ignore
+          }
         }
 
+        let updatedAny = false;
         set((state) => ({
           thirdPartyCharges: state.thirdPartyCharges.map((charge) => {
-            const alloc = allocMap.get(charge.id);
+            let alloc = allocMap.get(charge.id);
+            if (!alloc) {
+              try {
+                alloc = allocMap.get(toDeterministicUuid(charge.id));
+              } catch {
+                // ignore
+              }
+            }
             if (!alloc) return charge;
+
+            updatedAny = true;
 
             const previousPaidInstallments = Math.max(
               charge.initialPaidInstallments ?? 0,
@@ -862,18 +909,24 @@ export const useDebtsStore = create<DebtsState>()(
               ? alloc.previousLastPaymentDate
               : (alloc.previousLastPaymentDate ?? charge.lastPaymentDate);
 
+            const isHasRemaining = alloc.previousRemaining > 0.0001;
+            const isSettled = isHasRemaining ? false : Boolean(alloc.wasSettled);
+
             return {
               ...charge,
               remainingAmount: alloc.previousRemaining,
               paidInstallmentsCount: previousPaidInstallments,
               currentPeriodPaidAmount: previousCurrentPeriodPaid,
-              settled: alloc.wasSettled,
-              settledAt: alloc.wasSettled ? (alloc.previousSettledAt ?? charge.settledAt) : undefined,
+              settled: isSettled,
+              settledAt: isSettled ? (alloc.previousSettledAt ?? charge.settledAt) : undefined,
               lastPaymentDate: restoredLastPaymentDate,
             };
           }),
         }));
-        debtSyncHandlers.onDebtAddedOrUpdated?.();
+        if (updatedAny) {
+          debtSyncHandlers.onDebtAddedOrUpdated?.();
+        }
+        return updatedAny;
       },
 
       revertThirdPartyChargeCollection: (chargeId: string, amount: number): void => {
@@ -888,7 +941,17 @@ export const useDebtsStore = create<DebtsState>()(
             const newPaidInstallments = charge.monthlyInstallmentAmount > 0
               ? Math.max(
                   charge.initialPaidInstallments ?? 0,
-                  Math.floor((chargeTotal - newRemaining) / charge.monthlyInstallmentAmount)
+                  Math.min(
+                    charge.installmentsCount,
+                    Math.max(
+                      0,
+                      Math.round(
+                        parseFloat(
+                          ((chargeTotal - newRemaining) / charge.monthlyInstallmentAmount).toFixed(4)
+                        )
+                      )
+                    )
+                  )
                 )
               : charge.paidInstallmentsCount;
             return {
@@ -970,20 +1033,31 @@ export const useDebtsStore = create<DebtsState>()(
               const newPaidInstallments = charge.monthlyInstallmentAmount > 0
                 ? Math.max(
                     charge.initialPaidInstallments ?? 0,
-                    Math.floor((chargeTotal - newRemaining) / charge.monthlyInstallmentAmount)
+                    Math.min(
+                      charge.installmentsCount,
+                      Math.max(
+                        0,
+                        Math.round(
+                          parseFloat(
+                            ((chargeTotal - newRemaining) / charge.monthlyInstallmentAmount).toFixed(4)
+                          )
+                        )
+                      )
+                    )
                   )
                 : charge.paidInstallmentsCount;
 
-              const isRestoredToFull = newRemaining >= chargeTotal;
-              const isPeriodPaidZero = newPeriodPaid <= 0;
+              const isRestoredToFull = newRemaining >= chargeTotal - 0.0001;
+              const isPeriodPaidZero = newPeriodPaid <= 0.0001;
+              const isHasRemaining = newRemaining > 0.0001;
 
               return {
                 ...charge,
                 remainingAmount: Number(newRemaining.toFixed(2)),
                 currentPeriodPaidAmount: isRestoredToFull && isPeriodPaidZero ? 0 : Number(newPeriodPaid.toFixed(2)),
                 paidInstallmentsCount: newPaidInstallments,
-                settled: isRestoredToFull ? false : charge.settled,
-                settledAt: isRestoredToFull ? undefined : charge.settledAt,
+                settled: isHasRemaining ? false : charge.settled,
+                settledAt: isHasRemaining ? undefined : charge.settledAt,
                 lastPaymentDate: isRestoredToFull && isPeriodPaidZero ? undefined : charge.lastPaymentDate,
               };
             }),

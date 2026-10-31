@@ -1,15 +1,35 @@
 import React from 'react';
 import type { JSX } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { useSettingsStore } from '../../store/settings-store';
+import { getBankIdentity } from '../../utils/bank-identity';
+import { BankDeckCard, AddBankDeckCard } from './bank-deck-card';
 
-type BalanceHeroCardProps = {
+export type BankAccountSummary = {
+  id: string;
+  name: string;
+  balance: number;
+  percentage: number;
+  custodyAmount?: number;
+};
+
+export type BalanceHeroCardProps = {
   balance: number;
   monthlyIncome: number;
   monthlyExpense: number;
   currency?: string;
+  banks?: BankAccountSummary[];
+  onBankPress?: (bankId: string) => void;
+  onAddBankPress?: () => void;
+  isWide?: boolean;
   isPrivate?: boolean;
   onTogglePrivacy?: () => void;
   /** @deprecated compatibilidad con llamadas anteriores */
@@ -27,6 +47,14 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   MXN: '$',
 };
 
+const formatAmount = (val: number): string => {
+  if (isNaN(val)) return '0,00';
+  return val.toLocaleString('es-ES', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
+
 const BalanceHeroCard = ({
   balance = 0,
   monthlyIncome: monthlyIncomeProp,
@@ -34,6 +62,10 @@ const BalanceHeroCard = ({
   income,
   expenses,
   currency: currencyProp,
+  banks = [],
+  onBankPress,
+  onAddBankPress,
+  isWide = false,
   isPrivate,
   onTogglePrivacy,
 }: BalanceHeroCardProps): JSX.Element => {
@@ -50,13 +82,6 @@ const BalanceHeroCard = ({
 
   const activeCurrency =
     currencyProp ?? CURRENCY_SYMBOLS[storeCurrency] ?? storeCurrency;
-
-  const formatAmount = (val: number): string => {
-    return val.toLocaleString('es-ES', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-  };
 
   const net = monthlyIncome - monthlyExpense;
   const savingsRate =
@@ -76,89 +101,154 @@ const BalanceHeroCard = ({
     healthBg = 'rgba(0, 255, 163, 0.15)';
   }
 
+  // Filtrar bancos con porcentaje positivo para la micro-barra de distribución patrimonial
+  const validSegments = banks.filter((b) => b.percentage > 0);
+
   return (
-    <View style={styles.card}>
-      <View style={styles.topRow}>
-        <View style={styles.labelGroup}>
-          <Text style={styles.label}>BALANCE DISPONIBLE</Text>
-          <View
-            style={[
-              styles.healthChip,
-              { backgroundColor: healthBg, borderColor: healthColor },
-            ]}
+    <View style={styles.container}>
+      {/* Micro-Hero Card: Saldo Total Compacto */}
+      <View style={styles.card}>
+        {/* Fila 1: Etiqueta, badge de salud financiera y botón de privacidad */}
+        <View style={styles.topRow}>
+          <View style={styles.labelGroup}>
+            <Text style={styles.label}>LIQUIDEZ TOTAL DISPONIBLE</Text>
+            <View
+              style={[
+                styles.healthChip,
+                { backgroundColor: healthBg, borderColor: healthColor },
+              ]}
+            >
+              <View style={[styles.healthDot, { backgroundColor: healthColor }]} />
+              <Text style={[styles.healthText, { color: healthColor }]}>
+                {healthStatus}
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.eyeButton}
+            onPress={handleTogglePrivacy}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={
+              activePrivacy ? 'Mostrar balance' : 'Ocultar balance'
+            }
           >
-            <View style={[styles.healthDot, { backgroundColor: healthColor }]} />
-            <Text style={[styles.healthText, { color: healthColor }]}>
-              {healthStatus}
-            </Text>
+            <Ionicons
+              name={activePrivacy ? 'eye-off-outline' : 'eye-outline'}
+              size={18}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+        </View>
+
+        {/* Fila 2: Cifra de saldo total en tipografía compacta y micro-chips de flujo mensual */}
+        <View style={styles.balanceRow}>
+          <Text
+            style={styles.balanceText}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+          >
+            {activePrivacy
+              ? `${activeCurrency} ••••••`
+              : `${activeCurrency} ${formatAmount(balance)}`}
+          </Text>
+
+          <View style={styles.flowChipsContainer}>
+            <View style={styles.flowChipIncome}>
+              <Text style={styles.flowChipIncomeText}>
+                ▲ +{activePrivacy ? '••••' : `${activeCurrency} ${formatAmount(monthlyIncome)}`}
+              </Text>
+            </View>
+            <View style={styles.flowChipExpense}>
+              <Text style={styles.flowChipExpenseText}>
+                ▼ -{activePrivacy ? '••••' : `${activeCurrency} ${formatAmount(monthlyExpense)}`}
+              </Text>
+            </View>
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.eyeButton}
-          onPress={handleTogglePrivacy}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel={activePrivacy ? 'Mostrar balance' : 'Ocultar balance'}
-        >
-          <Ionicons
-            name={activePrivacy ? 'eye-off-outline' : 'eye-outline'}
-            size={20}
-            color={colors.textSecondary}
-          />
-        </TouchableOpacity>
+        {/* Fila 3: Micro-barra de distribución patrimonial segmentada */}
+        <View style={styles.segmentedBarTrack}>
+          {validSegments.length > 0 ? (
+            validSegments.map((bank) => {
+              const bankColor = getBankIdentity(bank.name).color;
+              return (
+                <View
+                  key={bank.id}
+                  style={[
+                    styles.segmentItem,
+                    {
+                      width: `${Math.max(0, Math.min(100, bank.percentage))}%`,
+                      backgroundColor: bankColor,
+                    },
+                  ]}
+                />
+              );
+            })
+          ) : (
+            <View style={styles.emptySegment} />
+          )}
+        </View>
       </View>
 
-      <View style={styles.balanceContainer}>
-        <Text style={styles.balanceText}>
-          {activePrivacy
-            ? `${activeCurrency} ••••••`
-            : `${activeCurrency} ${formatAmount(balance)}`}
-        </Text>
-      </View>
-
-      <View style={styles.divider} />
-
-      <View style={styles.statsRow}>
-        <View style={styles.statCol}>
-          <View style={styles.statHeader}>
-            <Ionicons
-              name="arrow-up-circle-outline"
-              size={18}
-              color={colors.primary}
-            />
-            <Text style={styles.statLabel}>Ingresos del mes</Text>
-          </View>
-          <Text style={[styles.statValue, styles.incomeValue]}>
-            {activePrivacy
-              ? `${activeCurrency} ••••`
-              : `+${activeCurrency} ${formatAmount(monthlyIncome)}`}
-          </Text>
+      {/* Carrusel / Deck de Cuentas Bancarias y Liquidez */}
+      <View style={styles.carouselSection}>
+        <View style={styles.carouselHeader}>
+          <Text style={styles.carouselTitle}>CUENTAS BANCARIAS Y LIQUIDEZ</Text>
         </View>
 
-        <View style={styles.statDivider} />
-
-        <View style={styles.statCol}>
-          <View style={styles.statHeader}>
-            <Ionicons
-              name="arrow-down-circle-outline"
-              size={18}
-              color={colors.error}
+        {isWide ? (
+          <View style={styles.wideDeckContainer}>
+            {banks.map((bank) => (
+              <BankDeckCard
+                key={bank.id}
+                bankName={bank.name}
+                balance={bank.balance}
+                currencySymbol={activeCurrency}
+                percentage={bank.percentage}
+                custodyAmount={bank.custodyAmount}
+                isHidden={activePrivacy}
+                onPress={() => onBankPress?.(bank.id)}
+                style={styles.desktopCard}
+              />
+            ))}
+            <AddBankDeckCard
+              onPress={() => onAddBankPress?.()}
+              style={styles.desktopCard}
             />
-            <Text style={styles.statLabel}>Gastos del mes</Text>
           </View>
-          <Text style={[styles.statValue, styles.expensesValue]}>
-            {activePrivacy
-              ? `${activeCurrency} ••••`
-              : `-${activeCurrency} ${formatAmount(monthlyExpense)}`}
-          </Text>
-        </View>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.mobileDeckScroll}
+          >
+            {banks.map((bank) => (
+              <BankDeckCard
+                key={bank.id}
+                bankName={bank.name}
+                balance={bank.balance}
+                currencySymbol={activeCurrency}
+                percentage={bank.percentage}
+                custodyAmount={bank.custodyAmount}
+                isHidden={activePrivacy}
+                onPress={() => onBankPress?.(bank.id)}
+              />
+            ))}
+            <AddBankDeckCard onPress={() => onAddBankPress?.()} />
+          </ScrollView>
+        )}
       </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    marginTop: 8,
+    gap: 14,
+  },
   card: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
@@ -166,8 +256,8 @@ const styles = StyleSheet.create({
     borderTopColor: colors.primary,
     borderTopWidth: 2,
     borderRadius: 16,
-    padding: 20,
-    marginTop: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
@@ -178,7 +268,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   labelGroup: {
     flexDirection: 'row',
@@ -187,18 +277,18 @@ const styles = StyleSheet.create({
   },
   label: {
     color: colors.textSecondary,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
   },
   healthChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     borderWidth: 1,
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 12,
+    borderRadius: 10,
   },
   healthDot: {
     width: 5,
@@ -213,54 +303,100 @@ const styles = StyleSheet.create({
   eyeButton: {
     padding: 4,
   },
-  balanceContainer: {
+  balanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
     marginVertical: 4,
   },
   balanceText: {
-    fontSize: 32,
+    fontSize: 23,
     fontWeight: '800',
-    color: colors.text,
-    letterSpacing: 0.5,
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
   },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: 16,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statCol: {
-    flex: 1,
-    gap: 4,
-  },
-  statDivider: {
-    width: 1,
-    height: 36,
-    backgroundColor: colors.border,
-    marginHorizontal: 16,
-  },
-  statHeader: {
+  flowChipsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  statLabel: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '500',
+  flowChipIncome: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(48, 209, 88, 0.12)',
+    borderColor: 'rgba(48, 209, 88, 0.3)',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
   },
-  statValue: {
-    fontSize: 15,
+  flowChipIncomeText: {
+    color: '#30D158',
+    fontSize: 11,
     fontWeight: '700',
   },
-  incomeValue: {
-    color: colors.primary,
+  flowChipExpense: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 69, 58, 0.12)',
+    borderColor: 'rgba(255, 69, 58, 0.3)',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
   },
-  expensesValue: {
-    color: colors.error,
+  flowChipExpenseText: {
+    color: '#FF453A',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  segmentedBarTrack: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    marginTop: 8,
+    backgroundColor: '#2A2A2A',
+    width: '100%',
+  },
+  segmentItem: {
+    height: '100%',
+  },
+  emptySegment: {
+    flex: 1,
+    height: '100%',
+    backgroundColor: '#2A2A2A',
+  },
+  carouselSection: {
+    marginTop: 2,
+  },
+  carouselHeader: {
+    marginBottom: 8,
+  },
+  carouselTitle: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  mobileDeckScroll: {
+    gap: 10,
+    paddingRight: 16,
+  },
+  wideDeckContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    width: '100%',
+  },
+  desktopCard: {
+    width: '48.5%',
+    flexGrow: 1,
+    minWidth: 170,
   },
 });
 
-export default BalanceHeroCard;
+export { BalanceHeroCard };
+export default React.memo(BalanceHeroCard);

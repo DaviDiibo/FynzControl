@@ -7,6 +7,118 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[TASK-DASHBOARD-BANK-DECK-REDESIGN]` (2026-10-31): Rediseño estético premium de tarjetas de bancos, ampliación de marcas y grid fluido en Desktop:
+  - Archivos intervenidos:
+    * `src/utils/bank-identity.ts`
+    * `src/components/dashboard/bank-deck-card.tsx`
+    * `src/components/dashboard/balance-hero-card.tsx`
+    * `src/__tests__/bank-identity.test.ts`
+  - Resumen técnico:
+    * Rediseño estético premium de `BankDeckCard`: acento neón vertical integrado (3.5px) sin cortar esquinas redondeadas, squircle para avatar de marca, saldo prominente en 19px bold (`#FFFFFF`), supresión del texto redundante "SALDO DISPONIBLE", badge de porcentaje translúcido sutil (atenuado en 0%), y micro-chip estilizado de fondos en custodia.
+    * Rediseño de `AddBankDeckCard` como ghost card moderna con acento `#00FFA3`.
+    * Ampliación de marcas oficiales en `bank-identity.ts`: Next (`#00FF5F`), BTG Pactual (`#0A84FF`), Inter (`#FF7A00`), C6 Bank, Bradesco, Caixa, Banco do Brasil, Wise, PayPal, Lemon y Ualá.
+    * Grid fluido de 2 columnas en Desktop (`isWide`): tarjetas con `width: '48.5%'`, `flexGrow: 1`, llenando el 100% del ancho de la columna izquierda y eliminando el hueco vacío lateral de la captura.
+    * 100/100 tests unitarios en verde y 0 errores de compilación TypeScript.
+  - Decisiones permanentes y verificación:
+    * Regla de Tarjetas Bancarias en Dashboard: Usar acento vertical neón interior en lugar de bordes superiores toscos, suprimir etiquetas redundantes de saldo, y en Desktop usar grid fluido de 2 columnas (width 48.5%, flexGrow 1) para llenar la columna izquierda sin huecos asimétricos.
+    * Verificación y calidad: 100/100 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-DASHBOARD-BANK-DECK]` (2026-10-30): Identidad bancaria, baraja de saldos y Micro-Hero en Dashboard (Fases 1 y 2):
+  - Archivos intervenidos:
+    * `src/utils/bank-identity.ts`
+    * `src/components/dashboard/bank-deck-card.tsx`
+    * `src/__tests__/bank-identity.test.ts`
+    * `src/components/dashboard/balance-hero-card.tsx`
+    * `app/(app)/(tabs)/index.tsx`
+  - Resumen técnico:
+    * Fase 1: Creación del motor puro de identidad bancaria `getBankIdentity` con colores corporativos e iconos de marcas reconocidas (Nubank, Santander, BBVA, MP, Brubank, Efectivo) y hashing determinista a paleta cyberpunk para bancos personalizados. Componentes modulares `BankDeckCard` y `AddBankDeckCard`.
+    * Fase 2: Rediseño del Micro-Hero en `balance-hero-card.tsx` reduciendo 50% la altura vertical con saldo compacto (23px), micro-chips de flujo mensual, micro-barra segmentada de asignación patrimonial (4dp) y carrusel de bancos (scroll horizontal en móvil y flex-wrap en escritorio). Cómputo memoizado de saldos en `index.tsx`.
+    * 89/89 tests unitarios en verde (100% pass) y 0 errores de compilación TypeScript.
+  - Decisiones permanentes y verificación:
+    * Regla de Liquidez y Bancos en Dashboard: Presentar la liquidez total en formato compacto con carrusel horizontal de BankDeckCard para diferenciar saldos bancarios rápidamente por color de marca, evitando cards de balance gigantes que empujen los vencimientos y transacciones.
+    * Verificación y calidad: 89/89 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-PERSONAL-DEBT-HISTORICAL-PENDING]` (2026-10-30): Corrección de conteo de cuotas propias históricas y pendientes en tarjeta:
+  - Archivos intervenidos:
+    * `src/store/debts-store.ts`
+    * `src/utils/date-helpers.ts`
+    * `app/(app)/cards/[id].tsx`
+    * `src/__tests__/billing-cycle.test.ts`
+  - Resumen técnico de la solución:
+    * Eliminación de la asignación automática espuria de `new Date().toISOString()` a `lastPaymentDate` al crear deudas históricas/preexistentes en `debts-store.ts`.
+    * En `app/(app)/cards/[id].tsx`, implementación de `computeCardPersonalDebtPeriodPaid`: las compras propias en tarjeta no se consideran cubiertas en el ciclo actual si el extracto de la tarjeta está pendiente de pago (`cardCurrentMonthDebt > 0`). Visualización con píldora naranja `Pendiente este mes` y badge `Cuota 5 de 8 • Pendiente` (caso iPhone 17 Pro Max).
+    * Actualización de `getInstallmentProgressInfo` y `getProjectedInstallmentInfo` para emitir explícitamente `• Pendiente` cuando no esté cubierta.
+    * Incorporación del Caso 13 con Fake Timers en `billing-cycle.test.ts`, validando el ciclo de 8 cuotas del iPhone (4 históricas, cuota 5 pendiente en ciclo actual, cuota 6 proyectada en próximo mes).
+    * 67/67 tests unitarios en verde y 0 errores en TypeScript.
+  - Decisiones permanentes y verificación:
+    * Regla de Compras Propias en Tarjeta: Nunca asignar `new Date()` como `lastPaymentDate` a deudas preexistentes. Las cuotas propias de tarjeta están supeditadas al pago del extracto (`cardCurrentMonthDebt <= 0`); si la tarjeta no se ha pagado, la cuota a cobrar es `cuotas_pagadas + 1` (Pendiente).
+    * Verificación y calidad: 67/67 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-INSTALLMENT-PRECISION-AUTOHEAL]` (2026-10-30): Precisión en amortización de cuotas con decimales, auto-reparación resiliente y proyección:
+  - Archivos intervenidos:
+    * `src/store/debts-store.ts`
+    * `src/utils/date-helpers.ts`
+    * `app/(app)/cards/[id].tsx`
+    * `src/__tests__/billing-cycle.test.ts`
+  - Resumen técnico de la solución:
+    * Erradicación del truncamiento por punto flotante IEEE-754 en `debts-store.ts`: se eliminó el cálculo vulnerable `Math.floor((total - remaining) / monthlyInstallment)` que truncaba cocientes como `0.9999999999999998` a `0` en compras con decimales periódicos (ej. caso "VS BIKES BREVES" por $169.900,01 a 3 cuotas de $56.633,34).
+    * Implementación de la utilidad de auto-reparación `getEffectivePaidInstallments` en `src/utils/date-helpers.ts`: función pura resiliente con tolerancia epsilon (`0.05`), que deriva las cuotas pagadas reales desde el monto amortizado efectivo y auto-repara datos preexistentes corruptos o desincronizados en disco/AsyncStorage.
+    * Sincronización del texto de progreso y proyección en `cards/[id].tsx`: visualización coherente del avance de amortización (mostrando "1 pagadas · Restan 2 cuotas" en lugar de "0 pagadas · Restan 3 cuotas") y proyección exacta para ciclos futuros ("Cuota 2 de 3 • Próximo Mes" en lugar de repetir Cuota 1).
+    * Tests unitarios deterministas añadidos: Casos 11 y 12 en `src/__tests__/billing-cycle.test.ts` simulando compras con decimales amortizadas con Fake Timers, alcanzando 66/66 tests unitarios en verde (100% pass) y 0 errores de compilación TypeScript.
+  - Decisiones permanentes y verificación:
+    * Regla de Precisión IEEE-754 en Cuotas: Nunca usar `Math.floor((total - rem) / monthly)` directamente con decimales sin normalización previa. Usar siempre `getEffectivePaidInstallments` para derivar cuotas amortizadas y auto-reparar registros en disco.
+    * Verificación y calidad: 66/66 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-INSTALLMENT-LIFECYCLE-UNIFICATION]` (2026-10-30): Unificación del ciclo de vida, conteo y estado de cuotas en toda la aplicación:
+  - Archivos intervenidos:
+    * `src/utils/date-helpers.ts`
+    * `app/(app)/(tabs)/debts.tsx`
+    * `app/(app)/cards/[id].tsx`
+    * `src/__tests__/billing-cycle.test.ts`
+  - Resumen técnico de la solución:
+    * Unificación de la semántica y ciclo de vida de cuotas en toda la app (gastos de terceros, compras en cuotas en tarjeta y préstamos personales).
+    * Inclusión del flag `isCurrentPeriodPaid` en `getInstallmentProgressInfo` y `getProjectedInstallmentInfo`.
+    * Comportamiento cuando la cuota del período actual está cubierta (`isCurrentPeriodPaid = true`):
+      - Ciclo actual: `Cuota X de Y • Cubierta` (sin saltar prematuramente al siguiente número de cuota).
+      - Próximo Mes (`offset = 1`): Proyecta `Cuota X+1 de Y` (resolviendo la anomalía de "3 de 5" en el caso JBL).
+      - En 2 Meses (`offset = 2`): Proyecta `Cuota X+2 de Y`.
+    * Conexión reactiva en `debts.tsx` (consumos de terceros y préstamos) y `cards/[id].tsx` (consumos de terceros y cuotas propias).
+    * Test unitario determinista del caso JBL añadido con Fake Timers (64/64 tests pasando, 0 errores de compilación TypeScript).
+  - Decisiones permanentes y verificación:
+    * Regla de Cuotas Activas: Al pagar la cuota de un ciclo, no incrementar ciegamente el número visible a cobrar en el ciclo en curso. Mantener "Cuota X de Y • Cubierta" hasta el corte del siguiente ciclo, y proyectar "Cuota X+1 de Y" únicamente para meses futuros.
+    * Verificación y calidad: 64/64 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-CARDS-RESPONSIVE-PROJECTION]` (2026-10-30): Adaptación responsiva de detalle de tarjeta para escritorio y proyección inteligente de ciclos de facturación:
+  - Archivos intervenidos:
+    * `app/(app)/cards/[id].tsx`
+    * `src/utils/date-helpers.ts`
+    * `src/__tests__/billing-cycle.test.ts`
+  - Resumen técnico:
+    * Tarea 1: Adaptación responsiva para Web / Tauri (Desktop) en `cards/[id].tsx` mediante `useIsWide(768)`. Contenedor centrado (`maxWidth: 1150`), layout en 2 columnas (columna izquierda para tarjeta digital con proporciones físicas de ~400px, HUD de saldos compacto y botones ergonómicos; columna derecha para filtros y listado de consumos legibles) y atajo de teclado `Escape`. Preservación 100% intacta del diseño móvil (`!isWide`).
+    * Tarea 2: Funciones puras de proyección en `src/utils/date-helpers.ts` (`getProjectedCardBillingPeriod`, `isOneTimeExpenseInPeriod`, `getProjectedInstallmentInfo`). Selector cyberpunk de períodos (`Actual`, `Próximo Mes`, `+2 Meses`). HUD de saldos dinámico con títulos e importes proyectados y lista de consumos con badges de cuota proyectada y compras post-corte. 4 pruebas unitarias deterministas con `jest.useFakeTimers()` agregadas (63/63 tests pasando, 0 errores de TypeScript).
+  - Verificación y calidad: 63/63 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-ABONOS-FACTURA-TARJETAS]` (2026-10-30): Corrección de reversión contable de abonos de terceros y sincronización del ciclo de facturación de tarjetas:
+  - Archivos intervenidos:
+    * `src/store/debts-store.ts`
+    * `src/store/transactions-store.ts`
+    * `src/__tests__/accounting-integration.test.ts`
+    * `app/(app)/cards/[id].tsx`
+    * `app/(app)/(modal)/cards-overview.tsx`
+    * `src/components/dashboard/upcoming-debts-card.tsx`
+  - Resumen técnico de la solución:
+    1. Reversión de abonos (`debts-store.ts` y `transactions-store.ts`):
+       - Corrección de `revertThirdPartyPersonAbono` desvinculando la reactivación (`settled: false`, `settledAt: undefined`) de `isRestoredToFull` cuando `newRemaining > 0.0001`, permitiendo que compras de terceros con pagos históricos previos vuelvan a activarse de forma íntegra al eliminar un abono posterior.
+       - Soporte bidireccional por ID directo y UUID determinista (`uuidv5(..., 'abono-allocation')`) en `revertThirdPartyAllocations`.
+       - Implementación de fallback en cascada en `deleteTransaction` para revertir abonos incluso si la transacción carece de `targetDebtId` o metadatos explícitos, garantizando integridad referencial y contable.
+    2. Facturación de tarjetas (`cards/[id].tsx`, `cards-overview.tsx`, `upcoming-debts-card.tsx`):
+       - Retención de consumos de terceros saldados dentro del ciclo actual mediante `isDateInCurrentBillingCycle`, manteniendo su cuota mensual en `thirdPartyMonthDue` de la tarjeta hasta que el usuario registre el pago efectivo de la tarjeta (`card_payment`).
+       - Sincronización contable exacta entre el detalle de la tarjeta (`cards/[id].tsx`), el modal de resumen de tarjetas (`cards-overview.tsx`) y el widget de vencimientos del dashboard (`upcoming-debts-card.tsx`).
+    3. Preservación estricta de `Visual Freeze`: Ningún cambio en estilos, colores, espaciados o estructura visual preexistente; acotado 100% a la lógica contable y de ciclo de facturación.
+  - Decisiones permanentes y pruebas:
+    - Regla contable permanente: Nunca expulsar cargos de terceros saldados del extracto de la tarjeta si pertenecen al ciclo actual de facturación, y nunca condicionar `settled: false` al 100% de la compra original en reversiones de abono.
+    - Extensión de la suite `src/__tests__/accounting-integration.test.ts` cubriendo la reversión de abonos parciales y la permanencia de compras saldadas en el ciclo de facturación de tarjetas. 56/56 tests unitarios en verde (100% pass) y 0 errores de TypeScript (`npx tsc --noEmit`).
+
 - `[DEBTS-WEB-TAURI-IMPROVEMENTS-PHASE1-001]` (2026-10-29): Mejoras de ergonomía, KPIs en 3 columnas y atajos de teclado para Web y Tauri en Gestión de Deudas:
   - Archivos intervenidos:
     * `src/components/debts/debts-summary-card.tsx`

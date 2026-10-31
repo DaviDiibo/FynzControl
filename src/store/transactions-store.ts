@@ -254,21 +254,7 @@ export const useTransactionsStore = create<TransactionsState>()(
       deleteTransaction: (id: string): void => {
         const tx = get().transactions.find((t) => t.id === id);
         if (tx) {
-          if (tx.thirdPartyAllocations && tx.thirdPartyAllocations.length > 0) {
-            useDebtsStore.getState().revertThirdPartyAllocations(tx.thirdPartyAllocations);
-          } else if (tx.relatedChargeId) {
-            const debtsStore = useDebtsStore.getState();
-            if (typeof debtsStore.revertThirdPartyChargeAbono === 'function') {
-              debtsStore.revertThirdPartyChargeAbono(tx.relatedChargeId, tx.amount);
-            } else {
-              debtsStore.revertThirdPartyChargeCollection(tx.relatedChargeId, tx.amount);
-            }
-          } else if (
-            tx.type === 'reimbursement' ||
-            tx.category === 'Cobro Tarjeta Compartida' ||
-            tx.category === 'Reembolso' ||
-            Boolean(tx.relatedPersonName || tx.personName || tx.relatedPersonId)
-          ) {
+          const resolveTargetPerson = (): string | undefined => {
             let targetPerson = tx.relatedPersonName || tx.personName;
             if (!targetPerson && tx.relatedPersonId) {
               targetPerson = useDebtsStore.getState().people.find((p) => p.id === tx.relatedPersonId)?.name;
@@ -291,8 +277,37 @@ export const useTransactionsStore = create<TransactionsState>()(
                 }
               }
             }
+            return targetPerson;
+          };
+
+          if (tx.thirdPartyAllocations && tx.thirdPartyAllocations.length > 0) {
+            const didRevert = useDebtsStore.getState().revertThirdPartyAllocations(tx.thirdPartyAllocations);
+            if (!didRevert) {
+              const targetPerson = resolveTargetPerson();
+              if (targetPerson) {
+                useDebtsStore.getState().revertThirdPartyPersonAbono(targetPerson, tx.amount);
+              } else if (tx.relatedPersonId) {
+                useDebtsStore.getState().revertThirdPartyPersonAbono(tx.relatedPersonId, tx.amount);
+              }
+            }
+          } else if (tx.relatedChargeId) {
+            const debtsStore = useDebtsStore.getState();
+            if (typeof debtsStore.revertThirdPartyChargeAbono === 'function') {
+              debtsStore.revertThirdPartyChargeAbono(tx.relatedChargeId, tx.amount);
+            } else {
+              debtsStore.revertThirdPartyChargeCollection(tx.relatedChargeId, tx.amount);
+            }
+          } else if (
+            tx.type === 'reimbursement' ||
+            tx.category === 'Cobro Tarjeta Compartida' ||
+            tx.category === 'Reembolso' ||
+            Boolean(tx.relatedPersonName || tx.personName || tx.relatedPersonId)
+          ) {
+            const targetPerson = resolveTargetPerson();
             if (targetPerson) {
               useDebtsStore.getState().revertThirdPartyPersonAbono(targetPerson, tx.amount);
+            } else if (tx.relatedPersonId) {
+              useDebtsStore.getState().revertThirdPartyPersonAbono(tx.relatedPersonId, tx.amount);
             }
           }
 
