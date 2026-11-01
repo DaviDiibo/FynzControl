@@ -9,7 +9,7 @@
 - **UI & Tema**: Modo oscuro cyberpunk/neón (`#121212`, tarjetas `#1E1E1E`, acento `#00FFA3`, peligro `#FF453A`). Modales interactivos transparentes, nunca diálogos toscos nativos.
 - **Multiplataforma**: Paridad iOS (KeyboardOffset 48dp, Safe Area), Android (KeyboardOffset 0dp, Edge-to-edge) y Web/Tauri Desktop (`useIsWide(768)`).
 - **Backend / Infra**: Arquitectura Offline-First con proyección a Supabase (Auth, RLS, PostgreSQL).
-- **Testing & QA**: Jest 29 + `jest-expo` (~57.0.6). Verificación doble obligatoria (`npm test` 100% pass [116/116] + `npx tsc --noEmit` 0 errores) previo a cerrar cualquier tarea.
+- **Testing & QA**: Jest 29 + `jest-expo` (~57.0.6). Verificación doble obligatoria (`npm test` 100% pass [117/117] + `npx tsc --noEmit` 0 errores) previo a cerrar cualquier tarea.
 
 ## 2. Estado Activo del Sprint y Foco Inmediato
 - **Módulos Principales Culminados**:
@@ -18,8 +18,9 @@
   - Todos los Card Modals adaptados como diálogos flotantes centrados con transparencia real sobre la vista previa.
   - Detalle de Tarjeta (`cards/[id].tsx`) con layout responsivo en 2 columnas para Web/Tauri y motor de proyección multi-período.
   - Centro de Gestión de Pasivos y Cobros: Préstamos bancarios, préstamos a amigos, y Liquidación Mensual de Terceros (Fases 1 y 2).
-  - Cobertura de Testing (116/116 tests en verde): Suites en `src/__tests__/` (formato de divisas, ciclos de facturación, proyección de cuotas, amortizaciones, utilidades de fechas e identidad bancaria).
+  - Cobertura de Testing (117/117 tests en verde): Suites en `src/__tests__/` (formato de divisas, ciclos de facturación, proyección de cuotas, amortizaciones, utilidades de fechas e identidad bancaria).
 - **Hitos Recientes Concluidos**:
+  - **Cálculo de Vencimiento y Alertas de Tarjetas en Dashboard (`[TASK-CARD-DUE-DATE-DASHBOARD-FIX]`)**: Sustitución de `calculateRecurringDueDate` por `getCardBillingCycleDates` en `upcoming-debts-card.tsx`. Eliminación de falso positivo "¡Vence hoy!" en compras del día 1 post-corte, proyección a 30 días con formato explícito "Vence: 1 Dic 2026" y Caso 19 en Jest. 117/117 tests en verde y 0 errores de TypeScript.
   - **Desacoplamiento y Modularización de Deudas - Fase 6B (`[TASK-OPTIMIZATION-PHASE-6B-FRIEND-LOAN-COLLECTION-MODAL]`)**: Extracción del modal de cobro de préstamos a amigos hacia el componente modular independiente `FriendLoanCollectionModal`. Limpieza de estados y 17 estilos exclusivos en `debts.tsx`. Preservación estricta de doble imputación contable y Visual Freeze. 116/116 tests en verde y 0 errores de TypeScript.
   - **Desacoplamiento y Modularización de Deudas - Fase 6A (`[TASK-OPTIMIZATION-PHASE-6A-DEBTS-PAYMENT-MODAL]`)**: Extracción del modal monolítico de pago de deudas personales desde `debts.tsx` hacia `PersonalDebtPaymentModal`. Reducción neta de más de 700 líneas en `debts.tsx`, preservación total de lógica contable y Visual Freeze, 116/116 tests en verde y 0 errores de TypeScript.
   - **Optimización y Memoización en Lista de Movimientos - Fase 5 (`[TASK-OPTIMIZATION-PHASE-5-TRANSACTIONS-MEMO]`)**: Envoltura de `TransactionItemCard` con `React.memo` y comparador personalizado `arePropsEqual` para prevenir re-renders durante el scroll de listas largas. Memoización de handlers (`useCallback`) en `transactions.tsx`. Preservación estricta de Visual Freeze, 116/116 tests en verde y 0 errores de TypeScript.
@@ -36,6 +37,7 @@
   - Continuar con la siguiente etapa de consolidación modular del módulo de deudas (ej. modal de amortización de préstamos bancarios o liquidaciones de terceros) o siguientes optimizaciones del backlog.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
+- ❌ **NO usar `calculateRecurringDueDate` para tarjetas de crédito (Regla de Vencimientos de Tarjetas)**: Para cálculo de vencimientos de tarjetas de crédito en cualquier componente o card (Dashboard o Overview), SIEMPRE usar `getCardBillingCycleDates(closingDay, paymentDay, refDate)` y NUNCA `calculateRecurringDueDate(paymentDay, ...)`, ya que este último ignora el corte y confunde compras post-cierre como vencimientos del mismo día.
 - ❌ **NO re-renderizar tarjetas de lista extensas ni recrear handlers inline en pantallas padre (Regla de Memoización en Listas)**: Envolver tarjetas de lista (TransactionItemCard) con React.memo y memoizar handlers con useCallback en pantallas padre para asegurar 60 FPS estables.
 - ❌ **NO duplicar cálculos de ciclo ni abonos inline para tarjetas (Regla de Liquidación de Tarjetas)**: Usar siempre `computeCardBillingStatement` para calcular extractos y deudas de tarjeta, evitando duplicar cálculos de ciclo y abonos inline.
 - ❌ **NO restar 1 al mes más de una vez al parsear YYYY-MM-DD manualmente (Regla de Fechas ISO)**: Al dividir una fecha ISO en componentes `[y, m, d]`, restar 1 al mes únicamente al pasarlo al constructor (`new Date(y, m - 1, d)`) o ajustar la variable una sola vez antes de invocar `new Date(y, m, d)`. Doble resta causa desfase de mes (ej. transacciones de Octubre computadas en Septiembre).
@@ -57,6 +59,7 @@
 - ❌ **NO dar por concluida una tarea sin verificación doble**: Mandatorio `npm test` (100% pass) y `npx tsc --noEmit` (0 errores). Simular fechas con Fake Timers.
 
 ## 4. Bugs Críticos Resueltos & Blindajes
+- **Falso Vencimiento Urgente en Tarjetas Post-Corte (Día 1)**: Tarjetas con corte el 29 y pago el día 1 mostraban erróneamente "¡Vence hoy! (Hoy)" al registrar compras el día 1 por usar `calculateRecurringDueDate` en `upcoming-debts-card.tsx`. Corregido usando `getCardBillingCycleDates`, calculando 30 días restantes para el siguiente mes con formato "Vence: 1 Dic 2026".
 - **Desfase de Mes en Estadísticas Mensuales (`stats.tsx`)**: `parseTxDate` restaba 1 al mes dos veces consecutivas (`m - 1` y luego `month - 1`), provocando que movimientos de Octubre se computaran en Septiembre. Corregido para restar una sola vez.
 - **Falsa Cobertura de Cuotas Históricas Propias en Tarjeta (Caso iPhone)**: Creación de deuda histórica preexistente asignaba erróneamente `lastPaymentDate = now`, marcando la siguiente cuota como cubierta y saltando al número de cuota siguiente. Corregido en `debts-store.ts` y `cards/[id].tsx` supeditándolo al pago del extracto (`cardCurrentMonthDebt <= 0`) con estado `• Pendiente`.
 - **Truncamiento de Cuotas por Precisión IEEE-754 (Caso VS BIKES)**: Compras con decimales amortizadas (ej. $169.900,01 con saldo restante $113.266,67) quedaban estancadas en `paidInstallments: 0` debido a `Math.floor` truncando `0.9999999999999998` a `0`. Blindado con `getEffectivePaidInstallments` y tolerancia epsilon `0.05`.

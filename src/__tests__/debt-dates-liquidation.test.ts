@@ -1,3 +1,8 @@
+/// <reference types="jest" />
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
+}));
+
 import {
   calculateRecurringDueDate,
   getUrgencyStatus,
@@ -14,6 +19,9 @@ import {
   type PersonalDebt,
   type ThirdPartyCardCharge,
 } from '../store/debts-store';
+import { getConsolidatedUpcomingDebts } from '../components/dashboard/upcoming-debts-card';
+import type { CreditCard } from '../store/cards-store';
+import type { Transaction } from '../store/transactions-store';
 
 describe('Vencimientos Recurrentes, Semáforo de Urgencia y Liquidación de Deudas', () => {
   beforeEach(() => {
@@ -464,6 +472,48 @@ describe('Vencimientos Recurrentes, Semáforo de Urgencia y Liquidación de Deud
     expect(status.nextDueDate.getMonth()).toBe(10); // Noviembre
     expect(status.nextDueDate.getDate()).toBe(20);
     expect(status.nextDueDateFormatted).toBe('20 Nov');
+  });
+
+  it('Caso 19: Tarjeta con corte día 29 y pago día 1 con compra el 1 de Noviembre (30 días hasta el 1 de Diciembre, sin falsa alarma)', () => {
+    const refDate = new Date('2026-11-01T12:00:00Z');
+    jest.setSystemTime(refDate);
+
+    const testCard: CreditCard = {
+      id: 'card-nubank-1',
+      name: 'Nubank Ultravioleta',
+      bankName: 'Nubank',
+      closingDay: 29,
+      paymentDay: 1,
+      createdAt: '2026-01-01T00:00:00Z',
+    };
+
+    const testTx: Transaction = {
+      id: 'tx-1',
+      title: 'Compra Supermercado',
+      amount: 1082.25,
+      type: 'expense',
+      category: 'supermarket',
+      icon: 'cart-outline',
+      date: '2026-11-01T10:00:00.000Z',
+      dateFormatted: '1 Nov 2026',
+      dateGroup: '1 de Noviembre',
+      paymentMethod: 'credit_card',
+      cardId: 'card-nubank-1',
+      cardName: 'Nubank Ultravioleta',
+    };
+
+    const upcoming = getConsolidatedUpcomingDebts([], [], [testTx], [testCard], refDate);
+
+    expect(upcoming).toHaveLength(1);
+    const cardDebt = upcoming[0];
+    expect(cardDebt.amount).toBe(1082.25);
+    // 30 días hasta el 1 de Diciembre, ¡NUNCA 0!
+    expect(cardDebt.daysRemaining).toBe(30);
+    // Al faltar 30 días, no debe generar alarma urgente de 7 días ni disparar "¡Vence hoy!"
+    expect(cardDebt.shouldAlertInDashboard).toBe(false);
+    // nextDueDateFormatted incluye Dic 2026
+    expect(cardDebt.nextDueDateFormatted).toBeDefined();
+    expect(cardDebt.nextDueDateFormatted).toContain('Dic 2026');
   });
 });
 
