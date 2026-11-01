@@ -219,4 +219,44 @@ const styles = StyleSheet.create({
   },
 });
 
-export default TransactionItemCard;
+const arePropsEqual = (
+  prevProps: TransactionItemCardProps,
+  nextProps: TransactionItemCardProps
+): boolean => {
+  if (
+    prevProps.onPress !== nextProps.onPress ||
+    prevProps.onLongPress !== nextProps.onLongPress ||
+    prevProps.onDelete !== nextProps.onDelete
+  ) {
+    return false;
+  }
+
+  const prevItem = prevProps.item;
+  const nextItem = nextProps.item;
+
+  if (prevItem === nextItem) {
+    return true;
+  }
+
+  if (!prevItem || !nextItem) {
+    return false;
+  }
+
+  return (
+    prevItem.id === nextItem.id &&
+    prevItem.title === nextItem.title &&
+    prevItem.category === nextItem.category &&
+    prevItem.icon === nextItem.icon &&
+    prevItem.type === nextItem.type &&
+    prevItem.amount === nextItem.amount &&
+    prevItem.time === nextItem.time &&
+    prevItem.dateGroup === nextItem.dateGroup &&
+    prevItem.currency === nextItem.currency &&
+    prevItem.paymentMethod === nextItem.paymentMethod &&
+    prevItem.cardName === nextItem.cardName &&
+    prevItem.installmentsCount === nextItem.installmentsCount
+  );
+};
+
+export { TransactionItemCard };
+export default React.memo(TransactionItemCard, arePropsEqual);

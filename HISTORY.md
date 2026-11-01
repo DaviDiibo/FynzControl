@@ -7,6 +7,99 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[TASK-OPTIMIZATION-PHASE-6B-FRIEND-LOAN-COLLECTION-MODAL]` (2026-10-31): Modularización y desacoplamiento del modal de cobro de préstamos a amigos en `debts.tsx`:
+  - Archivos intervenidos:
+    * `src/components/debts/friend-loan-collection-modal.tsx` (Nuevo)
+    * `app/(app)/(tabs)/debts.tsx`
+  - Resumen técnico:
+    * Extracción del modal de cobro de préstamos a amigos hacia el componente modular independiente `FriendLoanCollectionModal`.
+    * Eliminación de estados redundantes y 17 reglas de estilo exclusivas en `debts.tsx`.
+    * Preservación estricta de la doble imputación contable (`collectFriendLoan` y `addTransaction`) y Visual Freeze.
+    * Verificación de calidad: 116/116 tests en verde y 0 errores en TypeScript.
+  - Decisiones permanentes y verificación:
+    * Desacoplamiento de Modales de Cobro/Pago: Extraer modales secundarios a componentes independientes con props explícitas (`visible`, `onClose`, callbacks de acción) para mantener pantallas tab ligeras, legibles y con responsabilidad única.
+    * Verificación y calidad: 116/116 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-OPTIMIZATION-PHASE-6A-DEBTS-PAYMENT-MODAL]` (2026-10-31): Modularización y desacoplamiento del modal de pago de deudas personales en `debts.tsx`:
+  - Archivos intervenidos:
+    * `src/components/debts/personal-debt-payment-modal.tsx` (Nuevo)
+    * `app/(app)/(tabs)/debts.tsx`
+  - Resumen técnico:
+    * Extracción del modal monolítico de pago de deudas personales desde `debts.tsx` hacia un componente independiente `PersonalDebtPaymentModal`.
+    * Reducción neta de más de 700 líneas en `debts.tsx`.
+    * Preservación del 100% de la lógica contable, validaciones y estilos visuales (Visual Freeze).
+    * Verificación de calidad: 116/116 tests en verde y 0 errores en TypeScript.
+  - Decisiones permanentes y verificación:
+    * Modularización de Modales Complejos: Desacoplar modales monolíticos extensos de pantallas principales hacia componentes dedicados en `src/components/`, delegando estado local y callbacks explícitos para mantener pantallas ligeras y mantenibles.
+    * Verificación y calidad: 116/116 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-OPTIMIZATION-PHASE-5-TRANSACTIONS-MEMO]` (2026-10-31): Optimización de rendimiento en lista de movimientos con React.memo y callbacks memoizados:
+  - Archivos intervenidos:
+    * `src/components/transactions/transaction-item-card.tsx`
+    * `app/(app)/(tabs)/transactions.tsx`
+  - Resumen técnico:
+    * Envoltura de `TransactionItemCard` en `React.memo` con comparador personalizado `arePropsEqual` para prevenir re-renders durante el scroll de listas largas de movimientos.
+    * Memoización de handlers (`useCallback`) para eliminación, filtros de búsqueda y selección de períodos en `app/(app)/(tabs)/transactions.tsx`.
+    * Preservación estricta de Visual Freeze.
+    * Verificación de calidad: 116/116 tests en verde y 0 errores en TypeScript.
+  - Decisiones permanentes y verificación:
+    * Regla de Memoización en Listas: Envolver tarjetas de lista (`TransactionItemCard`) con `React.memo` y memoizar handlers con `useCallback` en pantallas padre para asegurar 60 FPS estables.
+    * Verificación y calidad: 116/116 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-OPTIMIZATION-PHASE-4-CARD-ACCOUNTING-SSOT]` (2026-10-31): Unificación contable de liquidaciones de tarjeta en Single Source of Truth:
+  - Archivos intervenidos:
+    * `src/utils/card-accounting.ts` (Nuevo)
+    * `src/components/dashboard/upcoming-debts-card.tsx`
+    * `app/(app)/(modal)/cards-overview.tsx`
+  - Resumen técnico:
+    * Creación de `computeCardBillingStatement` en `src/utils/card-accounting.ts` como Single Source of Truth contable para liquidaciones de tarjeta.
+    * Eliminación de más de 285 líneas de lógica contable duplicada en `upcoming-debts-card.tsx` y `cards-overview.tsx`.
+    * Preservación total de Visual Freeze.
+    * Verificación de calidad: 116/116 tests en verde y 0 errores en TypeScript.
+  - Decisiones permanentes y verificación:
+    * Regla de Liquidación de Tarjetas: Usar siempre `computeCardBillingStatement` para calcular extractos y deudas de tarjeta, evitando duplicar cálculos de ciclo y abonos inline.
+    * Verificación y calidad: 116/116 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-OPTIMIZATION-PHASE-3-CURRENCY-STATS-BUGFIX]` (2026-10-31): Creación de utilidades puras de moneda y corrección de desfase mensual en estadísticas:
+  - Archivos intervenidos:
+    * `src/utils/currency.ts` (Nuevo)
+    * `app/(app)/(tabs)/stats.tsx`
+    * `src/__tests__/currency.test.ts` (Nuevo)
+  - Resumen técnico:
+    * Creación de `src/utils/currency.ts` con funciones puras `formatCurrency`, `getCurrencySymbol` y `sanitizeDecimalInput` con formato estándar en español (`es-ES`, miles con punto, decimales con coma).
+    * Corrección de bug crítico en `app/(app)/(tabs)/stats.tsx`: la función `parseTxDate` restaba 1 al mes dos veces consecutivas (`m - 1`), clasificando transacciones de Octubre en Septiembre en las estadísticas mensuales.
+    * Incorporación de 16 tests unitarios en `currency.test.ts`, alcanzando 116/116 tests en verde y 0 errores en TypeScript.
+  - Decisiones permanentes y verificación:
+    * Regla de Fechas ISO: Al parsear YYYY-MM-DD manualmente, no restar 1 al mes más de una vez antes de invocar `new Date(y, m, d)`.
+    * Verificación y calidad: 116/116 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-OPTIMIZATION-PHASE-2-SAFE-STORAGE-SYNC]` (2026-10-31): Consolidación de persistencia resiliente y sincronización en stores:
+  - Archivos intervenidos:
+    * `src/store/safe-storage.ts` (Nuevo)
+    * `src/store/cards-store.ts`
+    * `src/services/sync-service.ts`
+  - Resumen técnico:
+    * Centralización de `safeStorage` en un único adaptador compartido con memoria en fallback resiliente.
+    * Implementación de `setCardSyncHandlers` en `cards-store.ts` para capturar altas, bajas y modificaciones de tarjetas de crédito y bancos.
+    * Conexión en `sync-service.ts` para encolar sincronización remota automática (`triggerBackgroundPush` y `deleteRemoteRecord`).
+    * Verificación de calidad: 100/100 tests en verde y 0 errores de compilación TypeScript.
+  - Decisiones permanentes y verificación:
+    * Regla de Sincronización en Stores: Todo store persistente que mute entidades de Supabase debe exportar su setXSyncHandlers y estar conectado en sync-service.ts.
+    * Verificación y calidad: 100/100 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-OPTIMIZATION-PHASE-1-DEAD-CODE]` (2026-10-31): Ejecución de la Fase 1 del plan de optimización (purgado de código muerto):
+  - Archivos intervenidos:
+    * `src/components/debts/debt-card.tsx` (Eliminado)
+    * `src/components/debts/third-party-debts-card.tsx` (Eliminado)
+    * `src/components/ui/collapsible.tsx` (Eliminado)
+  - Resumen técnico:
+    * Ejecución de la Fase 1 del plan de optimización.
+    * Eliminación de 865 líneas de código muerto obsoleto con 0 referencias activas en el proyecto.
+    * Verificación limpia de TypeScript (`tsc --noEmit` con 0 errores) y suite completa de Jest (100/100 tests en verde).
+  - Decisiones permanentes y verificación:
+    * Mantener higiene de código activo eliminando componentes obsoletos una vez verificado el desacoplamiento total en todo el árbol de dependencias.
+    * Verificación y calidad: 100/100 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[TASK-DASHBOARD-BANK-DECK-REDESIGN]` (2026-10-31): Rediseño estético premium de tarjetas de bancos, ampliación de marcas y grid fluido en Desktop:
   - Archivos intervenidos:
     * `src/utils/bank-identity.ts`

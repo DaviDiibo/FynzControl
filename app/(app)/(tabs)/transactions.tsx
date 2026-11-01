@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import type { JSX } from 'react';
 import {
   View,
@@ -85,34 +85,50 @@ const TransactionsScreen = (): JSX.Element => {
 
   const currencySymbol = currencyCode === 'EUR' ? '€' : currencyCode === 'BRL' ? 'R$' : '$';
 
-  const handleDeleteTransaction = (tx: TransactionRecord): void => {
+  const handleDeleteTransaction = useCallback((tx: TransactionRecord): void => {
     setTransactionToDelete(tx);
-  };
+  }, []);
 
-  const handleConfirmDelete = (): void => {
+  const handleConfirmDelete = useCallback((): void => {
     if (transactionToDelete) {
       deleteTransaction(transactionToDelete.id);
       setTransactionToDelete(null);
     }
-  };
+  }, [transactionToDelete, deleteTransaction]);
 
-  const handlePrevMonth = (): void => {
-    if (isAllTime) {
-      setIsAllTime(false);
-    }
+  const handleCancelDelete = useCallback((): void => {
+    setTransactionToDelete(null);
+  }, []);
+
+  const handlePrevMonth = useCallback((): void => {
+    setIsAllTime(false);
     setSelectedDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
-  };
+  }, []);
 
-  const handleNextMonth = (): void => {
-    if (isAllTime) {
-      setIsAllTime(false);
-    }
+  const handleNextMonth = useCallback((): void => {
+    setIsAllTime(false);
     setSelectedDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
-  };
+  }, []);
 
-  const handleToggleAllTime = (): void => {
+  const handleToggleAllTime = useCallback((): void => {
     setIsAllTime((prev) => !prev);
-  };
+  }, []);
+
+  const handleClearSearch = useCallback((): void => {
+    setSearchQuery('');
+  }, []);
+
+  const handleSelectFilterAll = useCallback((): void => {
+    setActiveFilter('all');
+  }, []);
+
+  const handleSelectFilterIncome = useCallback((): void => {
+    setActiveFilter('income');
+  }, []);
+
+  const handleSelectFilterExpense = useCallback((): void => {
+    setActiveFilter('expense');
+  }, []);
 
   const formattedMonth = useMemo(() => {
     if (isAllTime) {
@@ -226,6 +242,14 @@ const TransactionsScreen = (): JSX.Element => {
     };
   }, [monthTransactions]);
 
+  const handleResetFilters = useCallback((): void => {
+    setSearchQuery('');
+    setActiveFilter('all');
+    if (!isAllTime && monthTransactions.length === 0 && transactions.length > 0) {
+      setIsAllTime(true);
+    }
+  }, [isAllTime, monthTransactions.length, transactions.length]);
+
   const renderSummaryHeader = (): JSX.Element => (
     <TransactionsSummaryHeader
       currentMonth={formattedMonth}
@@ -255,7 +279,7 @@ const TransactionsScreen = (): JSX.Element => {
       />
       {searchQuery.length > 0 && (
         <TouchableOpacity
-          onPress={() => setSearchQuery('')}
+          onPress={handleClearSearch}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           activeOpacity={0.7}
         >
@@ -274,7 +298,7 @@ const TransactionsScreen = (): JSX.Element => {
             styles.pill,
             activeFilter === 'all' && styles.pillActive,
           ]}
-          onPress={() => setActiveFilter('all')}
+          onPress={handleSelectFilterAll}
           activeOpacity={0.7}
         >
           <Text
@@ -308,7 +332,7 @@ const TransactionsScreen = (): JSX.Element => {
             styles.pill,
             activeFilter === 'income' && styles.pillActiveIncome,
           ]}
-          onPress={() => setActiveFilter('income')}
+          onPress={handleSelectFilterIncome}
           activeOpacity={0.7}
         >
           <Ionicons
@@ -347,7 +371,7 @@ const TransactionsScreen = (): JSX.Element => {
             styles.pill,
             activeFilter === 'expense' && styles.pillActiveExpense,
           ]}
-          onPress={() => setActiveFilter('expense')}
+          onPress={handleSelectFilterExpense}
           activeOpacity={0.7}
         >
           <Ionicons
@@ -434,13 +458,7 @@ const TransactionsScreen = (): JSX.Element => {
         (!isAllTime && monthTransactions.length === 0 && transactions.length > 0)) && (
         <TouchableOpacity
           style={styles.resetButton}
-          onPress={() => {
-            setSearchQuery('');
-            setActiveFilter('all');
-            if (!isAllTime && monthTransactions.length === 0 && transactions.length > 0) {
-              setIsAllTime(true);
-            }
-          }}
+          onPress={handleResetFilters}
           activeOpacity={0.7}
         >
           <Ionicons
@@ -508,7 +526,7 @@ const TransactionsScreen = (): JSX.Element => {
         visible={!!transactionToDelete}
         transaction={transactionToDelete}
         currencySymbol={currencySymbol}
-        onCancel={() => setTransactionToDelete(null)}
+        onCancel={handleCancelDelete}
         onConfirm={handleConfirmDelete}
       />
     </SafeAreaView>
