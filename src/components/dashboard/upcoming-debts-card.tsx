@@ -19,6 +19,7 @@ import {
   getDebtDueStatus,
   MONTH_NAMES_ES,
 } from '../../utils/date-helpers';
+import { computeCardBillingStatement } from '../../utils/card-accounting';
 
 const formatAmount = (val: number): string => {
   return val.toLocaleString('es-ES', {
@@ -97,141 +98,13 @@ export const getConsolidatedUpcomingDebts = (
   // 2. Consolidar compromisos por cada tarjeta de crédito registrada
   const consolidatedCardItems: UpcomingCommitmentItem[] = cards
     .map((card): UpcomingCommitmentItem => {
-      const cardClosingDay = card.closingDay ?? card.cutOffDay ?? 20;
-
-      // Cuotas del mes de compras propias en tarjeta
-      const linkedPersonalDebts = personalDebts.filter(
-        (d) =>
-          (d.cardId === card.id ||
-            (d.category === 'credit_card' &&
-              d.entity &&
-              card.name &&
-              d.entity.toLowerCase().includes(card.name.toLowerCase()))) &&
-          !d.settled &&
-          d.remainingAmount > 0
-      );
-
-      const personalMonthDue = linkedPersonalDebts.reduce((acc, d) => {
-        const rem = d.remainingAmount ?? 0;
-        if (d.cardPaymentType === 'full_statement') {
-          return acc + rem;
-        }
-        if (d.monthlyPayment && d.monthlyPayment > 0) {
-          return acc + Math.min(rem, d.monthlyPayment);
-        }
-        return acc + rem;
-      }, 0);
-
-      // Cuotas del mes de compras de terceros vinculadas a la tarjeta
-      const isDateInCurrentBillingCycle = (dateStr?: string): boolean => {
-        if (!dateStr) return false;
-        const dt = new Date(dateStr);
-        if (isNaN(dt.getTime())) return false;
-        const d = dt.getDate();
-        const m = dt.getMonth();
-        const y = dt.getFullYear();
-        let billMonth = m;
-        let billYear = y;
-        if (d >= cardClosingDay) {
-          billMonth = m + 1;
-          if (billMonth > 11) {
-            billMonth = 0;
-            billYear = y + 1;
-          }
-        }
-        return (
-          (billMonth === currentMonth && billYear === currentYear) ||
-          (m === currentMonth && y === currentYear)
-        );
-      };
-
-      const linkedThirdPartyCharges = thirdPartyCharges.filter((c) => {
-        const isMatchingCard =
-          c.cardId === card.id ||
-          (c.cardName && card.name && c.cardName.toLowerCase() === card.name.toLowerCase());
-        if (!isMatchingCard) return false;
-
-        const isUnsettledWithRemaining = !c.settled && (c.remainingAmount ?? 0) > 0;
-        const isSettledInCurrentCycle =
-          (c.settled || (c.remainingAmount ?? 0) <= 0) &&
-          (isDateInCurrentBillingCycle(c.settledAt) ||
-            isDateInCurrentBillingCycle(c.lastPaymentDate) ||
-            (c.currentPeriodPaidAmount ?? 0) > 0);
-
-        return isUnsettledWithRemaining || isSettledInCurrentCycle;
+      const { cardCurrentMonthDebt, cardTotalDebt } = computeCardBillingStatement({
+        card,
+        transactions,
+        personalDebts,
+        thirdPartyCharges,
+        referenceDate,
       });
-
-      const thirdPartyMonthDue = linkedThirdPartyCharges.reduce((acc, c) => {
-        if (!c.settled && (c.remainingAmount ?? 0) > 0) {
-          const rem = c.remainingAmount ?? 0;
-          const count = c.installmentsCount ?? 1;
-          const normalQuota =
-            count <= 1
-              ? (c.totalAmount || c.amount || rem)
-              : (c.monthlyInstallmentAmount && c.monthlyInstallmentAmount > 0
-                  ? c.monthlyInstallmentAmount
-                  : rem);
-          return acc + Math.min(rem, normalQuota);
-        } else {
-          const retainedQuota =
-            c.currentPeriodPaidAmount && c.currentPeriodPaidAmount > 0
-              ? c.currentPeriodPaidAmount
-              : (c.installmentsCount ?? 1) <= 1
-              ? (c.totalAmount || c.amount || 0)
-              : (c.monthlyInstallmentAmount || c.totalAmount || c.amount || 0);
-          return acc + retainedQuota;
-        }
-      }, 0);
-
-      // Compras corrientes del mes en ciclo
-      const currentCycleTransactions = transactions
-        .filter((t) => {
-          if (t.type !== 'expense') return false;
-          if (t.paymentMethod !== 'credit_card') return false;
-          const isMatchingCard =
-            t.cardId === card.id ||
-            (t.cardName && card.name && t.cardName.toLowerCase() === card.name.toLowerCase());
-          if (!isMatchingCard) return false;
-          if (t.relatedDebtId || t.relatedChargeId || t.relatedLoanId) return false;
-
-          const txDate = new Date(t.date);
-          if (isNaN(txDate.getTime())) return false;
-          const d = txDate.getDate();
-          const m = txDate.getMonth();
-          const y = txDate.getFullYear();
-
-          let billMonth = m;
-          let billYear = y;
-          if (d >= cardClosingDay) {
-            billMonth = m + 1;
-            if (billMonth > 11) {
-              billMonth = 0;
-              billYear = y + 1;
-            }
-          }
-
-          return billMonth === currentMonth && billYear === currentYear;
-        })
-        .reduce((acc, t) => acc + (t.amount ?? 0), 0);
-
-      // Pagos de tarjeta registrados en el ciclo
-      const cardPayments = transactions
-        .filter(
-          (t) =>
-            t.type === 'card_payment' &&
-            (t.cardId === card.id ||
-              (t.cardName && card.name && t.cardName.toLowerCase() === card.name.toLowerCase()))
-        )
-        .reduce((sum, t) => sum + t.amount, 0);
-
-      const rawMonthDue = personalMonthDue + thirdPartyMonthDue + currentCycleTransactions;
-      const cardCurrentMonthDebt = Math.max(0, rawMonthDue - cardPayments);
-
-      const rawTotalDebt =
-        linkedPersonalDebts.reduce((sum, d) => sum + (d.remainingAmount ?? 0), 0) +
-        linkedThirdPartyCharges.reduce((sum, c) => sum + (c.remainingAmount ?? 0), 0) +
-        currentCycleTransactions;
-      const cardTotalDebt = Math.max(0, rawTotalDebt - cardPayments);
 
       const paymentDay = card.paymentDay ?? 5;
       const recurring = calculateRecurringDueDate(paymentDay, `Día ${paymentDay} de cada mes`, referenceDate);

@@ -23,6 +23,10 @@ import { DeleteCardModal } from '../../../src/components/cards/delete-card-modal
 import { DeleteBankModal } from '../../../src/components/cards/delete-bank-modal';
 import { CardPaymentModal } from '../../../src/components/cards/card-payment-modal';
 import { getCardBillingCycleDates } from '../../../src/utils/date-helpers';
+import {
+  computeCardBillingStatement,
+  type CardBillingStatementResult,
+} from '../../../src/utils/card-accounting';
 import { useIsWide } from '../../../src/hooks/use-responsive';
 
 const CardsOverviewModal = (): JSX.Element => {
@@ -275,159 +279,13 @@ const CardsOverviewModal = (): JSX.Element => {
   );
 
   // Cálculo reactivo centralizado de compromisos y pagos de tarjeta
-  const getCardDebtDetails = (card: CreditCard) => {
-    const cardClosingDay = card.closingDay ?? card.cutOffDay ?? 20;
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
-    // A.1 Deudas personales vinculadas a la tarjeta
-    const linkedPersonalDebts = personalDebts.filter(
-      (d) =>
-        (d.cardId === card.id ||
-          (d.title && card.name && d.title.toLowerCase().includes(card.name.toLowerCase()))) &&
-        !d.settled
-    );
-
-    const personalMonthDue = linkedPersonalDebts.reduce((acc, d) => {
-      const rem = d.remainingAmount ?? 0;
-      if (d.cardPaymentType === 'full_statement') {
-        return acc + rem;
-      }
-      if (d.monthlyPayment && d.monthlyPayment > 0) {
-        return acc + Math.min(rem, d.monthlyPayment);
-      }
-      return acc + rem;
-    }, 0);
-
-    // A.2 Consumos de terceros vinculados a la tarjeta
-    const isDateInCurrentBillingCycle = (dateStr?: string): boolean => {
-      if (!dateStr) return false;
-      const dt = new Date(dateStr);
-      if (isNaN(dt.getTime())) return false;
-      const d = dt.getDate();
-      const m = dt.getMonth();
-      const y = dt.getFullYear();
-      let billMonth = m;
-      let billYear = y;
-      if (d >= cardClosingDay) {
-        billMonth = m + 1;
-        if (billMonth > 11) {
-          billMonth = 0;
-          billYear = y + 1;
-        }
-      }
-      return (
-        (billMonth === currentMonth && billYear === currentYear) ||
-        (m === currentMonth && y === currentYear)
-      );
-    };
-
-    const linkedThirdPartyCharges = thirdPartyCharges.filter((c) => {
-      const isMatchingCard =
-        c.cardId === card.id ||
-        (c.cardName && card.name && c.cardName.toLowerCase() === card.name.toLowerCase());
-      if (!isMatchingCard) return false;
-
-      const isUnsettledWithRemaining = !c.settled && (c.remainingAmount ?? 0) > 0;
-      const isSettledInCurrentCycle =
-        (c.settled || (c.remainingAmount ?? 0) <= 0) &&
-        (isDateInCurrentBillingCycle(c.settledAt) ||
-          isDateInCurrentBillingCycle(c.lastPaymentDate) ||
-          (c.currentPeriodPaidAmount ?? 0) > 0);
-
-      return isUnsettledWithRemaining || isSettledInCurrentCycle;
+  const getCardDebtDetails = (card: CreditCard): CardBillingStatementResult => {
+    return computeCardBillingStatement({
+      card,
+      transactions,
+      personalDebts,
+      thirdPartyCharges,
     });
-
-    const thirdPartyMonthDue = linkedThirdPartyCharges.reduce((acc, c) => {
-      if (!c.settled && (c.remainingAmount ?? 0) > 0) {
-        const rem = c.remainingAmount ?? 0;
-        const count = c.installmentsCount ?? 1;
-        const normalQuota =
-          count <= 1
-            ? (c.totalAmount || c.amount || rem)
-            : (c.monthlyInstallmentAmount && c.monthlyInstallmentAmount > 0
-                ? c.monthlyInstallmentAmount
-                : rem);
-        return acc + Math.min(rem, normalQuota);
-      } else {
-        const retainedQuota =
-          c.currentPeriodPaidAmount && c.currentPeriodPaidAmount > 0
-            ? c.currentPeriodPaidAmount
-            : (c.installmentsCount ?? 1) <= 1
-            ? (c.totalAmount || c.amount || 0)
-            : (c.monthlyInstallmentAmount || c.totalAmount || c.amount || 0);
-        return acc + retainedQuota;
-      }
-    }, 0);
-
-    // A.3 Compras directas del período de facturación actual de transactions
-    const currentCycleTransactions = transactions
-      .filter((t) => {
-        if (t.type !== 'expense') return false;
-        if (t.paymentMethod !== 'credit_card') return false;
-        const isMatchingCard =
-          t.cardId === card.id ||
-          (t.cardName && card.name && t.cardName.toLowerCase() === card.name.toLowerCase());
-        if (!isMatchingCard) return false;
-        if (t.relatedDebtId || t.relatedChargeId || t.relatedLoanId) return false;
-
-        const txDate = new Date(t.date);
-        if (isNaN(txDate.getTime())) return false;
-        const d = txDate.getDate();
-        const m = txDate.getMonth();
-        const y = txDate.getFullYear();
-
-        let billMonth = m;
-        let billYear = y;
-        if (d >= cardClosingDay) {
-          billMonth = m + 1;
-          if (billMonth > 11) {
-            billMonth = 0;
-            billYear = y + 1;
-          }
-        }
-
-        return billMonth === currentMonth && billYear === currentYear;
-      })
-      .reduce((acc, t) => acc + (t.amount ?? 0), 0);
-
-    // Compromiso total del mes actual bruto
-    const rawMonthDue = personalMonthDue + thirdPartyMonthDue + currentCycleTransactions;
-
-    // B. Deuda total diferida bruta
-    const cardThirdPartyChargesDebt = linkedThirdPartyCharges.reduce(
-      (acc, c) => acc + (c.remainingAmount ?? 0),
-      0
-    );
-
-    const cardPersonalDebtsDebt = linkedPersonalDebts.reduce(
-      (acc, d) => acc + (d.remainingAmount ?? 0),
-      0
-    );
-
-    const rawTotalDebt =
-      cardThirdPartyChargesDebt + cardPersonalDebtsDebt + currentCycleTransactions;
-
-    // Pagos card_payment efectuados a la tarjeta
-    const cardPayments = transactions
-      .filter((t) => t.type === 'card_payment' && t.cardId === card.id)
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    // Deducir pagos del ciclo y del total
-    const cardCurrentMonthDebt = Math.max(0, rawMonthDue - cardPayments);
-    const cardTotalDebt = Math.max(0, rawTotalDebt - cardPayments);
-
-    return {
-      personalMonthDue,
-      thirdPartyMonthDue,
-      currentCycleTransactions,
-      cardPayments,
-      rawMonthDue,
-      rawTotalDebt,
-      cardCurrentMonthDebt,
-      cardTotalDebt,
-    };
   };
 
   // IDs de tarjetas con deuda activa pendiente (exigible del mes o diferida)

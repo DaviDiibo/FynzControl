@@ -17,6 +17,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../src/theme/colors';
 import { useIsWide } from '../../../src/hooks/use-responsive';
 import DebtsSummaryCard from '../../../src/components/debts/debts-summary-card';
+import PersonalDebtPaymentModal, {
+  type PersonalDebtPaymentData,
+} from '../../../src/components/debts/personal-debt-payment-modal';
+import FriendLoanCollectionModal from '../../../src/components/debts/friend-loan-collection-modal';
 import { getDebtDueStatus } from '../../../src/utils/date-helpers';
 import {
   useDebtsStore,
@@ -266,8 +270,8 @@ const DebtsScreen = (): JSX.Element => {
   const [filter, setFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLoanForAbono, setSelectedLoanForAbono] = useState<FriendLoan | null>(null);
-  const [customAbonoAmount, setCustomAbonoAmount] = useState<string>('');
-  const [abonoError, setAbonoError] = useState<string | null>(null);
+
+
 
   // Estados para modal de abono de compra compartida (terceros)
   const [selectedSummaryForAbono, setSelectedSummaryForAbono] = useState<ThirdPartyPersonMonthlySummary | null>(null);
@@ -281,22 +285,12 @@ const DebtsScreen = (): JSX.Element => {
 
   // Estados para modal de pago de deuda personal
   const [selectedDebtForPayment, setSelectedDebtForPayment] = useState<PersonalDebt | null>(null);
-  const [debtPaymentAmount, setDebtPaymentAmount] = useState<string>('');
-  const [debtPaymentError, setDebtPaymentError] = useState<string | null>(null);
-  const [debtPaymentMode, setDebtPaymentMode] = useState<'next' | 'last'>('next');
-  const [lastInstallmentsCount, setLastInstallmentsCount] = useState<number>(1);
 
   const [focusRefreshKey, setFocusRefreshKey] = useState<number>(0);
 
   // Store data y acciones
   const banks = useCardsStore((state) => state.banks);
   const [selectedDestinationBankId, setSelectedDestinationBankId] = useState<string | null>(
-    () => (banks.length > 0 ? banks[0].id : null)
-  );
-  const [selectedFriendLoanBankId, setSelectedFriendLoanBankId] = useState<string | null>(
-    () => (banks.length > 0 ? banks[0].id : null)
-  );
-  const [selectedDebtPaymentBankId, setSelectedDebtPaymentBankId] = useState<string | null>(
     () => (banks.length > 0 ? banks[0].id : null)
   );
   const people = useDebtsStore((state) => state.people);
@@ -587,258 +581,67 @@ const DebtsScreen = (): JSX.Element => {
 
   const handleOpenAbonoModal = (loan: FriendLoan): void => {
     setSelectedLoanForAbono(loan);
-    setCustomAbonoAmount('');
-    setAbonoError(null);
   };
 
   const handleCloseAbonoModal = (): void => {
     setSelectedLoanForAbono(null);
-    setCustomAbonoAmount('');
-    setAbonoError(null);
   };
 
-  const handleAbonoAmountChange = (text: string): void => {
-    let val = text.replace(',', '.');
-    val = val.replace(/[^0-9.]/g, '');
-    const parts = val.split('.');
-    if (parts.length > 2) {
-      val = parts[0] + '.' + parts.slice(1).join('');
-    }
-    setCustomAbonoAmount(val);
-
-    if (!val.trim()) {
-      setAbonoError(null);
-      return;
-    }
-
-    const num = parseFloat(val);
-    if (isNaN(num) || num <= 0) {
-      setAbonoError('Ingresa un monto válido mayor a 0');
-    } else if (selectedLoanForAbono && num > selectedLoanForAbono.remainingAmount) {
-      setAbonoError(
-        `El monto no puede superar ${currencySymbol}${formatAmount(selectedLoanForAbono.remainingAmount)} restantes`
-      );
-    } else {
-      setAbonoError(null);
-    }
-  };
-
-  const handleSetFiftyPercent = (): void => {
+  const handleConfirmFriendLoanCollection = (amount: number, bankId?: string): void => {
     if (!selectedLoanForAbono) return;
-    const half = (selectedLoanForAbono.remainingAmount / 2).toFixed(2);
-    setCustomAbonoAmount(half);
-    setAbonoError(null);
-  };
-
-  const handleSetFullAmount = (): void => {
-    if (!selectedLoanForAbono) return;
-    const full = selectedLoanForAbono.remainingAmount.toFixed(2);
-    setCustomAbonoAmount(full);
-    setAbonoError(null);
-  };
-
-  const handleConfirmAbono = (): void => {
-    if (!selectedLoanForAbono) return;
-    const parsedAmount = parseFloat(customAbonoAmount);
-    if (
-      abonoError ||
-      isNaN(parsedAmount) ||
-      parsedAmount <= 0 ||
-      parsedAmount > selectedLoanForAbono.remainingAmount
-    ) {
-      return;
-    }
-
-    collectFriendLoan(selectedLoanForAbono.id, parsedAmount);
+    collectFriendLoan(selectedLoanForAbono.id, amount);
     addTransaction({
       title: `Abono de ${selectedLoanForAbono.friendName}`,
-      amount: parsedAmount,
+      amount,
       type: 'income',
       category: 'Cobro Préstamo',
       relatedLoanId: selectedLoanForAbono.id,
       personName: selectedLoanForAbono.friendName,
-      bankId: selectedFriendLoanBankId || undefined,
+      bankId: bankId || undefined,
     });
     setSelectedLoanForAbono(null);
-    setCustomAbonoAmount('');
-    setAbonoError(null);
   };
-
-  const parsedAbonoAmount = parseFloat(customAbonoAmount);
-  const isConfirmDisabled =
-    !selectedLoanForAbono ||
-    Boolean(abonoError) ||
-    isNaN(parsedAbonoAmount) ||
-    parsedAbonoAmount <= 0 ||
-    parsedAbonoAmount > (selectedLoanForAbono?.remainingAmount ?? 0);
-
-  const maxRemainingInstallmentsForModal = useMemo((): number => {
-    if (!selectedDebtForPayment) return 1;
-    if (selectedDebtForPayment.totalInstallments && selectedDebtForPayment.totalInstallments > 0) {
-      return Math.max(
-        1,
-        selectedDebtForPayment.totalInstallments - (selectedDebtForPayment.paidInstallments || 0)
-      );
-    }
-    return 12;
-  }, [selectedDebtForPayment]);
 
   const handleOpenDebtPaymentModal = (debt: PersonalDebt): void => {
     setSelectedDebtForPayment(debt);
-    setDebtPaymentMode('next');
-    setLastInstallmentsCount(1);
-    if (debt.monthlyPayment && debt.monthlyPayment > 0) {
-      setDebtPaymentAmount(Math.min(debt.monthlyPayment, debt.remainingAmount).toFixed(2));
-    } else {
-      setDebtPaymentAmount('');
-    }
-    setDebtPaymentError(null);
   };
 
   const handleCloseDebtPaymentModal = (): void => {
     setSelectedDebtForPayment(null);
-    setDebtPaymentAmount('');
-    setDebtPaymentError(null);
-    setDebtPaymentMode('next');
-    setLastInstallmentsCount(1);
   };
 
-  const handleSelectDebtPaymentMode = (mode: 'next' | 'last'): void => {
-    setDebtPaymentMode(mode);
-    const targetCount = mode === 'last' ? lastInstallmentsCount : 1;
-    if (selectedDebtForPayment?.monthlyPayment && selectedDebtForPayment.monthlyPayment > 0) {
-      const nominal = Math.min(
-        selectedDebtForPayment.monthlyPayment * targetCount,
-        selectedDebtForPayment.remainingAmount
-      );
-      setDebtPaymentAmount(nominal.toFixed(2));
-      setDebtPaymentError(null);
-    }
-  };
-
-  const handleChangeLastInstallmentsCount = (delta: number): void => {
-    const nextCount = Math.max(
-      1,
-      Math.min(maxRemainingInstallmentsForModal, lastInstallmentsCount + delta)
-    );
-    setLastInstallmentsCount(nextCount);
-    if (selectedDebtForPayment?.monthlyPayment && selectedDebtForPayment.monthlyPayment > 0) {
-      const nominal = Math.min(
-        selectedDebtForPayment.monthlyPayment * nextCount,
-        selectedDebtForPayment.remainingAmount
-      );
-      setDebtPaymentAmount(nominal.toFixed(2));
-      setDebtPaymentError(null);
-    }
-  };
-
-  const handleDebtPaymentAmountChange = (text: string): void => {
-    let val = text.replace(',', '.');
-    val = val.replace(/[^0-9.]/g, '');
-    const parts = val.split('.');
-    if (parts.length > 2) {
-      val = parts[0] + '.' + parts.slice(1).join('');
-    }
-    setDebtPaymentAmount(val);
-
-    if (!val.trim()) {
-      setDebtPaymentError(null);
-      return;
-    }
-
-    const num = parseFloat(val);
-    if (isNaN(num) || num <= 0) {
-      setDebtPaymentError('Ingresa un monto válido mayor a 0');
-    } else if (selectedDebtForPayment && num > selectedDebtForPayment.remainingAmount) {
-      setDebtPaymentError(
-        `El monto no puede superar ${currencySymbol}${formatAmount(selectedDebtForPayment.remainingAmount)} restantes`
-      );
-    } else {
-      setDebtPaymentError(null);
-    }
-  };
-
-  const handleSetSuggestedInstallment = (): void => {
-    if (!selectedDebtForPayment || !selectedDebtForPayment.monthlyPayment) return;
-    const count = debtPaymentMode === 'last' ? lastInstallmentsCount : 1;
-    const val = Math.min(
-      selectedDebtForPayment.monthlyPayment * count,
-      selectedDebtForPayment.remainingAmount
-    ).toFixed(2);
-    setDebtPaymentAmount(val);
-    setDebtPaymentError(null);
-  };
-
-  const handleSetFullDebtPayment = (): void => {
+  const handleConfirmDebtPayment = (paymentData: PersonalDebtPaymentData): void => {
     if (!selectedDebtForPayment) return;
-    setDebtPaymentAmount(selectedDebtForPayment.remainingAmount.toFixed(2));
-    setDebtPaymentError(null);
-  };
-
-  const handleConfirmDebtPayment = (): void => {
-    if (!selectedDebtForPayment) return;
-    const parsedAmount = parseFloat(debtPaymentAmount.replace(',', '.'));
-    if (
-      debtPaymentError ||
-      isNaN(parsedAmount) ||
-      parsedAmount <= 0 ||
-      parsedAmount > selectedDebtForPayment.remainingAmount
-    ) {
-      return;
-    }
-
-    const count = debtPaymentMode === 'last' ? lastInstallmentsCount : 1;
-    const nominalQuotaValue =
-      selectedDebtForPayment.monthlyPayment && selectedDebtForPayment.monthlyPayment > 0
-        ? Math.min(
-            selectedDebtForPayment.remainingAmount,
-            Number((selectedDebtForPayment.monthlyPayment * count).toFixed(2))
-          )
-        : parsedAmount;
-    const effectiveNominal = Math.max(parsedAmount, nominalQuotaValue);
-    const discountSaved = Math.max(0, Number((effectiveNominal - parsedAmount).toFixed(2)));
+    const { amount, mode, installmentsCount, nominalAmountExtinguished, discountSaved, bankId } = paymentData;
 
     // 1. Ejecutar en debts store
-    payPersonalDebt(selectedDebtForPayment.id, parsedAmount, {
-      mode: debtPaymentMode,
-      installmentsCount: count,
-      nominalAmountExtinguished: effectiveNominal,
+    payPersonalDebt(selectedDebtForPayment.id, amount, {
+      mode,
+      installmentsCount,
+      nominalAmountExtinguished,
       discountSaved,
     });
 
     // 2. Ejecutar OBLIGATORIAMENTE en transactions store
-    const titleSuffix =
-      debtPaymentMode === 'last'
-        ? ` (${count} ${count === 1 ? 'última cuota' : 'últimas cuotas'})`
-        : '';
+    const quotaLabel = installmentsCount === 1 ? 'última cuota' : 'últimas cuotas';
+    const titleSuffix = mode === 'last' ? ` (${installmentsCount} ${quotaLabel})` : '';
     addTransaction({
       title: `Pago de ${selectedDebtForPayment.title}${titleSuffix}`,
-      amount: parsedAmount,
+      amount,
       type: 'expense',
       category: 'Pago Deudas',
       relatedDebtId: selectedDebtForPayment.id,
-      debtPaymentMode,
-      nominalDebtAmount: effectiveNominal,
-      debtInstallmentsPaid: count,
+      debtPaymentMode: mode,
+      nominalDebtAmount: nominalAmountExtinguished,
+      debtInstallmentsPaid: installmentsCount,
       debtDiscountSaved: discountSaved,
-      bankId: selectedDebtPaymentBankId || undefined,
+      bankId,
     });
 
     // 3. Cerrar el modal
     setSelectedDebtForPayment(null);
-    setDebtPaymentAmount('');
-    setDebtPaymentError(null);
-    setDebtPaymentMode('next');
-    setLastInstallmentsCount(1);
   };
 
-  const parsedDebtAmount = parseFloat(debtPaymentAmount);
-  const isDebtPaymentDisabled =
-    !selectedDebtForPayment ||
-    Boolean(debtPaymentError) ||
-    isNaN(parsedDebtAmount) ||
-    parsedDebtAmount <= 0 ||
-    parsedDebtAmount > (selectedDebtForPayment?.remainingAmount ?? 0);
 
   // Handlers para modal de abono de compras compartidas (terceros)
   const handleCloseThirdPartyAbonoModal = (): void => {
@@ -2394,530 +2197,25 @@ const DebtsScreen = (): JSX.Element => {
         )}
       </ScrollView>
 
-      {/* Modal de Registro de Abono */}
-      <Modal
+      {/* Modal de Registro de Abono (Préstamo a Amigos) */}
+      <FriendLoanCollectionModal
         visible={!!selectedLoanForAbono}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={handleCloseAbonoModal}
-      >
-        <TouchableOpacity
-          style={styles.modalBackdrop}
-          activeOpacity={1}
-          onPress={handleCloseAbonoModal}
-        >
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.modalKeyboardAvoiding}
-          >
-            <TouchableOpacity
-              activeOpacity={1}
-              style={styles.abonoCard}
-              onPress={(e) => {
-                e.stopPropagation?.();
-              }}
-            >
-              {/* Cabecera */}
-              <View style={styles.abonoHeader}>
-                <View style={styles.abonoBadge}>
-                  <Ionicons name="cash-outline" size={16} color="#00FFA3" />
-                  <Text style={styles.abonoBadgeText}>REGISTRAR ABONO</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.abonoCloseButton}
-                  onPress={handleCloseAbonoModal}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cerrar modal"
-                >
-                  <Ionicons name="close" size={20} color={colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Subtítulo informativo */}
-              <View style={styles.abonoInfoContainer}>
-                <Text style={styles.abonoFriendName}>
-                  {selectedLoanForAbono?.friendName}
-                </Text>
-                <Text style={styles.abonoRemainingText}>
-                  Resta por cobrar: {currencySymbol}{formatAmount(selectedLoanForAbono?.remainingAmount ?? 0)}
-                </Text>
-              </View>
-
-              {/* Campo de entrada */}
-              <View
-                style={[
-                  styles.abonoInputContainer,
-                  Boolean(abonoError) && styles.abonoInputContainerError,
-                ]}
-              >
-                <Text style={styles.abonoCurrencySymbol}>{currencySymbol}</Text>
-                <TextInput
-                  style={styles.abonoInput}
-                  value={customAbonoAmount}
-                  onChangeText={handleAbonoAmountChange}
-                  placeholder="0.00"
-                  placeholderTextColor={colors.textSecondary}
-                  keyboardType="decimal-pad"
-                />
-              </View>
-
-              {/* Error si aplica */}
-              {Boolean(abonoError) && (
-                <View style={styles.abonoErrorRow}>
-                  <Ionicons name="alert-circle-outline" size={14} color="#FF453A" />
-                  <Text style={styles.abonoErrorText}>{abonoError}</Text>
-                </View>
-              )}
-
-              {/* Píldoras de monto rápido */}
-              <View style={styles.abonoPillsRow}>
-                <TouchableOpacity
-                  style={styles.abonoPill}
-                  activeOpacity={0.7}
-                  onPress={handleSetFiftyPercent}
-                >
-                  <Text style={styles.abonoPillText}>
-                    50% ({currencySymbol}{formatAmount((selectedLoanForAbono?.remainingAmount ?? 0) / 2)})
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.abonoPill}
-                  activeOpacity={0.7}
-                  onPress={handleSetFullAmount}
-                >
-                  <Text style={styles.abonoPillText}>
-                    Liquidar Total ({currencySymbol}{formatAmount(selectedLoanForAbono?.remainingAmount ?? 0)})
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Selector de cuenta bancaria */}
-              <View style={styles.modalBankSelectorSection}>
-                <Text style={styles.modalBankSelectorLabel}>¿A QUÉ CUENTA INGRESÓ EL PAGO?</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.modalBankPillsRow}
-                >
-                  <TouchableOpacity
-                    style={[
-                      styles.modalBankPill,
-                      selectedFriendLoanBankId === null && styles.modalBankPillActive,
-                    ]}
-                    onPress={() => setSelectedFriendLoanBankId(null)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name="cash-outline"
-                      size={13}
-                      color={selectedFriendLoanBankId === null ? '#00FFA3' : colors.textSecondary}
-                    />
-                    <Text
-                      style={[
-                        styles.modalBankPillText,
-                        selectedFriendLoanBankId === null && styles.modalBankPillTextActive,
-                      ]}
-                    >
-                      Efectivo en mano
-                    </Text>
-                  </TouchableOpacity>
-                  {banks.map((b) => {
-                    const isSelected = selectedFriendLoanBankId === b.id;
-                    return (
-                      <TouchableOpacity
-                        key={b.id}
-                        style={[
-                          styles.modalBankPill,
-                          isSelected && styles.modalBankPillActive,
-                        ]}
-                        onPress={() => setSelectedFriendLoanBankId(b.id)}
-                        activeOpacity={0.7}
-                      >
-                        <Ionicons
-                          name="business-outline"
-                          size={13}
-                          color={isSelected ? '#00FFA3' : colors.textSecondary}
-                        />
-                        <Text
-                          style={[
-                            styles.modalBankPillText,
-                            isSelected && styles.modalBankPillTextActive,
-                          ]}
-                        >
-                          {b.name}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-
-              {/* Botón confirmar */}
-              <TouchableOpacity
-                style={[
-                  styles.abonoConfirmButton,
-                  { backgroundColor: isConfirmDisabled ? '#2C2C2E' : colors.primary },
-                ]}
-                activeOpacity={0.8}
-                disabled={isConfirmDisabled}
-                onPress={handleConfirmAbono}
-              >
-                <Text
-                  style={[
-                    styles.abonoConfirmButtonText,
-                    { color: isConfirmDisabled ? '#8E8E93' : '#121212' },
-                  ]}
-                >
-                  CONFIRMAR ABONO
-                </Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
-          </KeyboardAvoidingView>
-        </TouchableOpacity>
-      </Modal>
+        debt={selectedLoanForAbono}
+        onClose={handleCloseAbonoModal}
+        onConfirmCollection={handleConfirmFriendLoanCollection}
+        banks={banks}
+        currencySymbol={currencySymbol}
+      />
 
       {/* Modal de Pago de Deuda Personal */}
-      <Modal
+      <PersonalDebtPaymentModal
         visible={!!selectedDebtForPayment}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={handleCloseDebtPaymentModal}
-      >
-        <TouchableOpacity
-          style={styles.debtModalBackdrop}
-          activeOpacity={1}
-          onPress={handleCloseDebtPaymentModal}
-        >
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.modalKeyboardAvoiding}
-          >
-            <TouchableOpacity
-              activeOpacity={1}
-              style={styles.debtPaymentCard}
-              onPress={(e) => {
-                e.stopPropagation?.();
-              }}
-            >
-              {/* Cabecera */}
-              <View style={styles.debtPaymentHeader}>
-                <View style={styles.debtPaymentBadge}>
-                  <Ionicons name="card-outline" size={16} color="#00FFA3" />
-                  <Text style={styles.debtPaymentBadgeText}>REGISTRAR PAGO DE DEUDA</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.debtPaymentCloseButton}
-                  onPress={handleCloseDebtPaymentModal}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cerrar modal"
-                >
-                  <Ionicons name="close" size={20} color={colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Subtítulo */}
-              <View style={styles.debtPaymentInfoContainer}>
-                <Text style={styles.debtPaymentTitle} numberOfLines={1}>
-                  {selectedDebtForPayment?.title}
-                  {selectedDebtForPayment?.entity ? ` (${selectedDebtForPayment.entity})` : ''}
-                </Text>
-                <Text style={styles.debtPaymentRemainingText}>
-                  Resta por pagar: {currencySymbol}{formatAmount(selectedDebtForPayment?.remainingAmount ?? 0)}
-                </Text>
-              </View>
-
-              {/* Selector de Modalidad de Pago */}
-              <View style={styles.debtModeTabsContainer}>
-                <TouchableOpacity
-                  style={[
-                    styles.debtModeTab,
-                    debtPaymentMode === 'next' && styles.debtModeTabActive,
-                  ]}
-                  activeOpacity={0.7}
-                  onPress={() => handleSelectDebtPaymentMode('next')}
-                >
-                  <Text
-                    style={[
-                      styles.debtModeTabText,
-                      debtPaymentMode === 'next' && styles.debtModeTabTextActive,
-                    ]}
-                  >
-                    📅 Próxima Cuota
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.debtModeTab,
-                    debtPaymentMode === 'last' && styles.debtModeTabActive,
-                  ]}
-                  activeOpacity={0.7}
-                  onPress={() => handleSelectDebtPaymentMode('last')}
-                >
-                  <Text
-                    style={[
-                      styles.debtModeTabText,
-                      debtPaymentMode === 'last' && styles.debtModeTabTextActive,
-                    ]}
-                  >
-                    ⏭️ Última(s) Cuota(s)
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Selector de cantidad de últimas cuotas si debtPaymentMode === 'last' */}
-              {debtPaymentMode === 'last' && (
-                <View style={styles.lastInstallmentsSelectorBox}>
-                  <View style={styles.lastInstallmentsCounterRow}>
-                    <Text style={styles.lastInstallmentsLabel}>Cantidad de últimas cuotas:</Text>
-                    <View style={styles.lastInstallmentsControls}>
-                      <TouchableOpacity
-                        style={[
-                          styles.lastInstallmentStepBtn,
-                          lastInstallmentsCount <= 1 && styles.lastInstallmentStepBtnDisabled,
-                        ]}
-                        activeOpacity={0.7}
-                        disabled={lastInstallmentsCount <= 1}
-                        onPress={() => handleChangeLastInstallmentsCount(-1)}
-                      >
-                        <Ionicons
-                          name="remove"
-                          size={16}
-                          color={lastInstallmentsCount <= 1 ? '#555' : '#00FFA3'}
-                        />
-                      </TouchableOpacity>
-                      <Text style={styles.lastInstallmentsCountValue}>{lastInstallmentsCount}</Text>
-                      <TouchableOpacity
-                        style={[
-                          styles.lastInstallmentStepBtn,
-                          lastInstallmentsCount >= maxRemainingInstallmentsForModal &&
-                            styles.lastInstallmentStepBtnDisabled,
-                        ]}
-                        activeOpacity={0.7}
-                        disabled={lastInstallmentsCount >= maxRemainingInstallmentsForModal}
-                        onPress={() => handleChangeLastInstallmentsCount(1)}
-                      >
-                        <Ionicons
-                          name="add"
-                          size={16}
-                          color={
-                            lastInstallmentsCount >= maxRemainingInstallmentsForModal
-                              ? '#555'
-                              : '#00FFA3'
-                          }
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                  <Text style={styles.lastInstallmentsSummaryText}>
-                    Liquidando las últimas {lastInstallmentsCount} cuota(s) (del final hacia adelante)
-                  </Text>
-                  <Text style={styles.lastInstallmentsNoteText}>
-                    📌 Tu próxima cuota del mes sigue pendiente en su fecha habitual.
-                  </Text>
-                </View>
-              )}
-
-              {/* Input de monto */}
-              <View
-                style={[
-                  styles.debtPaymentInputContainer,
-                  Boolean(debtPaymentError) && styles.debtPaymentInputContainerError,
-                ]}
-              >
-                <Text style={styles.debtPaymentCurrencySymbol}>{currencySymbol}</Text>
-                <TextInput
-                  style={styles.debtPaymentInput}
-                  value={debtPaymentAmount}
-                  onChangeText={handleDebtPaymentAmountChange}
-                  placeholder="0.00"
-                  placeholderTextColor={colors.textSecondary}
-                  keyboardType="decimal-pad"
-                  autoFocus={true}
-                />
-              </View>
-
-              {/* Mensaje de error si aplica */}
-              {Boolean(debtPaymentError) && (
-                <View style={styles.debtPaymentErrorRow}>
-                  <Ionicons name="alert-circle-outline" size={14} color="#FF453A" />
-                  <Text style={styles.debtPaymentErrorText}>{debtPaymentError}</Text>
-                </View>
-              )}
-
-              {/* Desglose en Vivo de Descuento y % de Ahorro */}
-              {(() => {
-                const countForCalc = debtPaymentMode === 'last' ? lastInstallmentsCount : 1;
-                const nominalQuotaValue = selectedDebtForPayment?.monthlyPayment
-                  ? Math.min(
-                      selectedDebtForPayment.remainingAmount,
-                      Number((selectedDebtForPayment.monthlyPayment * countForCalc).toFixed(2))
-                    )
-                  : 0;
-                const enteredPaidVal = parseFloat(debtPaymentAmount.replace(',', '.')) || 0;
-                if (nominalQuotaValue > 0 && enteredPaidVal > 0) {
-                  const savedAmount = Math.max(
-                    0,
-                    Number((nominalQuotaValue - enteredPaidVal).toFixed(2))
-                  );
-                  const savedPct =
-                    nominalQuotaValue > 0
-                      ? Number(((savedAmount / nominalQuotaValue) * 100).toFixed(1))
-                      : 0;
-                  return (
-                    <View style={styles.debtLiveDiscountBox}>
-                      <Text style={styles.debtLiveDiscountLine}>
-                        Valor integral que baja de tu deuda ({countForCalc}{' '}
-                        {countForCalc === 1 ? 'cuota' : 'cuotas'}):{' '}
-                        <Text style={styles.debtLiveDiscountBold}>
-                          {currencySymbol}{formatAmount(nominalQuotaValue)}
-                        </Text>
-                      </Text>
-                      <Text style={styles.debtLiveDiscountLine}>
-                        Pago real que sale de tu cuenta:{' '}
-                        <Text style={styles.debtLiveDiscountBold}>
-                          {currencySymbol}{formatAmount(enteredPaidVal)}
-                        </Text>
-                      </Text>
-                      {savedAmount > 0 && (
-                        <Text style={styles.debtLiveDiscountHighlightNeon}>
-                          ✨ Descuento / Ahorro: {currencySymbol}{formatAmount(savedAmount)} ({savedPct}% de ahorro)
-                        </Text>
-                      )}
-                    </View>
-                  );
-                }
-                return null;
-              })()}
-
-              {/* Píldoras de selección rápida */}
-              <View style={styles.debtPaymentPillsRow}>
-                {selectedDebtForPayment?.monthlyPayment && selectedDebtForPayment.monthlyPayment > 0 ? (
-                  <TouchableOpacity
-                    style={styles.debtPaymentPill}
-                    activeOpacity={0.7}
-                    onPress={handleSetSuggestedInstallment}
-                  >
-                    <Text style={styles.debtPaymentPillText}>
-                      {debtPaymentMode === 'last' && lastInstallmentsCount > 1
-                        ? `${lastInstallmentsCount} cuotas (${currencySymbol}${formatAmount(
-                            Math.min(
-                              selectedDebtForPayment.monthlyPayment * lastInstallmentsCount,
-                              selectedDebtForPayment.remainingAmount
-                            )
-                          )})`
-                        : `Cuota sugerida (${currencySymbol}${formatAmount(
-                            Math.min(
-                              selectedDebtForPayment.monthlyPayment,
-                              selectedDebtForPayment.remainingAmount
-                            )
-                          )})`}
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-                <TouchableOpacity
-                  style={styles.debtPaymentPill}
-                  activeOpacity={0.7}
-                  onPress={handleSetFullDebtPayment}
-                >
-                  <Text style={styles.debtPaymentPillText}>
-                    Liquidar Total ({currencySymbol}{formatAmount(selectedDebtForPayment?.remainingAmount ?? 0)})
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Selector de cuenta bancaria */}
-              <View style={styles.modalBankSelectorSection}>
-                <Text style={styles.modalBankSelectorLabel}>¿DE QUÉ CUENTA BANCARIA SE DEBITÓ EL PAGO?</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.modalBankPillsRow}
-                >
-                  <TouchableOpacity
-                    style={[
-                      styles.modalBankPill,
-                      selectedDebtPaymentBankId === null && styles.modalBankPillActive,
-                    ]}
-                    onPress={() => setSelectedDebtPaymentBankId(null)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name="cash-outline"
-                      size={13}
-                      color={selectedDebtPaymentBankId === null ? '#00FFA3' : colors.textSecondary}
-                    />
-                    <Text
-                      style={[
-                        styles.modalBankPillText,
-                        selectedDebtPaymentBankId === null && styles.modalBankPillTextActive,
-                      ]}
-                    >
-                      Efectivo en mano
-                    </Text>
-                  </TouchableOpacity>
-                  {banks.map((b) => {
-                    const isSelected = selectedDebtPaymentBankId === b.id;
-                    return (
-                      <TouchableOpacity
-                        key={b.id}
-                        style={[
-                          styles.modalBankPill,
-                          isSelected && styles.modalBankPillActive,
-                        ]}
-                        onPress={() => setSelectedDebtPaymentBankId(b.id)}
-                        activeOpacity={0.7}
-                      >
-                        <Ionicons
-                          name="business-outline"
-                          size={13}
-                          color={isSelected ? '#00FFA3' : colors.textSecondary}
-                        />
-                        <Text
-                          style={[
-                            styles.modalBankPillText,
-                            isSelected && styles.modalBankPillTextActive,
-                          ]}
-                        >
-                          {b.name}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-
-              {/* Mensaje informativo sutil */}
-              <View style={styles.debtPaymentHintContainer}>
-                <Text style={styles.debtPaymentHintText}>
-                  💡 Este pago se registrará como gasto en tu historial de Movimientos. Si fue un error, puedes eliminarlo allí para restaurar el saldo de tu deuda automáticamente.
-                </Text>
-              </View>
-
-              {/* Botón confirmar */}
-              <TouchableOpacity
-                style={[
-                  styles.debtPaymentConfirmButton,
-                  { backgroundColor: isDebtPaymentDisabled ? '#2C2C2E' : '#00FFA3' },
-                ]}
-                activeOpacity={0.8}
-                disabled={isDebtPaymentDisabled}
-                onPress={handleConfirmDebtPayment}
-              >
-                <Text
-                  style={[
-                    styles.debtPaymentConfirmButtonText,
-                    { color: isDebtPaymentDisabled ? '#8E8E93' : '#121212' },
-                  ]}
-                >
-                  CONFIRMAR PAGO
-                </Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
-          </KeyboardAvoidingView>
-        </TouchableOpacity>
-      </Modal>
+        debt={selectedDebtForPayment}
+        onClose={handleCloseDebtPaymentModal}
+        onConfirmPayment={handleConfirmDebtPayment}
+        banks={banks}
+        currencySymbol={currencySymbol}
+      />
 
       {/* Modal Interactivo de Abono de Terceros */}
       <Modal
@@ -4298,263 +3596,6 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
-  abonoCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 20,
-    width: '100%',
-    maxWidth: 400,
-    gap: 16,
-  },
-  abonoHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  abonoBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(0, 255, 163, 0.08)',
-    borderColor: 'rgba(0, 255, 163, 0.3)',
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  abonoBadgeText: {
-    color: '#00FFA3',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-  },
-  abonoCloseButton: {
-    padding: 4,
-  },
-  abonoInfoContainer: {
-    gap: 4,
-  },
-  abonoFriendName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  abonoRemainingText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#64D2FF',
-  },
-  abonoInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    borderColor: '#2C2C2E',
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    gap: 10,
-  },
-  abonoInputContainerError: {
-    borderColor: '#FF453A',
-  },
-  abonoCurrencySymbol: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#00FFA3',
-  },
-  abonoInput: {
-    flex: 1,
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.text,
-    padding: 0,
-  },
-  abonoErrorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: -8,
-  },
-  abonoErrorText: {
-    color: '#FF453A',
-    fontSize: 12,
-    fontWeight: '600',
-    flexShrink: 1,
-  },
-  abonoPillsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  abonoPill: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 255, 163, 0.08)',
-    borderColor: 'rgba(0, 255, 163, 0.25)',
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 9,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  abonoPillText: {
-    color: '#00FFA3',
-    fontSize: 11,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  abonoConfirmButton: {
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 4,
-  },
-  abonoConfirmButtonText: {
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-  },
-  debtModalBackdrop: {
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  debtPaymentCard: {
-    backgroundColor: '#1E1E1E',
-    borderColor: '#2C2C2E',
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 20,
-    width: '100%',
-    maxWidth: 400,
-    gap: 16,
-  },
-  debtPaymentHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  debtPaymentBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(0, 255, 163, 0.08)',
-    borderColor: 'rgba(0, 255, 163, 0.3)',
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  debtPaymentBadgeText: {
-    color: '#00FFA3',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-  },
-  debtPaymentCloseButton: {
-    padding: 4,
-  },
-  debtPaymentInfoContainer: {
-    gap: 4,
-  },
-  debtPaymentTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  debtPaymentRemainingText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#FF6482',
-  },
-  debtPaymentInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#121212',
-    borderColor: '#2C2C2E',
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    gap: 10,
-  },
-  debtPaymentInputContainerError: {
-    borderColor: '#FF453A',
-  },
-  debtPaymentCurrencySymbol: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#00FFA3',
-  },
-  debtPaymentInput: {
-    flex: 1,
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    padding: 0,
-  },
-  debtPaymentErrorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: -8,
-  },
-  debtPaymentErrorText: {
-    color: '#FF453A',
-    fontSize: 12,
-    fontWeight: '600',
-    flexShrink: 1,
-  },
-  debtPaymentPillsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  debtPaymentPill: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 255, 163, 0.08)',
-    borderColor: 'rgba(0, 255, 163, 0.25)',
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 9,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  debtPaymentPillText: {
-    color: '#00FFA3',
-    fontSize: 11,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  debtPaymentHintContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 10,
-  },
-  debtPaymentHintText: {
-    color: '#8E8E93',
-    fontSize: 11,
-    lineHeight: 16,
-  },
-  debtPaymentConfirmButton: {
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 4,
-  },
-  debtPaymentConfirmButtonText: {
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-  },
   debtExtraBadgesContainer: {
     gap: 6,
     marginTop: 2,
@@ -4584,113 +3625,6 @@ const styles = StyleSheet.create({
     color: '#64D2FF',
     fontSize: 11,
     fontWeight: '700',
-  },
-  debtModeTabsContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    backgroundColor: '#141416',
-    padding: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#2C2C2E',
-  },
-  debtModeTab: {
-    flex: 1,
-    paddingVertical: 9,
-    paddingHorizontal: 8,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  debtModeTabActive: {
-    backgroundColor: 'rgba(0, 255, 163, 0.14)',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 255, 163, 0.4)',
-  },
-  debtModeTabText: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  debtModeTabTextActive: {
-    color: '#00FFA3',
-    fontWeight: '800',
-  },
-  lastInstallmentsSelectorBox: {
-    backgroundColor: 'rgba(100, 210, 255, 0.06)',
-    borderColor: 'rgba(100, 210, 255, 0.25)',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    gap: 6,
-  },
-  lastInstallmentsCounterRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  lastInstallmentsLabel: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  lastInstallmentsControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  lastInstallmentStepBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: 'rgba(0, 255, 163, 0.12)',
-    borderColor: 'rgba(0, 255, 163, 0.35)',
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  lastInstallmentStepBtnDisabled: {
-    backgroundColor: '#242426',
-    borderColor: '#333336',
-  },
-  lastInstallmentsCountValue: {
-    color: '#00FFA3',
-    fontSize: 15,
-    fontWeight: '800',
-    minWidth: 20,
-    textAlign: 'center',
-  },
-  lastInstallmentsSummaryText: {
-    color: '#64D2FF',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  lastInstallmentsNoteText: {
-    color: colors.textSecondary,
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  debtLiveDiscountBox: {
-    backgroundColor: 'rgba(0, 255, 163, 0.06)',
-    borderColor: 'rgba(0, 255, 163, 0.25)',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    gap: 4,
-  },
-  debtLiveDiscountLine: {
-    color: '#D0D0D5',
-    fontSize: 12,
-  },
-  debtLiveDiscountBold: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  debtLiveDiscountHighlightNeon: {
-    color: '#00FFA3',
-    fontSize: 12,
-    fontWeight: '800',
-    marginTop: 2,
   },
   // Estilos de la sección moderna de Reembolsos de Tarjetas Compartidas
   thirdPartySummaryCard: {

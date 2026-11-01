@@ -1,37 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { StateStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// Memoria fallback en caso de retraso en enlace nativo
-const memoryStorage = new Map<string, string>();
-
-const safeStorage: StateStorage = {
-  getItem: async (name: string): Promise<string | null> => {
-    try {
-      const value = await AsyncStorage.getItem(name);
-      return value;
-    } catch {
-      return memoryStorage.get(name) ?? null;
-    }
-  },
-  setItem: async (name: string, value: string): Promise<void> => {
-    try {
-      memoryStorage.set(name, value);
-      await AsyncStorage.setItem(name, value);
-    } catch {
-      // Silently fallback to memory storage
-    }
-  },
-  removeItem: async (name: string): Promise<void> => {
-    try {
-      memoryStorage.delete(name);
-      await AsyncStorage.removeItem(name);
-    } catch {
-      // Silently fallback to memory storage
-    }
-  },
-};
+import { safeStorage } from './safe-storage';
 
 export interface Bank {
   id: string;
@@ -53,6 +22,23 @@ export interface CreditCard {
   isDefault?: boolean;
   createdAt: string;
 }
+
+export type Card = CreditCard;
+
+export type CardSyncHandlers = {
+  onCardAdded?: (card: CreditCard) => void;
+  onCardUpdated?: (card: CreditCard) => void;
+  onCardDeleted?: (cardId: string) => void;
+  onBankAdded?: (bank: Bank) => void;
+  onBankUpdated?: (bank: Bank) => void;
+  onBankDeleted?: (bankId: string) => void;
+};
+
+let syncHandlers: CardSyncHandlers = {};
+
+export const setCardSyncHandlers = (handlers: CardSyncHandlers): void => {
+  syncHandlers = handlers;
+};
 
 export interface CardsState {
   banks: Bank[];
@@ -107,16 +93,21 @@ export const useCardsStore = create<CardsState>()(
         set((state) => ({
           banks: [...(state.banks || []), newBank],
         }));
+        syncHandlers.onBankAdded?.(newBank);
         return newBank;
       },
 
       setBankBalance: (id: string, balance: number): void => {
         const sanitized = Number(balance) || 0;
+        const currentBank = (get().banks || []).find((b) => b.id === id);
+        if (!currentBank) return;
+        const updatedBank: Bank = { ...currentBank, initialBalance: sanitized };
         set((state) => ({
           banks: (state.banks || []).map((b) =>
-            b.id === id ? { ...b, initialBalance: sanitized } : b
+            b.id === id ? updatedBank : b
           ),
         }));
+        syncHandlers.onBankUpdated?.(updatedBank);
       },
 
       updateBank: (id: string, name: string): void => {
@@ -131,10 +122,11 @@ export const useCardsStore = create<CardsState>()(
         }
 
         const oldNameLower = currentBank.name.trim().toLowerCase();
+        const updatedBank: Bank = { ...currentBank, name: trimmed };
 
         set((state) => ({
           banks: (state.banks || []).map((b) =>
-            b.id === id ? { ...b, name: trimmed } : b
+            b.id === id ? updatedBank : b
           ),
           cards: (state.cards || []).map((c) =>
             c.bankName.trim().toLowerCase() === oldNameLower
@@ -142,14 +134,18 @@ export const useCardsStore = create<CardsState>()(
               : c
           ),
         }));
+        syncHandlers.onBankUpdated?.(updatedBank);
       },
 
-      deleteBank: (id: string): void =>
+      deleteBank: (id: string): void => {
         set((state) => ({
           banks: (state.banks || []).filter((b) => b.id !== id),
-        })),
+        }));
+        syncHandlers.onBankDeleted?.(id);
+      },
 
-      addCard: (card: Omit<CreditCard, 'id' | 'createdAt'>) =>
+      addCard: (card: Omit<CreditCard, 'id' | 'createdAt'>): void => {
+        let addedCard: CreditCard | null = null;
         set((state) => {
           const isFirstCard = state.cards.length === 0;
           const shouldBeDefault = isFirstCard || !!card.isDefault;
@@ -165,6 +161,7 @@ export const useCardsStore = create<CardsState>()(
             id: Date.now().toString(),
             createdAt: new Date().toISOString(),
           };
+          addedCard = newCard;
           const existingCards = shouldBeDefault
             ? state.cards.map((c) => ({ ...c, isDefault: false }))
             : state.cards;
@@ -172,35 +169,65 @@ export const useCardsStore = create<CardsState>()(
           return {
             cards: [newCard, ...existingCards],
           };
-        }),
-
-      updateCard: (id: string, cardUpdate: Partial<CreditCard>) =>
-        set((state) => ({
-          cards: state.cards.map((c) =>
-            c.id === id ? { ...c, ...cardUpdate } : c
-          ),
-        })),
-
-      setDefaultCard: (id: string): void => {
-        set((state) => ({
-          cards: state.cards.map((c) => ({
-            ...c,
-            isDefault: c.id === id,
-          })),
-        }));
+        });
+        if (addedCard) {
+          syncHandlers.onCardAdded?.(addedCard);
+        }
       },
 
-      deleteCard: (id: string) =>
+      updateCard: (id: string, cardUpdate: Partial<CreditCard>): void => {
+        let updatedCard: CreditCard | null = null;
+        set((state) => ({
+          cards: state.cards.map((c) => {
+            if (c.id === id) {
+              updatedCard = { ...c, ...cardUpdate };
+              return updatedCard;
+            }
+            return c;
+          }),
+        }));
+        if (updatedCard) {
+          syncHandlers.onCardUpdated?.(updatedCard);
+        }
+      },
+
+      setDefaultCard: (id: string): void => {
+        let defaultCard: CreditCard | null = null;
+        set((state) => ({
+          cards: state.cards.map((c) => {
+            const isTarget = c.id === id;
+            if (isTarget) {
+              defaultCard = { ...c, isDefault: true };
+            }
+            return {
+              ...c,
+              isDefault: isTarget,
+            };
+          }),
+        }));
+        if (defaultCard) {
+          syncHandlers.onCardUpdated?.(defaultCard);
+        }
+      },
+
+      deleteCard: (id: string): void => {
+        let promotedDefaultCard: CreditCard | null = null;
         set((state) => {
           const cardToDelete = state.cards.find((c) => c.id === id);
           const remainingCards = state.cards.filter((c) => c.id !== id);
           if (cardToDelete?.isDefault && remainingCards.length > 0) {
-            remainingCards[0] = { ...remainingCards[0], isDefault: true };
+            promotedDefaultCard = { ...remainingCards[0], isDefault: true };
+            remainingCards[0] = promotedDefaultCard;
           }
           return {
             cards: remainingCards,
           };
-        }),
+        });
+        syncHandlers.onCardDeleted?.(id);
+        if (promotedDefaultCard) {
+          syncHandlers.onCardUpdated?.(promotedDefaultCard);
+        }
+      },
 
       getCardById: (id: string): CreditCard | undefined => {
         return get().cards.find((c) => c.id === id);

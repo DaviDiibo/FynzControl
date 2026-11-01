@@ -20,6 +20,7 @@ import { useTransactionsStore } from '../../../src/store/transactions-store';
 import { useSettingsStore } from '../../../src/store/settings-store';
 import { useDebtsStore } from '../../../src/store/debts-store';
 import { EXPENSE_CATEGORIES } from '../../../src/constants/categories';
+import { formatCurrency, getCurrencySymbol } from '../../../src/utils/currency';
 
 type PeriodFilter = 'current_month' | 'quarter' | 'year';
 
@@ -28,7 +29,7 @@ type ChangeInfo = {
   diff: number | null;
 };
 
-const parseTxDate = (dateStr?: string): Date | null => {
+export const parseTxDate = (dateStr?: string): Date | null => {
   if (!dateStr) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     const parts = dateStr.split('-');
@@ -36,7 +37,7 @@ const parseTxDate = (dateStr?: string): Date | null => {
     const m = parseInt(parts[1], 10) - 1;
     const d = parseInt(parts[2], 10);
     if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
-      return new Date(y, m - 1, d);
+      return new Date(y, m, d);
     }
   }
   const date = new Date(dateStr);
@@ -74,7 +75,7 @@ const StatsScreen = (): JSX.Element => {
 
   const transactions = useTransactionsStore((state) => state.transactions);
   const currencyCode = useSettingsStore((state) => state.currency);
-  const currencySymbol = currencyCode === 'EUR' ? '€' : currencyCode === 'BRL' ? 'R$' : '$';
+  const currencySymbol = getCurrencySymbol(currencyCode);
 
   const personalDebts = useDebtsStore((state) => state.personalDebts);
   const thirdPartyCharges = useDebtsStore((state) => state.thirdPartyCharges);
@@ -284,12 +285,6 @@ const StatsScreen = (): JSX.Element => {
     return computeDiffText(periodExpense, prevExpense);
   }, [periodExpense, prevExpense]);
 
-  const formatAmount = (val: number): string => {
-    return val.toLocaleString('es-ES', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-  };
 
   const currentYearNumber = new Date().getFullYear();
   const periodOptions: Array<{ id: PeriodFilter; label: string }> = [
@@ -332,7 +327,7 @@ const StatsScreen = (): JSX.Element => {
           <Text style={styles.summaryColLabel}>Ingresos Totales</Text>
         </View>
         <Text style={[styles.summaryColAmount, styles.incomeAmount]}>
-          {`${currencySymbol}${formatAmount(periodIncome)}`}
+          {formatCurrency(periodIncome, currencyCode)}
         </Text>
         <View style={styles.changeBadgePositive}>
           <Ionicons
@@ -360,7 +355,7 @@ const StatsScreen = (): JSX.Element => {
           <Text style={styles.summaryColLabel}>Gastos Totales</Text>
         </View>
         <Text style={[styles.summaryColAmount, styles.expenseAmount]}>
-          {`${currencySymbol}${formatAmount(periodExpense)}`}
+          {formatCurrency(periodExpense, currencyCode)}
         </Text>
         <View style={styles.changeBadgeNegative}>
           <Ionicons
