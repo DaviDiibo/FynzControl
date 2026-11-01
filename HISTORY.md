@@ -7,6 +7,19 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[TASK-CARD-DUE-DATE-DASHBOARD-FIX]` (2026-11-01): Corrección de cálculo de vencimiento y alertas de tarjetas en Dashboard:
+  - Archivos intervenidos:
+    * `src/components/dashboard/upcoming-debts-card.tsx`
+    * `src/__tests__/debt-dates-liquidation.test.ts`
+  - Resumen técnico:
+    * En `upcoming-debts-card.tsx` (`getConsolidatedUpcomingDebts`), se sustituyó la llamada ingenua a `calculateRecurringDueDate(paymentDay, ...)` por `getCardBillingCycleDates(cardClosingDay, cardPaymentDay, referenceDate)` para obtener la proyección de ciclo real (`cycleDates.daysUntilPayment` y `cycleDates.paymentDueFormatted`).
+    * Evita falsos positivos de "¡Vence hoy! (Hoy)" cuando una tarjeta tiene compras ingresadas el día 1 tras el cierre del período anterior (ej. corte 29 de mes anterior, pago día 1). Ahora calcula 30 días restantes para el 1 de Diciembre y no dispara alerta urgente.
+    * En el subtexto del ítem de tarjeta, ahora se muestra explícitamente "Vence: 1 Dic 2026" en lugar de "Vence día 1".
+    * En `src/__tests__/debt-dates-liquidation.test.ts`, se incorporó Caso 19 con Fake Timers deterministas para validar 30 días restantes, ausencia de alerta urgente y formato de fecha.
+  - Decisiones permanentes y verificación:
+    * Regla de Vencimientos de Tarjetas: Para cálculo de vencimientos de tarjetas de crédito en cualquier componente o card (Dashboard o Overview), SIEMPRE usar `getCardBillingCycleDates(closingDay, paymentDay, refDate)` y NUNCA `calculateRecurringDueDate(paymentDay, ...)`, ya que este último ignora el corte y confunde compras post-cierre como vencimientos del mismo día.
+    * Verificación y calidad: 117/117 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[TASK-OPTIMIZATION-PHASE-6B-FRIEND-LOAN-COLLECTION-MODAL]` (2026-10-31): Modularización y desacoplamiento del modal de cobro de préstamos a amigos en `debts.tsx`:
   - Archivos intervenidos:
     * `src/components/debts/friend-loan-collection-modal.tsx` (Nuevo)

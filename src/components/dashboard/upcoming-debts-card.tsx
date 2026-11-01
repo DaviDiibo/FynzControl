@@ -17,6 +17,7 @@ import {
   calculateRecurringDueDate,
   getUrgencyStatus,
   getDebtDueStatus,
+  getCardBillingCycleDates,
   MONTH_NAMES_ES,
 } from '../../utils/date-helpers';
 import { computeCardBillingStatement } from '../../utils/card-accounting';
@@ -106,9 +107,10 @@ export const getConsolidatedUpcomingDebts = (
         referenceDate,
       });
 
-      const paymentDay = card.paymentDay ?? 5;
-      const recurring = calculateRecurringDueDate(paymentDay, `Día ${paymentDay} de cada mes`, referenceDate);
-      const shouldAlertInDashboard = recurring.daysRemaining <= 7;
+      const cardClosingDay = card.closingDay ?? card.cutOffDay ?? 20;
+      const cardPaymentDay = card.paymentDay ?? card.cutOffDay ?? 5;
+      const cycleDates = getCardBillingCycleDates(cardClosingDay, cardPaymentDay, referenceDate);
+      const shouldAlertInDashboard = cycleDates.daysUntilPayment <= 7;
 
       return {
         id: `card-${card.id}`,
@@ -116,14 +118,14 @@ export const getConsolidatedUpcomingDebts = (
         entity: card.bankName || 'Tarjeta de Crédito',
         amount: cardCurrentMonthDebt,
         remainingAmount: cardTotalDebt,
-        dueDay: paymentDay,
-        dueDate: `Día ${paymentDay} de cada mes`,
+        dueDay: cardPaymentDay,
+        dueDate: cycleDates.paymentDueFormatted,
         isCard: true,
         icon: 'card-outline' as const,
         isMonthly: false,
         shouldAlertInDashboard,
-        daysRemaining: recurring.daysRemaining,
-        nextDueDateFormatted: recurring.nextDueDateFormatted,
+        daysRemaining: cycleDates.daysUntilPayment,
+        nextDueDateFormatted: cycleDates.paymentDueFormatted,
       };
     })
     .filter((item) => item.amount > 0);
@@ -369,7 +371,9 @@ const UpcomingDebtsCard = ({ onViewAll }: UpcomingDebtsCardProps = {}): JSX.Elem
                       color={colors.textSecondary}
                     />
                     <Text style={styles.dueDateText}>
-                      {item.isCard && item.dueDay
+                      {item.isCard && item.nextDueDateFormatted
+                        ? `Vence: ${item.nextDueDateFormatted}`
+                        : item.isCard && item.dueDay
                         ? `Vence día ${item.dueDay}`
                         : item.nextDueDateFormatted
                         ? `Próximo corte: ${item.nextDueDateFormatted}`
