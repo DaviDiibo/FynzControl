@@ -131,7 +131,12 @@ const DashboardScreen = (): JSX.Element => {
   }, [bankSummaries, netBalance]);
 
   const recentItems: RecentTransaction[] = useMemo(() => {
-    return transactions.slice(0, 5).map((t) => ({
+    const sorted = [...transactions].sort((a, b) => {
+      const timeA = new Date(a.date || a.createdAt || 0).getTime();
+      const timeB = new Date(b.date || b.createdAt || 0).getTime();
+      return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+    });
+    return sorted.slice(0, 5).map((t) => ({
       id: t.id,
       title: t.title,
       category: t.category,

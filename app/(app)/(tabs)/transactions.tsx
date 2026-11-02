@@ -71,6 +71,16 @@ const getTimeString = (tx: Transaction): string => {
   return '00:00';
 };
 
+const getTransactionTime = (t: {
+  date?: string | number | Date;
+  createdAt?: string | number | Date;
+}): number => {
+  const d = t.date || t.createdAt;
+  if (!d) return 0;
+  const time = new Date(d).getTime();
+  return isNaN(time) ? 0 : time;
+};
+
 const TransactionsScreen = (): JSX.Element => {
   const isWide = useIsWide(768);
   const [searchQuery, setSearchQuery] = useState('');
@@ -141,12 +151,13 @@ const TransactionsScreen = (): JSX.Element => {
     return monthName.charAt(0).toUpperCase() + monthName.slice(1);
   }, [isAllTime, selectedDate]);
 
-  // Transacciones filtradas por el mes seleccionado (o todas si isAllTime)
+  // Transacciones filtradas por el mes seleccionado (o todas si isAllTime) ordenadas cronológicamente descendente
   const monthTransactions = useMemo(() => {
-    if (isAllTime) {
-      return transactions;
-    }
-    return transactions.filter((tx) => isSameMonthAndYear(tx.date, selectedDate));
+    const list = isAllTime
+      ? transactions
+      : transactions.filter((tx) => isSameMonthAndYear(tx.date, selectedDate));
+
+    return [...list].sort((a, b) => getTransactionTime(b) - getTransactionTime(a));
   }, [transactions, isAllTime, selectedDate]);
 
   // Métricas financieras calculadas dinámicamente según el período activo
