@@ -15,12 +15,92 @@ export interface UpcomingDebtsCardProps {
 
 import {
   calculateRecurringDueDate,
-  getUrgencyStatus,
+
   getDebtDueStatus,
   getCardBillingCycleDates,
   MONTH_NAMES_ES,
 } from '../../utils/date-helpers';
 import { computeCardBillingStatement } from '../../utils/card-accounting';
+
+export type DashboardUrgencyLevel = 'overdue' | 'today' | 'urgent' | 'warning' | 'normal';
+
+export interface DashboardUrgencyStatus {
+  level: DashboardUrgencyLevel;
+  label: string;
+  color: string;
+  bg: string;
+  backgroundColor: string;
+  badgeBg: string;
+  badgeBorder: string;
+  text: string;
+}
+
+export const getDashboardUrgencyStatus = (daysRemaining: number): DashboardUrgencyStatus => {
+  if (daysRemaining < 0) {
+    return {
+      level: 'overdue',
+      label: 'Vencido',
+      text: 'Vencido',
+      color: '#FF453A',
+      bg: 'rgba(255, 69, 58, 0.15)',
+      backgroundColor: 'rgba(255, 69, 58, 0.15)',
+      badgeBg: 'rgba(255, 69, 58, 0.15)',
+      badgeBorder: 'rgba(255, 69, 58, 0.35)',
+    };
+  }
+
+  if (daysRemaining === 0) {
+    return {
+      level: 'today',
+      label: '¡Vence hoy! (Hoy)',
+      text: '¡Vence hoy!',
+      color: '#FF453A',
+      bg: 'rgba(255, 69, 58, 0.15)',
+      backgroundColor: 'rgba(255, 69, 58, 0.15)',
+      badgeBg: 'rgba(255, 69, 58, 0.15)',
+      badgeBorder: 'rgba(255, 69, 58, 0.35)',
+    };
+  }
+
+  if (daysRemaining <= 3) {
+    return {
+      level: 'urgent',
+      label: `¡Por vencer! (${daysRemaining}d)`,
+      text: '¡Por vencer!',
+      color: '#FF9F0A',
+      bg: 'rgba(255, 159, 10, 0.15)',
+      backgroundColor: 'rgba(255, 159, 10, 0.15)',
+      badgeBg: 'rgba(255, 159, 10, 0.15)',
+      badgeBorder: 'rgba(255, 159, 10, 0.35)',
+    };
+  }
+
+  if (daysRemaining <= 7) {
+    return {
+      level: 'warning',
+      label: `Próximo (${daysRemaining}d)`,
+      text: 'Próximo',
+      color: '#FFD60A',
+      bg: 'rgba(255, 214, 10, 0.15)',
+      backgroundColor: 'rgba(255, 214, 10, 0.15)',
+      badgeBg: 'rgba(255, 214, 10, 0.15)',
+      badgeBorder: 'rgba(255, 214, 10, 0.35)',
+    };
+  }
+
+  return {
+    level: 'normal',
+    label: `En plazo (${daysRemaining}d)`,
+    text: 'En plazo',
+    color: '#00FFA3',
+    bg: 'rgba(0, 255, 163, 0.1)',
+    backgroundColor: 'rgba(0, 255, 163, 0.1)',
+    badgeBg: 'rgba(0, 255, 163, 0.1)',
+    badgeBorder: 'rgba(0, 255, 163, 0.35)',
+  };
+};
+
+export const getUrgencyStatus = getDashboardUrgencyStatus;
 
 const formatAmount = (val: number): string => {
   return val.toLocaleString('es-ES', {

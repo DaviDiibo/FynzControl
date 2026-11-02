@@ -19,7 +19,11 @@ import {
   type PersonalDebt,
   type ThirdPartyCardCharge,
 } from '../store/debts-store';
-import { getConsolidatedUpcomingDebts } from '../components/dashboard/upcoming-debts-card';
+import {
+  getConsolidatedUpcomingDebts,
+  getDashboardUrgencyStatus,
+  getUrgencyStatus as getDashboardUrgency,
+} from '../components/dashboard/upcoming-debts-card';
 import type { CreditCard } from '../store/cards-store';
 import type { Transaction } from '../store/transactions-store';
 
@@ -958,6 +962,193 @@ describe('Transición Automática y Reseteo de Ciclo Mensual para Compras de Ter
     expect(juniorDec.monthlyDueAmount).toBe(449.12);
     expect(juniorDec.monthlyPendingAmount).toBe(449.12);
     expect(juniorDec.totalRemainingDebt).toBe(449.12);
+  });
+
+  it('Caso 20: Reversión de Pago de Deuda Personal - restauración de remainingAmount, paidInstallments y estado getDebtDueStatus', () => {
+    // Hoy es 10 de Octubre de 2026.
+    const refDate = new Date('2026-10-10T10:00:00Z');
+    jest.setSystemTime(refDate);
+
+    // 1. Crear una deuda personal en cuotas con vencimiento el día 15
+    const debt = useDebtsStore.getState().addPersonalDebt({
+      title: 'Préstamo Auto',
+      entity: 'Banco Santander',
+      category: 'loan',
+      debtType: 'installment_loan',
+      totalAmount: 1200,
+      remainingAmount: 1200,
+      totalInstallments: 12,
+      paidInstallments: 0,
+      monthlyPayment: 100,
+      dueDay: 15,
+      dueDate: 'Día 15 de cada mes',
+      icon: 'cash-outline',
+    });
+
+    // Validar estado inicial: no está al día este mes, vence el 15 de Octubre
+    const initialStatus = getDebtDueStatus(debt.dueDay ?? 15, debt.lastPaymentDate, refDate);
+    expect(initialStatus.isUpToDateThisMonth).toBe(false);
+    expect(initialStatus.nextDueDate.getMonth()).toBe(9); // Octubre (0-indexed)
+    expect(initialStatus.nextDueDate.getDate()).toBe(15);
+
+    // 2. Realizar un pago el día 10
+    useDebtsStore.getState().payPersonalDebt(debt.id, 100, {
+      installmentsCount: 1,
+      nominalAmountExtinguished: 100,
+    });
+
+    const paidDebt = useDebtsStore.getState().personalDebts.find((d) => d.id === debt.id)!;
+    expect(paidDebt.remainingAmount).toBe(1100);
+    expect(paidDebt.paidInstallments).toBe(1);
+    expect(paidDebt.lastPaymentDate).toBeDefined();
+
+    // Con el pago realizado, getDebtDueStatus marca que está al día este mes y proyecta a Noviembre
+    const paidStatus = getDebtDueStatus(paidDebt.dueDay ?? 15, paidDebt.lastPaymentDate, refDate);
+    expect(paidStatus.isUpToDateThisMonth).toBe(true);
+    expect(paidStatus.status).toBe('up_to_date');
+    expect(paidStatus.nextDueDate.getMonth()).toBe(10); // Noviembre (0-indexed)
+    expect(paidStatus.nextDueDate.getDate()).toBe(15);
+
+    // 3. Revertir el pago mediante revertPersonalDebtPayment
+    useDebtsStore.getState().revertPersonalDebtPayment(debt.id, 100, {
+      installmentsCount: 1,
+      nominalAmountExtinguished: 100,
+    });
+
+    // 4. Verificar que remainingAmount y paidInstallments se restauran
+    const revertedDebt = useDebtsStore.getState().personalDebts.find((d) => d.id === debt.id)!;
+    expect(revertedDebt.remainingAmount).toBe(1200);
+    expect(revertedDebt.paidInstallments).toBe(0);
+    expect(revertedDebt.settled).toBe(false);
+    expect(revertedDebt.lastPaymentDate).toBeUndefined();
+
+    // 5. Verificar que ante getDebtDueStatus ya NO dice que está al día en el mes actual (vuelve a estar pendiente el 15 de Octubre)
+    const revertedStatus = getDebtDueStatus(revertedDebt.dueDay ?? 15, revertedDebt.lastPaymentDate, refDate);
+    expect(revertedStatus.isUpToDateThisMonth).toBe(false);
+    expect(revertedStatus.status).not.toBe('up_to_date');
+    expect(revertedStatus.nextDueDate.getMonth()).toBe(9); // Octubre (0-indexed)
+    expect(revertedStatus.nextDueDate.getDate()).toBe(15);
+  });
+
+  it('Caso 21: Tolerancia del Centavo Residual (IEEE-754) en compras a cuotas de terceros ($100 en 3 cuotas con 3 abonos de $33.33)', () => {
+    // 1. Iniciar en Octubre 2026
+    const octRefDate = new Date('2026-10-05T12:00:00Z');
+    jest.setSystemTime(octRefDate);
+
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Carlos Gómez',
+      cardName: 'Visa Signature',
+      concept: 'Laptop cuotas',
+      amount: 100,
+      installmentsCount: 3,
+      monthlyInstallmentAmount: 33.33,
+    });
+
+    const getCharge = (): ThirdPartyCardCharge =>
+      useDebtsStore.getState().thirdPartyCharges.find((c) => c.concept === 'Laptop cuotas')!;
+
+    expect(getCharge().remainingAmount).toBe(100);
+    expect(getCharge().settled).toBe(false);
+    expect(getCharge().paidInstallmentsCount).toBe(0);
+
+    // 2. Primer abono de $33.33 en Octubre
+    useDebtsStore.getState().recordMonthlyPersonAbono('Carlos Gómez', 33.33);
+    const chargeAfter1 = getCharge();
+    expect(chargeAfter1.remainingAmount).toBe(66.67);
+    expect(chargeAfter1.paidInstallmentsCount).toBe(1);
+    expect(chargeAfter1.settled).toBe(false);
+
+    // 3. Segundo abono de $33.33 en Noviembre
+    const novRefDate = new Date('2026-11-05T12:00:00Z');
+    jest.setSystemTime(novRefDate);
+
+    useDebtsStore.getState().recordMonthlyPersonAbono('Carlos Gómez', 33.33);
+    const chargeAfter2 = getCharge();
+    expect(chargeAfter2.remainingAmount).toBe(33.34);
+    expect(chargeAfter2.paidInstallmentsCount).toBe(2);
+    expect(chargeAfter2.settled).toBe(false);
+
+    // 4. Tercer abono de $33.33 en Diciembre
+    const decRefDate = new Date('2026-12-05T12:00:00Z');
+    jest.setSystemTime(decRefDate);
+
+    useDebtsStore.getState().recordMonthlyPersonAbono('Carlos Gómez', 33.33);
+    const chargeAfter3 = getCharge();
+
+    // 5. Verificar liquidación completa: remainingAmount === 0, settled === true, sin quedar abierta por $0.01
+    expect(chargeAfter3.remainingAmount).toBe(0);
+    expect(chargeAfter3.settled).toBe(true);
+    expect(chargeAfter3.settledAt).toBeDefined();
+    expect(chargeAfter3.paidInstallmentsCount).toBe(3);
+
+    // 6. Validar también liquidación directa mediante recordThirdPartyInstallmentAbono
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Mariana Gómez',
+      cardName: 'Visa Signature',
+      concept: 'Monitor cuotas',
+      amount: 100,
+      installmentsCount: 3,
+      monthlyInstallmentAmount: 33.33,
+    });
+    const monitorCharge = useDebtsStore.getState().thirdPartyCharges.find((c) => c.concept === 'Monitor cuotas')!;
+    useDebtsStore.getState().recordThirdPartyInstallmentAbono(monitorCharge.id, 33.33);
+    useDebtsStore.getState().recordThirdPartyInstallmentAbono(monitorCharge.id, 33.33);
+    useDebtsStore.getState().recordThirdPartyInstallmentAbono(monitorCharge.id, 33.33);
+    const monitorAfter3 = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === monitorCharge.id)!;
+    expect(monitorAfter3.remainingAmount).toBe(0);
+    expect(monitorAfter3.settled).toBe(true);
+    expect(monitorAfter3.settledAt).toBeDefined();
+    expect(monitorAfter3.paidInstallmentsCount).toBe(3);
+  });
+
+  it('Caso 22: Calibración de Semáforos en Dashboard (niveles preventivos warning, urgent, today, overdue)', () => {
+    // 1. Para daysRemaining = 5: nivel preventivo 'warning' (amarillo/dorado #FFD60A), etiqueta "Próximo (5d)", nunca "normal" verde
+    const warningStatus = getDashboardUrgencyStatus(5);
+    expect(warningStatus.level).toBe('warning');
+    expect(warningStatus.color).toBe('#FFD60A');
+    expect(warningStatus.label).toBe('Próximo (5d)');
+    expect(warningStatus.text).toBe('Próximo');
+    expect(warningStatus.bg).toBe('rgba(255, 214, 10, 0.15)');
+    expect(warningStatus.badgeBg).toBe('rgba(255, 214, 10, 0.15)');
+    expect(warningStatus.level).not.toBe('normal');
+    expect(warningStatus.color).not.toBe('#00FFA3');
+
+    // 2. Para daysRemaining = 2: nivel 'urgent' (naranja)
+    const urgentStatus = getDashboardUrgencyStatus(2);
+    expect(urgentStatus.level).toBe('urgent');
+    expect(urgentStatus.color).toBe('#FF9F0A');
+    expect(urgentStatus.label).toBe('¡Por vencer! (2d)');
+    expect(urgentStatus.text).toBe('¡Por vencer!');
+    expect(urgentStatus.bg).toBe('rgba(255, 159, 10, 0.15)');
+
+    // 3. Para daysRemaining = 0: nivel 'today' (rojo)
+    const todayStatus = getDashboardUrgencyStatus(0);
+    expect(todayStatus.level).toBe('today');
+    expect(todayStatus.color).toBe('#FF453A');
+    expect(todayStatus.label).toBe('¡Vence hoy! (Hoy)');
+    expect(todayStatus.text).toBe('¡Vence hoy!');
+    expect(todayStatus.bg).toBe('rgba(255, 69, 58, 0.15)');
+
+    // 4. Para daysRemaining = -1: nivel 'overdue' (rojo)
+    const overdueStatus = getDashboardUrgencyStatus(-1);
+    expect(overdueStatus.level).toBe('overdue');
+    expect(overdueStatus.color).toBe('#FF453A');
+    expect(overdueStatus.label).toBe('Vencido');
+    expect(overdueStatus.text).toBe('Vencido');
+    expect(overdueStatus.bg).toBe('rgba(255, 69, 58, 0.15)');
+
+    // 5. Para daysRemaining = 10 (> 7 días): nivel 'normal' (verde)
+    const normalStatus = getDashboardUrgencyStatus(10);
+    expect(normalStatus.level).toBe('normal');
+    expect(normalStatus.color).toBe('#00FFA3');
+    expect(normalStatus.label).toBe('En plazo (10d)');
+    expect(normalStatus.text).toBe('En plazo');
+    expect(normalStatus.bg).toBe('rgba(0, 255, 163, 0.1)');
+
+    // 6. Validar equivalencia con alias getDashboardUrgency (export getUrgencyStatus del dashboard)
+    expect(getDashboardUrgency(5)).toEqual(warningStatus);
+    expect(getDashboardUrgency(2)).toEqual(urgentStatus);
+    expect(getDashboardUrgency(0)).toEqual(todayStatus);
   });
 });
 

@@ -288,9 +288,9 @@ const CardDetailScreen = (): JSX.Element => {
     }, 0);
 
     // 3. Consumos de terceros asociados a esta tarjeta
-    const isDateInCurrentBillingCycle = (dateStr?: string): boolean => {
-      if (!dateStr) return false;
-      const dt = new Date(dateStr);
+    const isDateInCurrentBillingCycle = (dateVal?: string | number | Date): boolean => {
+      if (!dateVal) return false;
+      const dt = new Date(dateVal);
       if (isNaN(dt.getTime())) return false;
       const d = dt.getDate();
       const m = dt.getMonth();
@@ -335,8 +335,8 @@ const CardDetailScreen = (): JSX.Element => {
             ? (c.totalAmount || c.amount || rem)
             : (c.monthlyInstallmentAmount && c.monthlyInstallmentAmount > 0
                 ? c.monthlyInstallmentAmount
-                : rem);
-        return acc + Math.min(rem, normalQuota);
+                : (c.totalAmount || c.amount || rem) / count);
+        return acc + normalQuota;
       } else {
         const retainedQuota =
           c.currentPeriodPaidAmount && c.currentPeriodPaidAmount > 0
@@ -350,7 +350,13 @@ const CardDetailScreen = (): JSX.Element => {
 
     // 4. Pagos de tarjeta aplicados
     const payments = transactions
-      .filter((t) => t.type === 'card_payment' && t.cardId === card.id)
+      .filter(
+        (t) =>
+          t.type === 'card_payment' &&
+          (t.cardId === card.id ||
+            (t.cardName && card.name && t.cardName.toLowerCase() === card.name.toLowerCase())) &&
+          isDateInCurrentBillingCycle(t.date)
+      )
       .reduce((sum, t) => sum + (t.amount ?? 0), 0);
 
     // 5. Consolidación contable

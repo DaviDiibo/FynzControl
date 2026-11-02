@@ -99,6 +99,7 @@ export type AuthState = {
   ) => Promise<AuthResponse & { message?: string }>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
+  initializeAuth: () => Promise<void>;
   updateActivity: () => void;
   setPin: (pin: string | null) => void;
   lockApp: () => void;
@@ -165,7 +166,8 @@ export const useAuthStore = create<AuthState>()(
               isLocked: false,
               isLoading: false,
             });
-            syncService.syncAll().catch(() => {});
+            syncService.syncAll(mappedUser.id).catch(() => {});
+            syncService.startRealtimeSubscription(mappedUser.id);
             return { error: null };
           }
 
@@ -336,7 +338,8 @@ export const useAuthStore = create<AuthState>()(
                 isLocked: false,
                 isLoading: false,
               });
-              syncService.syncAll().catch(() => {});
+              syncService.syncAll(mappedUser.id).catch(() => {});
+              syncService.startRealtimeSubscription(mappedUser.id);
               return { error: null };
             } else {
               set({ isLoading: false });
@@ -357,6 +360,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: async (): Promise<void> => {
+        syncService.stopRealtimeSubscription();
         const currentUser = get().user;
         if (currentUser?.id) {
           try {
@@ -389,6 +393,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { data, error } = await supabase.auth.getSession();
           if (error || !data.session?.user) {
+            syncService.stopRealtimeSubscription();
             set({
               isAuthenticated: false,
               user: null,
@@ -428,10 +433,15 @@ export const useAuthStore = create<AuthState>()(
             user: mappedUser,
             isLoading: false,
           });
-          syncService.syncAll().catch(() => {});
+          syncService.syncAll(mappedUser.id).catch(() => {});
+          syncService.startRealtimeSubscription(mappedUser.id);
         } catch {
           set({ isLoading: false });
         }
+      },
+
+      initializeAuth: async (): Promise<void> => {
+        return get().checkAuth();
       },
 
       updateActivity: (): void => {
@@ -474,7 +484,7 @@ export const useAuthStore = create<AuthState>()(
 );
 
 supabase.auth.onAuthStateChange((event, session) => {
-  if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+  if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
     if (session?.user) {
       const u = session.user;
       const userName =
@@ -507,9 +517,11 @@ supabase.auth.onAuthStateChange((event, session) => {
         user: mappedUser,
         isLoading: false,
       });
-      syncService.syncAll().catch(() => {});
+      syncService.syncAll(mappedUser.id).catch(() => {});
+      syncService.startRealtimeSubscription(mappedUser.id);
     }
   } else if (event === 'SIGNED_OUT') {
+    syncService.stopRealtimeSubscription();
     purgeAllDomainStores();
     useAuthStore.setState({
       isAuthenticated: false,

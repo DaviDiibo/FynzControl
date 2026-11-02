@@ -289,6 +289,10 @@ const NewTransactionModal = (): JSX.Element => {
         parsedExpenseInstallments > 1
           ? parsedExpenseInstallments
           : undefined,
+      relatedDebtId:
+        operationType === 'expense' && selectedDebtId ? selectedDebtId : undefined,
+      relatedLoanId:
+        operationType === 'income' && selectedLoanId ? selectedLoanId : undefined,
     });
 
     if (operationType === 'expense' && selectedDebtId) {

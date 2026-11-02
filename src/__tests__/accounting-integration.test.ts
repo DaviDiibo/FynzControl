@@ -7,6 +7,7 @@ import {
 import { useDebtsStore } from '../store/debts-store';
 import { useCardsStore } from '../store/cards-store';
 import { toDeterministicUuid } from '../lib/sync-adapters';
+import { computeCardBillingStatement } from '../utils/card-accounting';
 
 describe('Integración Contable: Amortizaciones, Cobros, Reversiones y Abonos en Dos Fases', () => {
   beforeEach(() => {
@@ -1239,5 +1240,196 @@ describe('Integración Contable: Amortizaciones, Cobros, Reversiones y Abonos en
     ]);
     expect(didRevertNone).toBe(false);
   });
+  it('Caso 17: Blindaje de Pagos por Ciclo y Facturación Íntegra de Cuotas de Terceros', () => {
+    // 1. Configuración de tiempo fijo y tarjeta con día de corte 20 y fecha de pago 5
+    jest.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+    const testCard = {
+      id: 'card-test-shield-1',
+      name: 'Visa Platinum',
+      bankName: 'Banco Santander',
+      closingDay: 20,
+      paymentDay: 5,
+      cutOffDay: 20,
+      creditLimit: 5000,
+      isDefault: true,
+      createdAt: '2026-10-01T00:00:00Z',
+    };
+    useCardsStore.setState({ cards: [testCard], banks: [] });
+
+    // 2. Compra diferida de tercero con abono parcial:
+    // Carlos compra laptop por $600 diferida a 6 cuotas ($100/mes)
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Carlos Gómez',
+      cardName: 'Visa Platinum',
+      cardId: 'card-test-shield-1',
+      concept: 'Laptop cuotas',
+      amount: 600,
+      installmentsCount: 6,
+      date: '2026-10-10T12:00:00Z',
+    });
+
+    // Compra corriente de tercero (1 cuota):
+    // Andrés compra cena por $50 (1 cuota, compromiso del mes: $50)
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Andrés López',
+      cardName: 'Visa Platinum',
+      cardId: 'card-test-shield-1',
+      concept: 'Cena equipo',
+      amount: 50,
+      installmentsCount: 1,
+      date: '2026-10-10T12:00:00Z',
+    });
+
+    const laptopCharge = useDebtsStore.getState().thirdPartyCharges.find((c) => c.concept === 'Laptop cuotas')!;
+    const cenaCharge = useDebtsStore.getState().thirdPartyCharges.find((c) => c.concept === 'Cena equipo')!;
+
+    // Compra propia directa en el ciclo de octubre ($150)
+    useTransactionsStore.getState().addTransaction({
+      title: 'Supermercado propio',
+      amount: 150,
+      type: 'expense',
+      category: 'Alimentación',
+      paymentMethod: 'credit_card',
+      cardId: 'card-test-shield-1',
+      date: '2026-10-12T12:00:00Z',
+    });
+
+    // Verificación previa a abonos:
+    // Cuotas pactadas: Laptop = $100, Cena = $50, Compras directas = $150
+    // Total rawMonthDue = $300
+    let statementOct = computeCardBillingStatement({
+      card: testCard,
+      transactions: useTransactionsStore.getState().transactions,
+      personalDebts: useDebtsStore.getState().personalDebts,
+      thirdPartyCharges: useDebtsStore.getState().thirdPartyCharges,
+      referenceDate: new Date('2026-10-15T12:00:00Z'),
+    });
+    expect(statementOct.thirdPartyMonthDue).toBe(150); // 100 + 50
+    expect(statementOct.cycleTransactionsTotal).toBe(150);
+    expect(statementOct.rawMonthDue).toBe(300);
+    expect(statementOct.cardCurrentMonthDebt).toBe(300);
+    expect(statementOct.cardPayments).toBe(0);
+
+    // 3. Andrés hace un abono PARCIAL de $30 para la cena de $50 (le restan $20)
+    useDebtsStore.getState().recordMonthlyPersonAbono('Andrés López', 30);
+    const cenaActualizada = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === cenaCharge.id)!;
+    expect(cenaActualizada.remainingAmount).toBe(20);
+    expect(cenaActualizada.settled).toBe(false);
+
+    // Carlos hace un abono PARCIAL de $40 para su cuota de $100 (le restan $60 de la cuota del mes)
+    useDebtsStore.getState().recordMonthlyPersonAbono('Carlos Gómez', 40);
+    const laptopActualizada = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === laptopCharge.id)!;
+    expect(laptopActualizada.remainingAmount).toBe(560);
+    expect(laptopActualizada.settled).toBe(false);
+
+    // FACTURACIÓN ÍNTEGRA ANTE EL BANCO:
+    // Aunque Andrés abonó $30 y Carlos abonó $40, el banco emisor cobra la cuota pactada del mes al 100%:
+    // Laptop = $100, Cena = $50 -> thirdPartyMonthDue DEBE seguir siendo $150 (sin ser recortada por remainingAmount)
+    statementOct = computeCardBillingStatement({
+      card: testCard,
+      transactions: useTransactionsStore.getState().transactions,
+      personalDebts: useDebtsStore.getState().personalDebts,
+      thirdPartyCharges: useDebtsStore.getState().thirdPartyCharges,
+      referenceDate: new Date('2026-10-15T12:00:00Z'),
+    });
+    expect(statementOct.thirdPartyMonthDue).toBe(150);
+    expect(statementOct.rawMonthDue).toBe(300); // 150 (terceros) + 150 (propio)
+    expect(statementOct.cardCurrentMonthDebt).toBe(300);
+
+    // 4. Pago de tarjeta en el ciclo de octubre:
+    // El usuario paga la totalidad del resumen de octubre ($300) el día 16 de octubre (antes del corte del día 20)
+    useTransactionsStore.getState().addTransaction({
+      title: 'Pago Tarjeta Octubre',
+      amount: 300,
+      type: 'card_payment',
+      category: 'Pago Tarjeta',
+      cardId: 'card-test-shield-1',
+      date: '2026-10-16T12:00:00Z',
+    });
+
+    // En octubre, el pago es reconocido y salda la factura del ciclo
+    statementOct = computeCardBillingStatement({
+      card: testCard,
+      transactions: useTransactionsStore.getState().transactions,
+      personalDebts: useDebtsStore.getState().personalDebts,
+      thirdPartyCharges: useDebtsStore.getState().thirdPartyCharges,
+      referenceDate: new Date('2026-10-16T12:00:00Z'),
+    });
+    expect(statementOct.cardPayments).toBe(300);
+    expect(statementOct.cardCurrentMonthDebt).toBe(0);
+    expect(statementOct.isStatementPaid).toBe(true);
+
+    // 5. BLINDAJE DE PAGOS EN NUEVO CICLO POSTERIOR AL CORTE:
+    // Viajamos en el tiempo a Noviembre (después del corte del 20 de Octubre): 10 de Noviembre de 2026
+    jest.setSystemTime(new Date('2026-11-10T12:00:00Z'));
+
+    // En el nuevo ciclo, el usuario realiza una nueva compra de $80 con la tarjeta
+    useTransactionsStore.getState().addTransaction({
+      title: 'Compra nueva Noviembre',
+      amount: 80,
+      type: 'expense',
+      category: 'Tecnología',
+      paymentMethod: 'credit_card',
+      cardId: 'card-test-shield-1',
+      date: '2026-11-10T12:00:00Z',
+    });
+
+    const statementNov = computeCardBillingStatement({
+      card: testCard,
+      transactions: useTransactionsStore.getState().transactions,
+      personalDebts: useDebtsStore.getState().personalDebts,
+      thirdPartyCharges: useDebtsStore.getState().thirdPartyCharges,
+      referenceDate: new Date('2026-11-10T12:00:00Z'),
+    });
+
+    // En Noviembre:
+    // - El pago de $300 de Octubre NO debe computarse en cardPayments de Noviembre (cardPayments = 0)
+    expect(statementNov.cardPayments).toBe(0);
+    // - Las compras directas del ciclo de noviembre son $80
+    expect(statementNov.cycleTransactionsTotal).toBe(80);
+    // - La cuota mensual diferida de la laptop exige $100 ante el banco
+    expect(statementNov.thirdPartyMonthDue).toBe(150); // 100 (cuota 2 laptop) + 50 (cena aún no 100% saldada)
+    expect(statementNov.rawMonthDue).toBe(230); // 150 (terceros) + 80 (compras directas)
+    // - La deuda exigible del mes NO es absorbida por el pago del mes anterior:
+    expect(statementNov.cardCurrentMonthDebt).toBe(230);
+    expect(statementNov.isStatementPaid).toBe(false);
+
+    // 6. El usuario paga la factura de Noviembre ($230) el día 12 de Noviembre
+    useTransactionsStore.getState().addTransaction({
+      title: 'Pago Tarjeta Noviembre',
+      amount: 230,
+      type: 'card_payment',
+      category: 'Pago Tarjeta',
+      cardId: 'card-test-shield-1',
+      date: '2026-11-12T12:00:00Z',
+    });
+
+    const statementNovPagado = computeCardBillingStatement({
+      card: testCard,
+      transactions: useTransactionsStore.getState().transactions,
+      personalDebts: useDebtsStore.getState().personalDebts,
+      thirdPartyCharges: useDebtsStore.getState().thirdPartyCharges,
+      referenceDate: new Date('2026-11-12T12:00:00Z'),
+    });
+    expect(statementNovPagado.cardPayments).toBe(230);
+    expect(statementNovPagado.cardCurrentMonthDebt).toBe(0);
+    expect(statementNovPagado.isStatementPaid).toBe(true);
+
+    // 7. Salto al ciclo posterior al corte de Noviembre (Diciembre de 2026)
+    jest.setSystemTime(new Date('2026-12-05T12:00:00Z'));
+    const statementDic = computeCardBillingStatement({
+      card: testCard,
+      transactions: useTransactionsStore.getState().transactions,
+      personalDebts: useDebtsStore.getState().personalDebts,
+      thirdPartyCharges: useDebtsStore.getState().thirdPartyCharges,
+      referenceDate: new Date('2026-12-05T12:00:00Z'),
+    });
+    // Ninguno de los pagos de Octubre ($300) ni de Noviembre ($230) afecta a Diciembre:
+    expect(statementDic.cardPayments).toBe(0);
+    expect(statementDic.thirdPartyMonthDue).toBe(150);
+    expect(statementDic.cardCurrentMonthDebt).toBe(150);
+    expect(statementDic.isStatementPaid).toBe(false);
+  });
+
 });
 
