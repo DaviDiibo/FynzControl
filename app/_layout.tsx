@@ -1,6 +1,7 @@
 import { useEffect, type JSX } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { Slot, useRouter, useSegments } from 'expo-router';
+import Head from 'expo-router/head';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -28,6 +29,12 @@ const RootLayout = (): JSX.Element | null => {
   }, []);
 
   useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      document.title = 'ControlFynz';
+    }
+  }, [segments]);
+
+  useEffect(() => {
     if (!isHydrated) return;
 
     const inAuthGroup = segments[0] === '(auth)';
@@ -45,6 +52,9 @@ const RootLayout = (): JSX.Element | null => {
 
   return (
     <SafeAreaProvider>
+      <Head>
+        <title>ControlFynz</title>
+      </Head>
       {/* @ts-ignore - expo-status-bar types in SDK 57 omit backgroundColor and translucent */}
       <StatusBar style="light" backgroundColor="#121212" translucent={false} />
       <Slot />

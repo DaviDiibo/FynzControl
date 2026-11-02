@@ -7,6 +7,30 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[TASK-STATIC-WEB-TAB-TITLE]` (2026-11-02): Título Estático de la Pestaña Web ('ControlFynz'):
+  - Archivos intervenidos:
+    * `app/_layout.tsx`
+    * `app.json`
+  - Resumen técnico:
+    * En `app/_layout.tsx`: Se importaron `Head` desde `'expo-router/head'` y `Platform` desde `'react-native'`, renderizando `<Head><title>ControlFynz</title></Head>` en el layout raíz y sincronizando `document.title = 'ControlFynz'` en Web (`Platform.OS === 'web'`). Con esto se elimina el fallback del navegador que mostraba nombres de rutas (`index`, `transactions`, `debts`) o URLs con query strings de autenticación (`?code=...`), fijando el título permanentemente en "ControlFynz".
+    * En `app.json`: Se actualizaron `"name": "ControlFynz"` y `"slug": "controlfynz"` eliminando `"temp_app"`.
+  - Decisiones permanentes y verificación:
+    * Título Web Estático: Usar `<Head><title>ControlFynz</title></Head>` y `document.title` en `app/_layout.tsx` para mantener el título de la pestaña del navegador estático sin que se altere por rutas o query params de OAuth.
+    * Verificación y calidad: 121/121 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-TRANSACTIONS-CHRONOLOGICAL-SORTING]` (2026-11-01): Ordenamiento Cronológico Estricto de Movimientos (Fecha y Hora):
+  - Archivos intervenidos:
+    * `app/(app)/(tabs)/transactions.tsx`
+    * `app/(app)/(tabs)/index.tsx`
+    * `src/services/sync-service.ts`
+  - Resumen técnico:
+    * En `app/(app)/(tabs)/transactions.tsx`: Se ordenó descendentemente el array `monthTransactions` por timestamp exacto (`t.date || t.createdAt`), logrando que los grupos diarios y los movimientos individuales se listen estrictamente por hora de ingreso (más reciente arriba).
+    * En `app/(app)/(tabs)/index.tsx`: Se ordenaron las transacciones por fecha y hora antes de tomar los 5 primeros elementos con `.slice(0, 5)` para el widget de "Últimos Movimientos".
+    * En `src/services/sync-service.ts`: Se añadió `.order('date', { ascending: false })` en las consultas de Supabase y se garantizó el orden cronológico en `mergeById` y eventos Realtime. Aplicación de la Regla 9 de limpieza continua de código.
+  - Decisiones permanentes y verificación:
+    * Ordenamiento Cronológico de Movimientos: SIEMPRE ordenar transacciones descendentemente por timestamp (`b.date - a.date`) antes de agrupar o hacer `.slice()`, garantizando que el último gasto registrado aparezca en la cima.
+    * Verificación y calidad: 121/121 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[TASK-MULTI-DEVICE-CLOUD-SYNC]` (2026-11-01): Sincronización Automática Multi-Dispositivo (Supabase Pull & Realtime):
   - Archivos intervenidos:
     * `src/store/auth-store.ts`

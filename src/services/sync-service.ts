@@ -45,7 +45,20 @@ const mergeById = <T extends { id: string }>(local: T[], remote: T[]): T[] => {
   for (const item of remote) {
     map.set(toDeterministicUuid(item.id), item);
   }
-  return Array.from(map.values());
+  const result = Array.from(map.values());
+
+  // Si los elementos corresponden a transacciones, ordenar cronológicamente descendente
+  if (result.length > 0 && 'date' in result[0] && 'category' in result[0]) {
+    return result.sort((a, b) => {
+      const itemA = a as { date?: string | number | Date; createdAt?: string | number | Date };
+      const itemB = b as { date?: string | number | Date; createdAt?: string | number | Date };
+      const timeA = new Date(itemA.date || itemA.createdAt || 0).getTime();
+      const timeB = new Date(itemB.date || itemB.createdAt || 0).getTime();
+      return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+    });
+  }
+
+  return result;
 };
 
 let isSyncInProgress = false;
@@ -274,7 +287,8 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
       .from('transactions')
       .select('*')
       .eq('user_id', targetUserId)
-      .is('deleted_at', null);
+      .is('deleted_at', null)
+      .order('date', { ascending: false });
     if (txErr) {
       return { success: false, offline: true, error: txErr.message };
     }
@@ -480,21 +494,10 @@ export const startRealtimeSubscription = (userId: string): void => {
           }
         } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
           const incomingTx = rowToTransaction(newRow);
-          const targetUuid = toDeterministicUuid(incomingTx.id);
           const currentTx = useTransactionsStore.getState().transactions;
-          const exists = currentTx.some((t) => toDeterministicUuid(t.id) === targetUuid);
-
-          if (exists) {
-            useTransactionsStore.setState({
-              transactions: currentTx.map((t) =>
-                toDeterministicUuid(t.id) === targetUuid ? incomingTx : t
-              ),
-            });
-          } else {
-            useTransactionsStore.setState({
-              transactions: [incomingTx, ...currentTx],
-            });
-          }
+          useTransactionsStore.setState({
+            transactions: mergeById(currentTx, [incomingTx]),
+          });
         }
         triggerDebouncedPull();
       }
