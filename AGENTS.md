@@ -76,6 +76,11 @@ This is an Expo/React Native mobile application. Prioritize mobile-first pattern
 - Si una tarea trata sobre lógica contable, corrección de bugs, modelos de datos o persistencia, la apariencia visual preexistente DEBE mantenerse 100% inalterada.
 - Todo agente y subagente debe acotar cualquier cambio estrictamente a lo que fue pedido, sin iniciativas estéticas unilaterales.
 
+### 9. Higiene y Limpieza Continua de Código (Zero Dead Code & Refactorización Inmediata)
+- **Eliminación Proactiva de Código Obsoleto**: Ante cualquier modificación, refactorización o nueva funcionalidad, es mandatorio auditar si alguna función, variable, tipo, componente, importación o rama lógica previa queda en desuso, obsoleta o redundante.
+- **Tolerancia Cero a Código Basura**: Todo código inalcanzable, sustituido o ineficiente debe removerse o refactorizarse inmediatamente en el mismo ciclo de trabajo, manteniendo la base de código compacta, limpia y ágil.
+- **Integridad y Verificación**: La purga de código obsoleto no debe romper referencias cruzadas ni contratos preexistentes, debiendo confirmarse siempre con `npx tsc --noEmit` y `npm test`.
+
 ## Expo has changed — do not trust your training data
 
 Expo ships breaking changes every SDK release. APIs you remember are likely renamed, moved, or removed. Before writing any code that touches an Expo, EAS, or React Native API:

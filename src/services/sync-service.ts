@@ -1,3 +1,4 @@
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { useCardsStore, setCardSyncHandlers } from '../store/cards-store';
 import { useDebtsStore, setDebtSyncHandlers } from '../store/debts-store';
@@ -48,6 +49,7 @@ const mergeById = <T extends { id: string }>(local: T[], remote: T[]): T[] => {
 };
 
 let isSyncInProgress = false;
+let isPullInProgress = false;
 
 export type SyncStateListener = (isSyncing: boolean) => void;
 let isInitialSyncActive = false;
@@ -67,6 +69,8 @@ export const subscribeToInitialSync = (listener: SyncStateListener): (() => void
 };
 
 export const isInitialSyncing = (): boolean => isInitialSyncActive;
+
+export const isSyncing = (): boolean => isSyncInProgress || isPullInProgress;
 
 export const syncPush = async (userId?: string): Promise<SyncResult> => {
   try {
@@ -190,17 +194,26 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
   }
 };
 
-export const syncPull = async (userId: string): Promise<SyncResult> => {
+export const syncPull = async (userId?: string): Promise<SyncResult> => {
+  if (isPullInProgress) {
+    return { success: false, offline: true, error: 'Sincronización pull ya en curso' };
+  }
+  isPullInProgress = true;
   try {
-    if (!userId) {
-      return { success: false, offline: true, error: 'Usuario no autenticado' };
+    let targetUserId = userId;
+    if (!targetUserId) {
+      const { data, error } = await supabase.auth.getSession();
+      if (error || !data.session?.user?.id) {
+        return { success: false, offline: true, error: 'Usuario no autenticado' };
+      }
+      targetUserId = data.session.user.id;
     }
 
     // 1. Pull bancos
     const { data: banksData, error: banksErr } = await supabase
       .from('banks')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', targetUserId)
       .is('deleted_at', null);
     if (banksErr) {
       return { success: false, offline: true, error: banksErr.message };
@@ -210,7 +223,7 @@ export const syncPull = async (userId: string): Promise<SyncResult> => {
     const { data: cardsData, error: cardsErr } = await supabase
       .from('credit_cards')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', targetUserId)
       .is('deleted_at', null);
     if (cardsErr) {
       return { success: false, offline: true, error: cardsErr.message };
@@ -220,7 +233,7 @@ export const syncPull = async (userId: string): Promise<SyncResult> => {
     const { data: peopleData, error: peopleErr } = await supabase
       .from('people')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', targetUserId)
       .is('deleted_at', null);
     if (peopleErr) {
       return { success: false, offline: true, error: peopleErr.message };
@@ -230,7 +243,7 @@ export const syncPull = async (userId: string): Promise<SyncResult> => {
     const { data: debtsData, error: debtsErr } = await supabase
       .from('personal_debts')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', targetUserId)
       .is('deleted_at', null);
     if (debtsErr) {
       return { success: false, offline: true, error: debtsErr.message };
@@ -240,7 +253,7 @@ export const syncPull = async (userId: string): Promise<SyncResult> => {
     const { data: loansData, error: loansErr } = await supabase
       .from('friend_loans')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', targetUserId)
       .is('deleted_at', null);
     if (loansErr) {
       return { success: false, offline: true, error: loansErr.message };
@@ -250,7 +263,7 @@ export const syncPull = async (userId: string): Promise<SyncResult> => {
     const { data: chargesData, error: chargesErr } = await supabase
       .from('third_party_card_charges')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', targetUserId)
       .is('deleted_at', null);
     if (chargesErr) {
       return { success: false, offline: true, error: chargesErr.message };
@@ -260,7 +273,7 @@ export const syncPull = async (userId: string): Promise<SyncResult> => {
     const { data: txData, error: txErr } = await supabase
       .from('transactions')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', targetUserId)
       .is('deleted_at', null);
     if (txErr) {
       return { success: false, offline: true, error: txErr.message };
@@ -320,6 +333,8 @@ export const syncPull = async (userId: string): Promise<SyncResult> => {
     const errMessage =
       error instanceof Error ? error.message : 'Error de conexión o red durante syncPull';
     return { success: false, offline: true, error: errMessage };
+  } finally {
+    isPullInProgress = false;
   }
 };
 
@@ -405,10 +420,176 @@ export const deleteRemoteRecord = async (
 };
 
 export const triggerBackgroundPush = (): void => {
-  // Ejecutar en microtarea / segundo plano sin bloquear
   setTimeout(() => {
     syncPush().catch(() => {});
   }, 300);
+};
+
+let activeRealtimeChannel: RealtimeChannel | null = null;
+let activeRealtimeUserId: string | null = null;
+let realtimeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+export const startRealtimeSubscription = (userId: string): void => {
+  if (!userId) return;
+
+  if (activeRealtimeUserId === userId && activeRealtimeChannel) {
+    return;
+  }
+
+  if (activeRealtimeChannel) {
+    stopRealtimeSubscription();
+  }
+
+  activeRealtimeUserId = userId;
+
+  const triggerDebouncedPull = (): void => {
+    if (realtimeDebounceTimer) {
+      clearTimeout(realtimeDebounceTimer);
+    }
+    realtimeDebounceTimer = setTimeout(() => {
+      if (activeRealtimeUserId) {
+        syncPull(activeRealtimeUserId).catch(() => {});
+      }
+    }, 1200);
+  };
+
+  const channel = supabase.channel(`user-sync-${userId}`);
+
+  channel
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'transactions',
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload) => {
+        const eventType = payload.eventType;
+        const newRow = payload.new as TransactionRow | null;
+        const oldRow = payload.old as Partial<TransactionRow> | null;
+
+        if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
+          const idToDelete = newRow?.id || oldRow?.id;
+          if (idToDelete) {
+            const targetUuid = toDeterministicUuid(idToDelete);
+            const currentTx = useTransactionsStore.getState().transactions;
+            useTransactionsStore.setState({
+              transactions: currentTx.filter((t) => toDeterministicUuid(t.id) !== targetUuid),
+            });
+          }
+        } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+          const incomingTx = rowToTransaction(newRow);
+          const targetUuid = toDeterministicUuid(incomingTx.id);
+          const currentTx = useTransactionsStore.getState().transactions;
+          const exists = currentTx.some((t) => toDeterministicUuid(t.id) === targetUuid);
+
+          if (exists) {
+            useTransactionsStore.setState({
+              transactions: currentTx.map((t) =>
+                toDeterministicUuid(t.id) === targetUuid ? incomingTx : t
+              ),
+            });
+          } else {
+            useTransactionsStore.setState({
+              transactions: [incomingTx, ...currentTx],
+            });
+          }
+        }
+        triggerDebouncedPull();
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'personal_debts',
+        filter: `user_id=eq.${userId}`,
+      },
+      () => {
+        triggerDebouncedPull();
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'credit_cards',
+        filter: `user_id=eq.${userId}`,
+      },
+      () => {
+        triggerDebouncedPull();
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'banks',
+        filter: `user_id=eq.${userId}`,
+      },
+      () => {
+        triggerDebouncedPull();
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'third_party_card_charges',
+        filter: `user_id=eq.${userId}`,
+      },
+      () => {
+        triggerDebouncedPull();
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'friend_loans',
+        filter: `user_id=eq.${userId}`,
+      },
+      () => {
+        triggerDebouncedPull();
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'people',
+        filter: `user_id=eq.${userId}`,
+      },
+      () => {
+        triggerDebouncedPull();
+      }
+    );
+
+  channel.subscribe();
+  activeRealtimeChannel = channel;
+};
+
+export const stopRealtimeSubscription = (): void => {
+  if (realtimeDebounceTimer) {
+    clearTimeout(realtimeDebounceTimer);
+    realtimeDebounceTimer = null;
+  }
+  if (activeRealtimeChannel) {
+    try {
+      supabase.removeChannel(activeRealtimeChannel);
+    } catch {
+      // Ignorar errores al desuscribir
+    }
+    activeRealtimeChannel = null;
+  }
+  activeRealtimeUserId = null;
 };
 
 export const syncService = {
@@ -417,9 +598,11 @@ export const syncService = {
   syncAll,
   deleteRemoteRecord,
   triggerBackgroundPush,
-  isSyncing: (): boolean => isSyncInProgress,
+  isSyncing,
   isInitialSyncing,
   subscribeToInitialSync,
+  startRealtimeSubscription,
+  stopRealtimeSubscription,
 };
 
 setTransactionSyncHandlers({

@@ -1003,7 +1003,12 @@ const DebtsScreen = (): JSX.Element => {
                       item.remainingAmount < item.totalAmount;
 
                   return (
-                    <View key={item.id} style={[styles.card, isWide && styles.cardWide]}>
+                    <TouchableOpacity
+                      key={item.id}
+                      activeOpacity={0.85}
+                      onPress={() => router.push({ pathname: '/debts/[id]', params: { id: item.id } })}
+                      style={[styles.card, isWide && styles.cardWide]}
+                    >
                     {/* Cabecera de la tarjeta: Título + Entidad Bancaria + Urgencia / Liquidado */}
                     <View style={styles.cardHeader}>
                       <View
@@ -1060,7 +1065,10 @@ const DebtsScreen = (): JSX.Element => {
                           hasRecordedPayments && styles.loanDeleteButtonProtected,
                         ]}
                         activeOpacity={0.7}
-                        onPress={() => setPersonalDebtToDelete(item)}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          setPersonalDebtToDelete(item);
+                        }}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         accessibilityRole="button"
                         accessibilityLabel="Eliminar préstamo"
@@ -1204,13 +1212,16 @@ const DebtsScreen = (): JSX.Element => {
                       <TouchableOpacity
                         style={styles.payDebtButton}
                         activeOpacity={0.7}
-                        onPress={() => handleOpenDebtPaymentModal(item)}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleOpenDebtPaymentModal(item);
+                        }}
                       >
                         <Ionicons name="checkmark-circle-outline" size={15} color="#00FFA3" />
                         <Text style={styles.payDebtButtonText}>REGISTRAR PAGO DE CUOTA</Text>
                       </TouchableOpacity>
                     )}
-                    </View>
+                    </TouchableOpacity>
                   );
                 })}
                     </View>
@@ -1665,7 +1676,12 @@ const DebtsScreen = (): JSX.Element => {
                           : (loan.paidAmount || 0) > 0 ||
                             loan.remainingAmount < (loan.totalAmount ?? loan.totalToCollect);
                         return (
-                          <View key={loan.id} style={[styles.card, isWide && styles.cardWide]}>
+                          <TouchableOpacity
+                            key={loan.id}
+                            activeOpacity={0.85}
+                            onPress={() => router.push({ pathname: '/debts/[id]', params: { id: loan.id } })}
+                            style={[styles.card, isWide && styles.cardWide]}
+                          >
                           <View style={styles.cardHeader}>
                             <View style={styles.cardIconWrapperBlue}>
                               <Ionicons name="cash-outline" size={18} color="#0A84FF" />
@@ -1697,7 +1713,10 @@ const DebtsScreen = (): JSX.Element => {
                                 hasLoanPayments && styles.loanDeleteButtonProtected,
                               ]}
                               activeOpacity={0.7}
-                              onPress={() => setFriendLoanToDelete(loan)}
+                              onPress={(e) => {
+                                e.stopPropagation();
+                                setFriendLoanToDelete(loan);
+                              }}
                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                               accessibilityRole="button"
                               accessibilityLabel="Eliminar préstamo"
@@ -1793,7 +1812,10 @@ const DebtsScreen = (): JSX.Element => {
                             <TouchableOpacity
                               style={styles.collectButton}
                               activeOpacity={0.7}
-                              onPress={() => handleOpenAbonoModal(loan)}
+                              onPress={(e) => {
+                                e.stopPropagation();
+                                handleOpenAbonoModal(loan);
+                              }}
                             >
                               <Ionicons name="cash-outline" size={15} color="#FFFFFF" />
                               <Text style={styles.collectButtonText}>💵 REGISTRAR ABONO</Text>
@@ -1811,7 +1833,7 @@ const DebtsScreen = (): JSX.Element => {
                               )}
                             </View>
                           )}
-                        </View>
+                        </TouchableOpacity>
                       );
                     })}
                     </View>
@@ -1857,7 +1879,12 @@ const DebtsScreen = (): JSX.Element => {
                         const paidInstallments = item.paidInstallments || totalInstallments;
 
                         return (
-                          <View key={`settled-${item.id}`} style={[styles.card, styles.settledCardMuted, isWide && styles.cardWide]}>
+                          <TouchableOpacity
+                            key={`settled-${item.id}`}
+                            activeOpacity={0.85}
+                            onPress={() => router.push({ pathname: '/debts/[id]', params: { id: item.id } })}
+                            style={[styles.card, styles.settledCardMuted, isWide && styles.cardWide]}
+                          >
                           <View style={styles.cardHeader}>
                             <View style={styles.cardIconWrapperNeon}>
                               <Ionicons name="checkmark-done" size={18} color="#00FFA3" />
@@ -1877,7 +1904,10 @@ const DebtsScreen = (): JSX.Element => {
                             <TouchableOpacity
                               style={styles.loanDeleteButtonProtected}
                               activeOpacity={0.7}
-                              onPress={() => setPersonalDebtToDelete(item)}
+                              onPress={(e) => {
+                          e.stopPropagation();
+                          setPersonalDebtToDelete(item);
+                        }}
                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                               accessibilityRole="button"
                               accessibilityLabel="Eliminar préstamo"
@@ -1959,7 +1989,7 @@ const DebtsScreen = (): JSX.Element => {
                               </Text>
                             )}
                           </View>
-                        </View>
+                        </TouchableOpacity>
                       );
                     })}
                     </View>
@@ -1982,7 +2012,12 @@ const DebtsScreen = (): JSX.Element => {
                     <View style={[styles.cardsGrid, isWide && styles.cardsGridWide]}>
                       {settledFriendLoans.map((loan) => {
                         return (
-                          <View key={`settled-loan-${loan.id}`} style={[styles.card, styles.settledCardMuted, isWide && styles.cardWide]}>
+                          <TouchableOpacity
+                            key={`settled-loan-${loan.id}`}
+                            activeOpacity={0.85}
+                            onPress={() => router.push({ pathname: '/debts/[id]', params: { id: loan.id } })}
+                            style={[styles.card, styles.settledCardMuted, isWide && styles.cardWide]}
+                          >
                           <View style={styles.cardHeader}>
                             <View style={styles.cardIconWrapperNeon}>
                               <Ionicons name="checkmark-done" size={18} color="#00FFA3" />
@@ -2000,7 +2035,10 @@ const DebtsScreen = (): JSX.Element => {
                             <TouchableOpacity
                               style={styles.loanDeleteButtonProtected}
                               activeOpacity={0.7}
-                              onPress={() => setFriendLoanToDelete(loan)}
+                              onPress={(e) => {
+                                e.stopPropagation();
+                                setFriendLoanToDelete(loan);
+                              }}
                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                               accessibilityRole="button"
                               accessibilityLabel="Eliminar préstamo"
@@ -2049,7 +2087,7 @@ const DebtsScreen = (): JSX.Element => {
                               </Text>
                             )}
                           </View>
-                        </View>
+                        </TouchableOpacity>
                       );
                     })}
                     </View>

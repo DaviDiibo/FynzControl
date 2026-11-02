@@ -73,9 +73,9 @@ export const computeCardBillingStatement = ({
   }, 0);
 
   // 2. Cargos de terceros vinculados a la tarjeta y verificación de ciclo
-  const isDateInCurrentBillingCycle = (dateStr?: string): boolean => {
-    if (!dateStr) return false;
-    const dt = new Date(dateStr);
+  const isDateInCurrentBillingCycle = (dateVal?: string | number | Date): boolean => {
+    if (!dateVal) return false;
+    const dt = new Date(dateVal);
     if (isNaN(dt.getTime())) return false;
     const d = dt.getDate();
     const m = dt.getMonth();
@@ -118,8 +118,8 @@ export const computeCardBillingStatement = ({
           ? (c.totalAmount || c.amount || rem)
           : (c.monthlyInstallmentAmount && c.monthlyInstallmentAmount > 0
               ? c.monthlyInstallmentAmount
-              : rem);
-      return acc + Math.min(rem, normalQuota);
+              : (c.totalAmount || c.amount || rem) / count);
+      return acc + normalQuota;
     } else {
       const retainedQuota =
         c.currentPeriodPaidAmount && c.currentPeriodPaidAmount > 0
@@ -165,7 +165,8 @@ export const computeCardBillingStatement = ({
     .filter(
       (t) =>
         t.type === 'card_payment' &&
-        (t.cardId === card.id || isMatchingCardName(t.cardName))
+        (t.cardId === card.id || isMatchingCardName(t.cardName)) &&
+        isDateInCurrentBillingCycle(t.date)
     )
     .reduce((sum, t) => sum + (t.amount ?? 0), 0);
 

@@ -7,6 +7,76 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[TASK-MULTI-DEVICE-CLOUD-SYNC]` (2026-11-01): Sincronización Automática Multi-Dispositivo (Supabase Pull & Realtime):
+  - Archivos intervenidos:
+    * `src/store/auth-store.ts`
+    * `src/hooks/use-app-hydration.ts`
+    * `src/services/sync-service.ts`
+  - Resumen técnico:
+    * En `src/store/auth-store.ts`: Se incluyó el evento `'INITIAL_SESSION'` en el listener `onAuthStateChange` y en `checkAuth()`/`initializeAuth()`, asegurando que al recargar la página en navegador (F5) o iniciar la app con sesión persistente (Google o email), se ejecute inmediatamente `syncService.syncAll()` e inicialice la conexión Realtime.
+    * En `src/hooks/use-app-hydration.ts`: Se añadió el efecto post-hidratación para ejecutar `syncPull()` silencioso cuando `isHydrated === true` con sesión activa. Se implementó Focus Sync (`window.addEventListener('focus')` en Web y `AppState.change === 'active'` en móvil con cooldown de 6s y protección de concurrencia) para actualizar automáticamente los datos al regresar a la ventana.
+    * En `src/services/sync-service.ts`: Se implementó el canal Supabase Realtime (`user-sync-${userId}`) escuchando `postgres_changes` en el schema `public` filtrado por `user_id`. Las transacciones y mutaciones remotas se reconcilian atómicamente en `useTransactionsStore` en tiempo real (vía WebSockets). Se aplicó la Regla 9 de limpieza de código en los tres archivos intervenidos.
+  - Decisiones permanentes y verificación:
+    * Sincronización al Recargar y Realtime: Escuchar siempre `'INITIAL_SESSION'` en Supabase auth para disparar `syncAll` al refrescar el navegador (F5) y mantener suscripción a WebSockets para replicación instantánea entre dispositivos.
+    * Verificación y calidad: 121/121 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-DEBT-DETAIL-SCREEN-PHASE-2]` (2026-11-01): Pantalla de Detalle Histórico y Bitácora por Deuda (`debts/[id]`):
+  - Archivos intervenidos:
+    * `app/(app)/debts/[id].tsx` (NUEVO ARCHIVO)
+    * `app/(app)/(tabs)/debts.tsx`
+  - Resumen técnico:
+    * Creación de la pantalla completa `app/(app)/debts/[id].tsx` para deudas personales (`PersonalDebt`) y préstamos a amigos (`FriendLoan`) con TypeScript estricto, tema cyberpunk (fondo `#121212`, tarjetas `#1E1E1E`, acentos neón `#00FFA3`).
+    * Integra Header con retorno, entidad/persona y badge semafórico reactivo de 5 niveles.
+    * Hero Card Financiero con saldo restante, monto original, barra de progreso de cuotas amortizadas, cuota mensual nominal, ahorros acumulados por liquidación anticipada y fechas de ciclo de vida.
+    * Bitácora Histórica de Pagos que agrupa y lista cronológicamente las transacciones vinculadas por `relatedDebtId` o `relatedLoanId`, indicando fecha, monto, cuenta bancaria utilizada, modo de pago y estado vacío amigable.
+    * Barra de acción inferior flotante para registrar pagos y abonos directamente desde el detalle con modales conectados y doble impacto contable.
+    * En `app/(app)/(tabs)/debts.tsx`: conexión del tap de tarjetas activas y liquidadas a `router.push({ pathname: '/debts/[id]', params: { id: item.id } })` con protección `e.stopPropagation()` en botones de acción rápida.
+  - Decisiones permanentes y verificación:
+    * Pantalla de Detalle de Deudas: Despliegue en ruta dinámica `app/(app)/debts/[id].tsx` para auditoría y trazabilidad histórica de deudas personales y préstamos, preservando la navegación canónica de Expo Router y el aislamiento de modales de acción rápida.
+    * Verificación y calidad: 121/121 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-DASHBOARD-URGENCY-CALIBRATION-1B]` (2026-11-01): Calibración de Semáforos en Dashboard:
+  - Archivos intervenidos:
+    * `src/components/dashboard/upcoming-debts-card.tsx`
+    * `src/__tests__/debt-dates-liquidation.test.ts`
+  - Resumen técnico:
+    * En `upcoming-debts-card.tsx`: Se implementó y exportó `getDashboardUrgencyStatus` calibrando un semáforo preventivo de 4 niveles (`overdue` < 0d en rojo, `today` = 0d en rojo, `urgent` <= 3d en naranja, `warning` <= 7d en amarillo dorado `#FFD60A`, y `normal` > 7d en verde). Se eliminó la disonancia donde ítems que alertaban en el widget con 4 a 7 días restantes mostraban un badge verde "En plazo", presentando ahora la advertencia dorada "Próximo (Xd)".
+    * En `src/__tests__/debt-dates-liquidation.test.ts`: Se añadió el Caso 22 validando los 5 estados de urgencia, verificando que 5 días devuelve `warning` (#FFD60A) y nunca verde.
+  - Decisiones permanentes y verificación:
+    * Semáforos Preventivos en Dashboard: Alertas entre 4 y 7 días deben usar nivel `warning` (amarillo/dorado `#FFD60A`) y nunca `normal` verde, manteniendo la coherencia semafórica preventiva.
+    * Verificación y calidad: 121/121 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-DEBTS-ACCOUNTING-INTEGRITY-1A]` (2026-11-01): Integridad Contable en Deudas y Transacciones:
+  - Archivos intervenidos:
+    * `app/(app)/(modal)/new-transaction.tsx`
+    * `src/store/debts-store.ts`
+    * `src/__tests__/debt-dates-liquidation.test.ts`
+  - Resumen técnico:
+    * En `new-transaction.tsx`: Se agregaron explícitamente `relatedDebtId: selectedDebtId` y `relatedLoanId: selectedLoanId` a la llamada a `addTransaction`, permitiendo la trazabilidad directa por ID para anulaciones y reversiones sin depender de coincidencias por texto en el título.
+    * En `src/store/debts-store.ts`:
+      - En `revertPersonalDebtPayment`: Se sincronizó `lastPaymentDate`, permitiendo restaurar la fecha previa o resetear a `undefined` al anular pagos, asegurando que `getDebtDueStatus` devuelva la cuota a su estado real de pendiente/vencida.
+      - En `recordMonthlyPersonAbono` y `recordThirdPartyInstallmentAbono`: Se incorporó la tolerancia de punto flotante IEEE-754 (`newRemaining <= 0.05 || newPaidInstallments >= cargo.installmentsCount`), forzando `newRemaining = 0`, `settled = true` y `paidInstallmentsCount = cargo.installmentsCount`, evitando que compras a cuotas queden abiertas indefinidamente por centavos residuales ($0.01).
+    * En `src/__tests__/debt-dates-liquidation.test.ts`: Se agregaron los Casos 20 y 21 con Fake Timers validando la reversión de fechas de deuda y la liquidación exacta del centavo residual.
+  - Decisiones permanentes y verificación:
+    * Trazabilidad de Deudas en Transacciones: Toda transacción generada para deudas o préstamos DEBE portar `relatedDebtId` o `relatedLoanId` para garantizar su reversión exacta por ID sin depender de descripciones o títulos.
+    * Reversión de `lastPaymentDate`: Al revertir un pago de deuda personal, `lastPaymentDate` debe resetearse para no fingir que la deuda sigue al día en el período actual.
+    * Tolerancia de Centavos IEEE-754 en Terceros: Liquidar con `newRemaining <= 0.05` para absorber centavos residuales generados por divisiones inexactas en cuotas periódicas.
+    * Verificación y calidad: 120/120 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-CARD-CYCLE-PAYMENTS-ISOLATION]` (2026-11-01): Blindaje de Pagos por Ciclo y Facturación Íntegra de Cuotas de Terceros:
+  - Archivos intervenidos:
+    * `src/utils/card-accounting.ts`
+    * `app/(app)/cards/[id].tsx`
+    * `src/__tests__/accounting-integration.test.ts`
+  - Resumen técnico:
+    * En `src/utils/card-accounting.ts` (`computeCardBillingStatement`) y `app/(app)/cards/[id].tsx`, se acotó la sumatoria de transacciones `card_payment` utilizando `isDateInCurrentBillingCycle(t.date)`, aislando los pagos históricos de tarjetas estrictamente a su ciclo correspondiente y evitando que pagos previos absorban deudas en ciclos posteriores.
+    * En el cálculo de cuotas de terceros (`thirdPartyMonthDue` / `tpMonthDue`), se garantizó que los consumos activos de terceros facturen la cuota íntegra mensual pactada (`normalQuota`), evitando que abonos parciales del amigo al titular reduzcan el monto nominal exigido por el banco en la factura física mensual.
+    * En `src/__tests__/accounting-integration.test.ts`, se incorporó el Caso 17 validando con Fake Timers la independencia de pagos entre múltiples ciclos consecutivos y la exigencia de cuota completa ante el banco.
+  - Decisiones permanentes y verificación:
+    * Acotamiento de Pagos de Tarjeta por Ciclo: Los pagos de tarjeta (`card_payment`) SIEMPRE deben filtrarse con `isDateInCurrentBillingCycle(t.date)` al calcular la deuda del extracto actual. De lo contrario, los pagos de meses anteriores persisten y distorsionan períodos futuros.
+    * Facturación Nominal de Cuotas de Terceros: El extracto de la tarjeta debe exigir la cuota pactada completa (`normalQuota`), ya que el banco factura el 100% independientemente de si el tercero abonó parcial o totalmente antes del vencimiento.
+    * Verificación y calidad: 118/118 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[TASK-CARD-DUE-DATE-DASHBOARD-FIX]` (2026-11-01): Corrección de cálculo de vencimiento y alertas de tarjetas en Dashboard:
   - Archivos intervenidos:
     * `src/components/dashboard/upcoming-debts-card.tsx`

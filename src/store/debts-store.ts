@@ -186,6 +186,7 @@ export interface DebtsState {
       installmentsCount?: number;
       nominalAmountExtinguished?: number;
       discountSaved?: number;
+      previousPaymentDate?: string | null;
     }
   ) => void;
   addThirdPartyCharge: (charge: {
@@ -460,6 +461,15 @@ export const useDebtsStore = create<DebtsState>()(
 
             const isInstallmentLoan =
               debt.debtType === 'installment_loan' || Boolean(debt.totalInstallments);
+
+            // Determinar lastPaymentDate revertido
+            let newLastPaymentDate: string | undefined;
+            if (options?.previousPaymentDate !== undefined) {
+              newLastPaymentDate = options.previousPaymentDate || undefined;
+            } else {
+              newLastPaymentDate = undefined;
+            }
+
             if (isInstallmentLoan && debt.paidInstallments !== undefined) {
               const newPaid = Math.max(0, (debt.paidInstallments || 0) - count);
               const newPrepaidLast =
@@ -478,6 +488,7 @@ export const useDebtsStore = create<DebtsState>()(
                 totalActualPaid: newTotalActualPaid,
                 settled: isSettled,
                 settledAt: isSettled ? (debt.settledAt ?? new Date().toISOString()) : undefined,
+                lastPaymentDate: newLastPaymentDate,
               };
             }
 
@@ -490,6 +501,7 @@ export const useDebtsStore = create<DebtsState>()(
               totalActualPaid: newTotalActualPaid,
               settled: isSettled,
               settledAt: isSettled ? (debt.settledAt ?? new Date().toISOString()) : undefined,
+              lastPaymentDate: newLastPaymentDate,
             };
           }),
         }));
@@ -613,10 +625,9 @@ export const useDebtsStore = create<DebtsState>()(
         set((state) => ({
           thirdPartyCharges: state.thirdPartyCharges.map((charge) => {
             if (charge.id !== chargeId) return charge;
-            const newRemaining = Math.max(0, charge.remainingAmount - amount);
+            let newRemaining = Math.max(0, charge.remainingAmount - amount);
             const newPeriodPaid = (charge.currentPeriodPaidAmount || 0) + amount;
-            const isFullySettled = newRemaining <= 0;
-            const newPaidInstallments = charge.monthlyInstallmentAmount > 0
+            let newPaidInstallments = charge.monthlyInstallmentAmount > 0
               ? Math.min(
                   charge.installmentsCount,
                   Math.max(
@@ -629,6 +640,16 @@ export const useDebtsStore = create<DebtsState>()(
                   )
                 )
               : charge.paidInstallmentsCount;
+
+            const isFullySettled =
+              newRemaining <= 0.05 ||
+              (charge.installmentsCount > 1 && newPaidInstallments >= charge.installmentsCount);
+
+            if (isFullySettled) {
+              newRemaining = 0;
+              newPaidInstallments = charge.installmentsCount;
+            }
+
             return {
               ...charge,
               remainingAmount: Number(newRemaining.toFixed(2)),
@@ -821,9 +842,8 @@ export const useDebtsStore = create<DebtsState>()(
               : false;
             const basePeriodPaid = isSameCycleMonth ? (cargo.currentPeriodPaidAmount || 0) : 0;
 
-            const newRemaining = Math.max(0, parseFloat((cargo.remainingAmount - totalAppliedToCharge).toFixed(2)));
+            let newRemaining = Math.max(0, parseFloat((cargo.remainingAmount - totalAppliedToCharge).toFixed(2)));
             const newPeriodPaid = parseFloat((basePeriodPaid + totalAppliedToCharge).toFixed(2));
-            const isFullySettled = newRemaining <= 0.0001;
             let newPaidInstallments =
               cargo.monthlyInstallmentAmount > 0
                 ? Math.min(
@@ -838,7 +858,13 @@ export const useDebtsStore = create<DebtsState>()(
                     )
                   )
                 : cargo.paidInstallmentsCount;
+
+            const isFullySettled =
+              newRemaining <= 0.05 ||
+              (cargo.installmentsCount > 1 && newPaidInstallments >= cargo.installmentsCount);
+
             if (isFullySettled) {
+              newRemaining = 0;
               newPaidInstallments = cargo.installmentsCount;
             }
 
@@ -847,7 +873,7 @@ export const useDebtsStore = create<DebtsState>()(
               currentPeriodPaidAmount: newPeriodPaid,
               paidInstallmentsCount: newPaidInstallments,
               settled: isFullySettled,
-              settledAt: isFullySettled ? nowIso : undefined,
+              settledAt: isFullySettled ? (cargo.settledAt ?? nowIso) : undefined,
               lastPaymentDate: nowIso,
             });
           }
