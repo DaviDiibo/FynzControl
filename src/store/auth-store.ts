@@ -475,32 +475,17 @@ export const useAuthStore = create<AuthState>()(
       deleteAccount: async (): Promise<{ success: boolean; error?: string }> => {
         set({ isLoading: true });
         try {
-          syncService.stopRealtimeSubscription();
-          const stateUser = get().user;
-          let userId = stateUser?.id;
-          if (!userId) {
-            try {
-              const { data } = await supabase.auth.getSession();
-              userId = data.session?.user?.id;
-            } catch {
-              // Silencioso
-            }
+          const { error: rpcError } = await supabase.rpc('delete_user_account');
+          if (rpcError) {
+            set({ isLoading: false });
+            return { success: false, error: rpcError.message };
           }
 
-          if (userId) {
-            try {
-              const { error: rpcError } = await supabase.rpc('delete_user_account');
-              if (rpcError) {
-                console.warn('RPC delete_user_account notice:', rpcError.message);
-              }
-            } catch {
-              // Manejo limpio si la función RPC no existe en la base de datos o falla
-            }
-            try {
-              await supabase.auth.signOut();
-            } catch {
-              // Ignorar fallas de red en signOut
-            }
+          syncService.stopRealtimeSubscription();
+          try {
+            await supabase.auth.signOut();
+          } catch {
+            // Silencioso si falla la red en signOut tras eliminación en servidor
           }
 
           purgeAllDomainStores();
@@ -508,9 +493,9 @@ export const useAuthStore = create<AuthState>()(
           await safeStorage.removeItem('auth-storage-v2');
 
           set({
-            session: null,
-            user: null,
             isAuthenticated: false,
+            user: null,
+            session: null,
             isLoading: false,
             isLocked: false,
             pin: null,
