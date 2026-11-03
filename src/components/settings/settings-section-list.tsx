@@ -324,6 +324,68 @@ export const SettingsSectionList = ({
         </View>
         <Text style={styles.itemValue}>Sesión: Persistente (Segura)</Text>
       </View>
+
+      <View style={styles.separator} />
+
+      <TouchableOpacity
+        style={styles.actionRow}
+        onPress={() => router.push('/terms')}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Ver Términos y Condiciones"
+      >
+        <View style={styles.itemLeftFlex}>
+          <Ionicons
+            name="document-text-outline"
+            size={18}
+            color={colors.primary}
+          />
+          <View style={styles.textContainer}>
+            <Text style={styles.rowTitle}>Términos y Condiciones</Text>
+            <Text style={styles.rowSubtitle}>
+              Condiciones de uso y alcance del servicio
+            </Text>
+          </View>
+        </View>
+        <View style={styles.actionRight}>
+          <Ionicons
+            name="chevron-forward-outline"
+            size={16}
+            color={colors.textSecondary}
+          />
+        </View>
+      </TouchableOpacity>
+
+      <View style={styles.separator} />
+
+      <TouchableOpacity
+        style={styles.actionRow}
+        onPress={() => router.push('/privacy')}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Ver Política de Privacidad"
+      >
+        <View style={styles.itemLeftFlex}>
+          <Ionicons
+            name="shield-checkmark-outline"
+            size={18}
+            color={colors.primary}
+          />
+          <View style={styles.textContainer}>
+            <Text style={styles.rowTitle}>Política de Privacidad</Text>
+            <Text style={styles.rowSubtitle}>
+              Tratamiento de datos y modelo seguro
+            </Text>
+          </View>
+        </View>
+        <View style={styles.actionRight}>
+          <Ionicons
+            name="chevron-forward-outline"
+            size={16}
+            color={colors.textSecondary}
+          />
+        </View>
+      </TouchableOpacity>
     </View>
   );
 

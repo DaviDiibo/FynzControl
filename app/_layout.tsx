@@ -11,6 +11,8 @@ import { useAppHydration } from '../src/hooks/use-app-hydration';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
+const PUBLIC_ROUTES = ['terms', 'privacy'];
+
 const RootLayout = (): JSX.Element | null => {
   const isHydrated = useAppHydration();
   const segments = useSegments();
@@ -38,7 +40,9 @@ const RootLayout = (): JSX.Element | null => {
     if (!isHydrated) return;
 
     const inAuthGroup = segments[0] === '(auth)';
-    if (!isAuthenticated && !inAuthGroup) {
+    const isPublicRoute = Boolean(segments[0] && PUBLIC_ROUTES.includes(segments[0]));
+
+    if (!isAuthenticated && !inAuthGroup && !isPublicRoute) {
       router.replace('/(auth)/login');
     } else if (isAuthenticated && inAuthGroup) {
       // @ts-expect-error Expo router group route canonical path
