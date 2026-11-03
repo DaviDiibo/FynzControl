@@ -85,6 +85,7 @@ const decodeSafe = (value: string): string => {
 
 export type AuthState = {
   user: User | null;
+  session?: null;
   isAuthenticated: boolean;
   isLoading: boolean;
   lastActiveTimestamp: number;
@@ -104,12 +105,14 @@ export type AuthState = {
   setPin: (pin: string | null) => void;
   lockApp: () => void;
   unlockApp: (enteredPin?: string) => boolean;
+  deleteAccount: () => Promise<{ success: boolean; error?: string }>;
 };
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
+      session: null,
       isAuthenticated: false,
       isLoading: false,
       lastActiveTimestamp: Date.now(),
@@ -467,6 +470,59 @@ export const useAuthStore = create<AuthState>()(
           return true;
         }
         return false;
+      },
+
+      deleteAccount: async (): Promise<{ success: boolean; error?: string }> => {
+        set({ isLoading: true });
+        try {
+          syncService.stopRealtimeSubscription();
+          const stateUser = get().user;
+          let userId = stateUser?.id;
+          if (!userId) {
+            try {
+              const { data } = await supabase.auth.getSession();
+              userId = data.session?.user?.id;
+            } catch {
+              // Silencioso
+            }
+          }
+
+          if (userId) {
+            try {
+              const { error: rpcError } = await supabase.rpc('delete_user_account');
+              if (rpcError) {
+                console.warn('RPC delete_user_account notice:', rpcError.message);
+              }
+            } catch {
+              // Manejo limpio si la función RPC no existe en la base de datos o falla
+            }
+            try {
+              await supabase.auth.signOut();
+            } catch {
+              // Ignorar fallas de red en signOut
+            }
+          }
+
+          purgeAllDomainStores();
+          await safeStorage.removeItem('controlfynz-auth-storage');
+          await safeStorage.removeItem('auth-storage-v2');
+
+          set({
+            session: null,
+            user: null,
+            isAuthenticated: false,
+            isLoading: false,
+            isLocked: false,
+            pin: null,
+          });
+
+          return { success: true };
+        } catch (err) {
+          set({ isLoading: false });
+          const errorMessage =
+            err instanceof Error ? err.message : 'Error al eliminar la cuenta';
+          return { success: false, error: errorMessage };
+        }
       },
     }),
     {

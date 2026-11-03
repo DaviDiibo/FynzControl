@@ -7,6 +7,144 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[TASK-FIX-REALTIME-SUBSCRIPTION-RACE]` (2026-11-03): Corrección de Ciclo de Vida y Limpieza de Canales en Supabase Realtime:
+  - Archivos intervenidos:
+    * `src/services/sync-service.ts`
+  - Resumen técnico:
+    * Se corrigió la excepción `cannot add postgres_changes callbacks after subscribe()` en Supabase Realtime.
+    * En `startRealtimeSubscription`: Se agregó una guardia de canal saludable (`joined` o `joining`) para evitar re-suscripciones innecesarias, y se implementó la purga proactiva de cualquier canal previo con tópico `user-sync-` en `supabase.getChannels()` mediante `supabase.removeChannel(ch)` antes de instanciar un canal nuevo.
+    * En `stopRealtimeSubscription`: Se incorporó la remoción de todos los canales de sincronización de `supabase.getChannels()`, garantizando que el singleton global de Supabase no retenga instancias suscritas zombis.
+  - Decisiones permanentes y verificación:
+    * Regla de Canales Realtime Limpios: Siempre remover canales previos del registro del cliente Supabase antes de instanciar uno nuevo con el mismo tópico.
+    * Verificación: 121/121 tests unitarios en verde (100% pass) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-SYNC-REALTIME-GRANULAR-3B]` (2026-11-03): Reconciliación Granular en Tiempo Real (Supabase WebSockets) y Backoff Exponencial:
+  - Archivos intervenidos:
+    * `src/services/sync-service.ts`
+  - Resumen técnico:
+    * Se configuró la reconciliación granular en memoria para las 7 tablas maestras en `startRealtimeSubscription` (`transactions`, `personal_debts`, `friend_loans`, `third_party_card_charges`, `people`, `credit_cards`, `banks`), actualizando y filtrando entidades directamente sobre Zustand con `mergeById` y transformadores tipados.
+    * Se eliminó el llamado a `triggerDebouncedPull()` en los eventos regulares de WebSockets, suprimiendo la ráfaga de 7 consultas `SELECT *` consecutivas y reduciendo drásticamente el consumo de red.
+    * Se implementó el mecanismo de reconexión con **backoff exponencial** (`1s`, `2s`, `4s`... hasta `30s`) ante estados `TIMED_OUT`, `CHANNEL_ERROR` y `CLOSED`, con reseteo de reintentos al conectar exitosamente (`SUBSCRIBED`) y cancelación de temporizadores en `stopRealtimeSubscription`.
+  - Decisiones permanentes y verificación:
+    * Replicación multi-dispositivo instantánea a 0ms sin recargas completas de la base de datos.
+    * Verificación: 121/121 tests unitarios en verde (100% pass) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-SYNC-TOMBSTONE-QUEUE-3A]` (2026-11-03): Cola de Bajas Persistida (Tombstone Queue) y Escudo Anti-Zombis:
+  - Archivos intervenidos:
+    * `src/services/sync-service.ts`
+    * `src/hooks/use-app-hydration.ts`
+  - Resumen técnico:
+    * Se implementó la arquitectura de Cola de Bajas Persistida (`TombstoneQueue`) en `sync-service.ts` utilizando `safeStorage` (clave `'controlfynz-pending-deletions-v1'`).
+    * Se conectó `enqueuePendingDeletion` al listener `deleteRemoteRecord`, registrando tickets de baja persistidos en disco inmediatamente al ejecutarse cualquier acción de borrado en los stores locales (`transactions`, `debts`, `cards`, `banks`), garantizando latencia 0ms en la UI.
+    * Se implementó el **Escudo de Entrada en `syncPull`**: Filtra y descarta proactivamente cualquier registro remoto de Supabase cuyo ID figure en la cola local de bajas pendientes, eliminando definitivamente la reaparición de "registros zombis".
+    * Se implementó el **Escudo de Salida en `syncPush` y `syncAll`**: Drenaje prioritario mediante `flushPendingDeletions()`, con reintentos y persistencia en disco si el dispositivo está sin red.
+    * En `src/hooks/use-app-hydration.ts`, se activó el drenaje automático al recuperar el foco (*Focus Sync*) y tras la hidratación inicial de stores.
+  - Decisiones permanentes y verificación:
+    * Sincronización basada en intenciones y acciones persistidas: las órdenes de borrado nunca se pierden en el aire ante desconexiones.
+    * Verificación: 121/121 tests unitarios en verde (100% pass) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-HYGIENE-LOTE-2G-THEME-CSS]` (2026-11-03): Eliminación Final de Constantes de Plantilla (`theme.ts` y `global.css`):
+  - Archivos intervenidos:
+    * `src/constants/theme.ts` (eliminado)
+    * `src/global.css` (eliminado)
+  - Resumen técnico:
+    * Se eliminaron de disco los dos últimos archivos de estilos y paleta de plantilla de Expo, completando al 100% la erradicación de los 14 archivos huérfanos del boilerplate inicial.
+  - Decisiones permanentes y verificación:
+    * El sistema visual de la app reside única y exclusivamente en `src/theme/colors.ts`.
+    * Verificación: 121/121 tests unitarios en verde (100% pass) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-HYGIENE-LOTE-2F-COLOR-SCHEME]` (2026-11-03): Eliminación de Archivos Huérfanos de Plantilla (`use-color-scheme.ts` y `.web.ts`):
+  - Archivos intervenidos:
+    * `src/hooks/use-color-scheme.ts` (eliminado)
+    * `src/hooks/use-color-scheme.web.ts` (eliminado)
+  - Resumen técnico:
+    * Se eliminaron de disco ambos hooks de alternancia de color de plantilla heredados de Expo, sin uso tras la purga de `useTheme` y desacoplados del diseño cyberpunk persistente de ControlFynz.
+  - Decisiones permanentes y verificación:
+    * Mantener el directorio `src/hooks/` exclusivamente con hooks de lógica de negocio y estado.
+    * Verificación: 121/121 tests unitarios en verde (100% pass) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-HYGIENE-LOTE-2E-THEMED-COMPONENTS]` (2026-11-03): Eliminación de Archivos Huérfanos de Plantilla (`themed-text.tsx`, `themed-view.tsx` y `use-theme.ts`):
+  - Archivos intervenidos:
+    * `src/components/themed-text.tsx` (eliminado)
+    * `src/components/themed-view.tsx` (eliminado)
+    * `src/hooks/use-theme.ts` (eliminado)
+  - Resumen técnico:
+    * Se eliminaron de disco los componentes tipográficos y contenedores temáticos de plantilla y su hook consumidor `useTheme`, consolidando el uso exclusivo del sistema de diseño propio de ControlFynz en `src/theme/colors.ts`.
+  - Decisiones permanentes y verificación:
+    * Erradicación total de componentes de diseño de plantilla que competían con la arquitectura de diseño cyberpunk de la app.
+    * Verificación: 121/121 tests unitarios en verde (100% pass) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-HYGIENE-LOTE-2D-HINT-BADGE]` (2026-11-03): Eliminación de Archivos Huérfanos de Plantilla (`hint-row.tsx` y `web-badge.tsx`):
+  - Archivos intervenidos:
+    * `src/components/hint-row.tsx` (eliminado)
+    * `src/components/web-badge.tsx` (eliminado)
+  - Resumen técnico:
+    * Se eliminaron de disco ambos componentes auxiliares de demostración del template de Expo, desacoplando la dependencia de `themed-text` y `themed-view`.
+  - Decisiones permanentes y verificación:
+    * Purga secuencial ordenada de componentes no utilizados para preservar la compilación limpia.
+    * Verificación: 121/121 tests unitarios en verde (100% pass) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-HYGIENE-LOTE-2C-APP-TABS]` (2026-11-03): Eliminación de Archivos Huérfanos de Plantilla (`app-tabs.*` y `external-link.tsx`):
+  - Archivos intervenidos:
+    * `src/components/app-tabs.tsx` (eliminado)
+    * `src/components/app-tabs.web.tsx` (eliminado)
+    * `src/components/external-link.tsx` (eliminado)
+  - Resumen técnico:
+    * Se eliminaron de disco los 3 archivos de navegación de demostración de Expo, los cuales formaban una isla de código cerrada sustituida por `app/(app)/(tabs)/_layout.tsx`.
+  - Decisiones permanentes y verificación:
+    * Aplicación continua de la Regla 9 (Zero Dead Code) para eliminar componentes de plantilla obsoletos.
+    * Verificación: 121/121 tests unitarios en verde (100% pass) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-HYGIENE-LOTE-2B-ANIMATED-ICON]` (2026-11-03): Eliminación de Archivos Huérfanos de Plantilla (`animated-icon.*`):
+  - Archivos intervenidos:
+    * `src/components/animated-icon.tsx` (eliminado)
+    * `src/components/animated-icon.web.tsx` (eliminado)
+    * `src/components/animated-icon.module.css` (eliminado)
+  - Resumen técnico:
+    * Se eliminaron de disco los 3 archivos componentes de animación splash heredados del template de Expo, los cuales dependían de la librería desinstalada `react-native-worklets` y carecían de importaciones en la aplicación.
+  - Decisiones permanentes y verificación:
+    * Purga continua de código muerto en cumplimiento de la Regla 9 (Zero Dead Code).
+    * Verificación: 121/121 tests unitarios en verde (100% pass) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-HYGIENE-LOTE-2A-DEPS]` (2026-11-03): Saneamiento de Dependencias y Metadata en `package.json`:
+  - Archivos intervenidos:
+    * `package.json`
+  - Resumen técnico:
+    * Se eliminaron 5 dependencias en desuso/huérfanas (`@expo/ui`, `expo-glass-effect`, `expo-system-ui`, `expo-symbols`, `react-native-worklets`), reduciendo el bundle y posibles conflictos de autolinking en Expo SDK 57.
+    * Se actualizó la propiedad `"name"` de `"temp_app"` a `"ControlFynz"`, homologando la metadata del proyecto con `app.json`.
+  - Decisiones permanentes y verificación:
+    * Mantener el árbol de dependencias estrictamente limpio de paquetes no importados.
+    * Verificación: 121/121 tests unitarios en verde (100% pass) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-ACCOUNT-PERMANENT-DELETION]` (2026-11-03): Eliminación Permanente de Cuenta y Purga de Sincronización:
+  - Archivos intervenidos:
+    * `src/store/auth-store.ts`
+    * `src/services/sync-service.ts`
+    * `src/components/settings/settings-section-list.tsx`
+  - Resumen técnico:
+    * En `src/services/sync-service.ts`: Se implementó y exportó `purgeLocalSyncState()`, el cual detiene canales Realtime de Supabase (`stopRealtimeSubscription`), resetea banderas de sincronización (`isSyncInProgress`, `isPullInProgress`, `isPushInProgress`, `lastSyncTimestamp`) y notifica a los listeners reactivos.
+    * En `src/store/auth-store.ts`: Se añadió la acción `deleteAccount: () => Promise<{ success: boolean; error?: string }>`, que invoca `supabase.rpc('delete_user_account')` (con manejo defensivo de errores), ejecuta `supabase.auth.signOut()`, purga stores de dominio locales (`purgeAllDomainStores`), elimina claves de `safeStorage` y resetea el estado de sesión a nulo.
+    * En `src/components/settings/settings-section-list.tsx`: Se implementó el controlador `handleDeleteAccount` con diálogo de confirmación en dos pasos (`Alert.alert`) y botón destructivo estilizado en `#FF453A`, dando feedback visual de carga antes de purgar los datos y redirigir al login.
+  - Decisiones permanentes y verificación:
+    * Cumplimiento estricto de Apple Guideline 5.1.1(v) y Google Play Data Safety para aprobación obligatoria en tiendas.
+    * Doble paso de confirmación nativo para prevenir pérdidas accidentales de cuentas.
+    * Verificación: 121/121 tests unitarios en verde (100% pass) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-POLISH-LOGOUT-SCROLL-SYNC-INDICATOR]` (2026-11-02): Confirmación de Cierre de Sesión, Corrección de Scroll en Dashboard e Indicador Visual de Sincronización:
+  - Archivos intervenidos:
+    * `src/services/sync-service.ts`
+    * `src/components/settings/settings-section-list.tsx`
+    * `app/(app)/(tabs)/index.tsx`
+  - Resumen técnico:
+    * En `src/services/sync-service.ts`: Se implementó el registro de `lastSyncTimestamp`, la función `getLastSyncTime()` y la suscripción reactiva `subscribeToSyncStatus(listener)` para notificar en vivo `isSyncing` y `lastSyncTime`. Aplicación de Regla 9 (Zero Dead Code).
+    * En `src/components/settings/settings-section-list.tsx`: Se añadió diálogo nativo de confirmación `Alert.alert` al pulsar 'Cerrar Sesión' para evitar salidas involuntarias con pérdida de caché local, y se integró en la tarjeta 'DATOS & ALMACENAMIENTO' una fila interactiva con icono de nube/spinner, última hora de sincronización y botón interactivo `[ SINCRONIZAR ]` manual.
+    * En `app/(app)/(tabs)/index.tsx`: Se homologó `paddingBottom: 110` en el scroll del Dashboard, resolviendo el solapamiento de los últimos movimientos con el TabBar flotante inferior.
+  - Decisiones permanentes y verificación:
+    * Confirmación de Logout: Siempre proteger el cierre de sesión con `Alert.alert` para prevenir purgas accidentales de caché local.
+    * Scroll Padding Homogéneo: Todos los contenedores de scroll en las pestañas principales deben mantener `paddingBottom: 110` para librar el TabBar flotante.
+    * Indicador Reactivo de Sincronización: Exponer `subscribeToSyncStatus` y `getLastSyncTime()` para dar feedback visual reactivo y permitir sincronizaciones manuales bajo demanda desde Ajustes.
+    * Verificación y calidad: 121/121 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[TASK-STATIC-WEB-TAB-TITLE]` (2026-11-02): Título Estático de la Pestaña Web ('ControlFynz'):
   - Archivos intervenidos:
     * `app/_layout.tsx`

@@ -62,6 +62,7 @@ export const useAppHydration = (): boolean => {
 
     const currentUser = useAuthStore.getState().user;
     if (currentUser?.id) {
+      syncService.flushPendingDeletions(currentUser.id).catch(() => {});
       syncService.syncPull(currentUser.id).catch(() => {});
       syncService.startRealtimeSubscription(currentUser.id);
     }
@@ -89,6 +90,7 @@ export const useAppHydration = (): boolean => {
       }
 
       lastFocusSyncTimestamp = now;
+      syncService.flushPendingDeletions(currentUser.id).catch(() => {});
       syncService.syncPull(currentUser.id).catch(() => {});
       syncService.startRealtimeSubscription(currentUser.id);
     };
