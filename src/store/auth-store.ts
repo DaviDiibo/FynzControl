@@ -364,26 +364,20 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async (): Promise<void> => {
         syncService.stopRealtimeSubscription();
-        const currentUser = get().user;
-        if (currentUser?.id) {
-          try {
-            await Promise.race([
-              syncService.syncPush(currentUser.id),
-              new Promise((resolve) => setTimeout(resolve, 2000)),
-            ]);
-          } catch {
-            // Silencioso ante falta de conexión
-          }
-        }
         purgeAllDomainStores();
         try {
-          await supabase.auth.signOut();
+          await Promise.allSettled([
+            safeStorage.removeItem('controlfynz-auth-storage'),
+            safeStorage.removeItem('auth-storage-v2'),
+            supabase.auth.signOut({ scope: 'local' }),
+          ]);
         } catch {
-          // Ignorar errores de red para asegurar cierre de sesión local
+          // Silencioso ante contingencias de red
         } finally {
           set({
             isAuthenticated: false,
             user: null,
+            session: null,
             lastActiveTimestamp: Date.now(),
             isLocked: false,
             isLoading: false,
