@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useCardsStore, setCardSyncHandlers } from '../store/cards-store';
 import { useDebtsStore, setDebtSyncHandlers } from '../store/debts-store';
 import { useTransactionsStore, setTransactionSyncHandlers } from '../store/transactions-store';
+import { safeStorage } from '../store/safe-storage';
 import {
   bankToRow,
   rowToBank,
@@ -12,10 +13,13 @@ import {
   rowToPerson,
   debtToRow,
   rowToDebt,
+  rowToDebt as rowToPersonalDebt,
   chargeToRow,
   rowToCharge,
+  rowToCharge as rowToThirdPartyCharge,
   loanToRow,
   rowToLoan,
+  rowToLoan as rowToFriendLoan,
   transactionToRow,
   rowToTransaction,
   toDeterministicUuid,
@@ -27,6 +31,181 @@ import {
   type FriendLoanRow,
   type TransactionRow,
 } from '../lib/sync-adapters';
+
+export type SyncTable =
+  | 'transactions'
+  | 'personal_debts'
+  | 'friend_loans'
+  | 'third_party_card_charges'
+  | 'credit_cards'
+  | 'banks'
+  | 'people';
+
+export type PendingDeletion = {
+  id: string; // ID original o UUID
+  table: SyncTable;
+  deletedAt: string;
+  attempts: number;
+};
+
+export const PENDING_DELETIONS_STORAGE_KEY = 'controlfynz-pending-deletions-v1';
+
+let pendingDeletionsCache: PendingDeletion[] = [];
+let isTombstoneQueueLoaded = false;
+let isFlushingDeletions = false;
+let hasPendingFlushRequest = false;
+
+export const getPendingDeletions = async (): Promise<PendingDeletion[]> => {
+  try {
+    const raw = await safeStorage.getItem(PENDING_DELETIONS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        pendingDeletionsCache = parsed as PendingDeletion[];
+        isTombstoneQueueLoaded = true;
+        return [...pendingDeletionsCache];
+      }
+    }
+  } catch {
+    // Fallback a caché en memoria
+  }
+  isTombstoneQueueLoaded = true;
+  return [...pendingDeletionsCache];
+};
+
+export const getPendingDeletionIdSet = (table: SyncTable): Set<string> => {
+  const set = new Set<string>();
+  for (const item of pendingDeletionsCache) {
+    if (item.table === table) {
+      set.add(item.id);
+      set.add(toDeterministicUuid(item.id));
+    }
+  }
+  return set;
+};
+
+export const enqueuePendingDeletion = async (
+  table: SyncTable,
+  id: string
+): Promise<void> => {
+  if (!isTombstoneQueueLoaded) {
+    await getPendingDeletions();
+  }
+
+  const existingIndex = pendingDeletionsCache.findIndex(
+    (item) =>
+      item.table === table &&
+      (item.id === id || toDeterministicUuid(item.id) === toDeterministicUuid(id))
+  );
+
+  const now = new Date().toISOString();
+  if (existingIndex >= 0) {
+    pendingDeletionsCache[existingIndex] = {
+      ...pendingDeletionsCache[existingIndex],
+      deletedAt: now,
+    };
+  } else {
+    pendingDeletionsCache.push({
+      id,
+      table,
+      deletedAt: now,
+      attempts: 0,
+    });
+  }
+
+  try {
+    await safeStorage.setItem(
+      PENDING_DELETIONS_STORAGE_KEY,
+      JSON.stringify(pendingDeletionsCache)
+    );
+  } catch {
+    // safeStorage maneja fallback a memoria internamente
+  }
+
+  // Disparar en segundo plano flushPendingDeletions sin bloquear al llamador
+  flushPendingDeletions().catch(() => {});
+};
+
+export const flushPendingDeletions = async (
+  userId?: string
+): Promise<{ success: boolean; processed: number }> => {
+  if (isFlushingDeletions) {
+    hasPendingFlushRequest = true;
+    return { success: false, processed: 0 };
+  }
+
+  isFlushingDeletions = true;
+  try {
+    let targetUserId = userId;
+    if (!targetUserId) {
+      const { data, error } = await supabase.auth.getSession();
+      if (error || !data.session?.user?.id) {
+        return { success: false, processed: 0 };
+      }
+      targetUserId = data.session.user.id;
+    }
+
+    const currentDeletions = await getPendingDeletions();
+    if (currentDeletions.length === 0) {
+      return { success: true, processed: 0 };
+    }
+
+    const successfulKeys = new Set<string>();
+    const failedAttemptMap = new Map<string, number>();
+    let processedCount = 0;
+
+    for (const item of currentDeletions) {
+      const itemKey = `${item.table}:${toDeterministicUuid(item.id)}`;
+      try {
+        const uuid = toDeterministicUuid(item.id);
+        const { error } = await supabase
+          .from(item.table)
+          .update({ deleted_at: item.deletedAt })
+          .eq('id', uuid)
+          .eq('user_id', targetUserId);
+
+        if (error) {
+          failedAttemptMap.set(itemKey, item.attempts + 1);
+        } else {
+          successfulKeys.add(itemKey);
+          processedCount++;
+        }
+      } catch {
+        failedAttemptMap.set(itemKey, item.attempts + 1);
+      }
+    }
+
+    // Actualizar la caché conservando cualquier nuevo elemento encolado durante el flush
+    pendingDeletionsCache = pendingDeletionsCache
+      .filter((item) => !successfulKeys.has(`${item.table}:${toDeterministicUuid(item.id)}`))
+      .map((item) => {
+        const itemKey = `${item.table}:${toDeterministicUuid(item.id)}`;
+        const updatedAttempts = failedAttemptMap.get(itemKey);
+        return updatedAttempts !== undefined ? { ...item, attempts: updatedAttempts } : item;
+      });
+
+    try {
+      await safeStorage.setItem(
+        PENDING_DELETIONS_STORAGE_KEY,
+        JSON.stringify(pendingDeletionsCache)
+      );
+    } catch {
+      // safeStorage maneja fallback a memoria internamente
+    }
+
+    return { success: true, processed: processedCount };
+  } catch {
+    return { success: false, processed: 0 };
+  } finally {
+    isFlushingDeletions = false;
+    if (hasPendingFlushRequest) {
+      hasPendingFlushRequest = false;
+      setTimeout(() => {
+        flushPendingDeletions(userId).catch(() => {});
+      }, 100);
+    }
+  }
+};
 
 export type SyncResult = {
   success: boolean;
@@ -63,6 +242,10 @@ const mergeById = <T extends { id: string }>(local: T[], remote: T[]): T[] => {
 
 let isSyncInProgress = false;
 let isPullInProgress = false;
+let isPushInProgress = false;
+let lastSyncTimestamp: string | null = null;
+
+export const getLastSyncTime = (): string | null => lastSyncTimestamp;
 
 export type SyncStateListener = (isSyncing: boolean) => void;
 let isInitialSyncActive = false;
@@ -83,9 +266,41 @@ export const subscribeToInitialSync = (listener: SyncStateListener): (() => void
 
 export const isInitialSyncing = (): boolean => isInitialSyncActive;
 
-export const isSyncing = (): boolean => isSyncInProgress || isPullInProgress;
+export const isSyncing = (): boolean =>
+  isSyncInProgress || isPullInProgress || isPushInProgress;
+
+export type SyncStatus = {
+  isSyncing: boolean;
+  lastSyncTime: string | null;
+};
+export type SyncStatusListener = (status: SyncStatus) => void;
+const syncStatusListeners = new Set<SyncStatusListener>();
+
+export const notifySyncStatusListeners = (): void => {
+  const currentStatus: SyncStatus = {
+    isSyncing: isSyncing(),
+    lastSyncTime: lastSyncTimestamp,
+  };
+  syncStatusListeners.forEach((listener) => listener(currentStatus));
+};
+
+export const subscribeToSyncStatus = (listener: SyncStatusListener): (() => void) => {
+  syncStatusListeners.add(listener);
+  listener({
+    isSyncing: isSyncing(),
+    lastSyncTime: lastSyncTimestamp,
+  });
+  return () => {
+    syncStatusListeners.delete(listener);
+  };
+};
 
 export const syncPush = async (userId?: string): Promise<SyncResult> => {
+  if (isPushInProgress) {
+    return { success: false, offline: true, error: 'Sincronización push ya en curso' };
+  }
+  isPushInProgress = true;
+  notifySyncStatusListeners();
   try {
     let targetUserId = userId;
     if (!targetUserId) {
@@ -95,6 +310,9 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
       }
       targetUserId = data.session.user.id;
     }
+
+    // Escudo de salida: procesar y vaciar prioritariamente los borrados pendientes antes de push
+    await flushPendingDeletions(targetUserId);
 
     const { banks, cards } = useCardsStore.getState();
     const { people, personalDebts, friendLoans, thirdPartyCharges } = useDebtsStore.getState();
@@ -199,11 +417,15 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
       }
     }
 
-    return { success: true, syncedAt: new Date().toISOString() };
+    lastSyncTimestamp = new Date().toISOString();
+    return { success: true, syncedAt: lastSyncTimestamp };
   } catch (error) {
     const errMessage =
       error instanceof Error ? error.message : 'Error de conexión o red durante syncPush';
     return { success: false, offline: true, error: errMessage };
+  } finally {
+    isPushInProgress = false;
+    notifySyncStatusListeners();
   }
 };
 
@@ -212,6 +434,7 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
     return { success: false, offline: true, error: 'Sincronización pull ya en curso' };
   }
   isPullInProgress = true;
+  notifySyncStatusListeners();
   try {
     let targetUserId = userId;
     if (!targetUserId) {
@@ -221,6 +444,9 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
       }
       targetUserId = data.session.user.id;
     }
+
+    // Cargar cola de borrados pendientes para el escudo anti-zombis de entrada
+    await getPendingDeletions();
 
     // 1. Pull bancos
     const { data: banksData, error: banksErr } = await supabase
@@ -293,15 +519,23 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
       return { success: false, offline: true, error: txErr.message };
     }
 
-    // Aplicar actualizaciones a Zustand
+    // Aplicar actualizaciones a Zustand con Escudo Anti-Zombis (filtrar bajas pendientes)
     if (banksData && banksData.length > 0) {
-      const pulledBanks = (banksData as BankRow[]).map(rowToBank);
+      const pendingBankIds = getPendingDeletionIdSet('banks');
+      const filteredBanks = (banksData as BankRow[]).filter(
+        (row) => !pendingBankIds.has(row.id) && !pendingBankIds.has(toDeterministicUuid(row.id))
+      );
+      const pulledBanks = filteredBanks.map(rowToBank);
       const currentBanks = useCardsStore.getState().banks;
       useCardsStore.setState({ banks: mergeById(currentBanks, pulledBanks) });
     }
 
     if (cardsData && cardsData.length > 0) {
-      const pulledCards = (cardsData as CreditCardRow[]).map(rowToCard);
+      const pendingCardIds = getPendingDeletionIdSet('credit_cards');
+      const filteredCards = (cardsData as CreditCardRow[]).filter(
+        (row) => !pendingCardIds.has(row.id) && !pendingCardIds.has(toDeterministicUuid(row.id))
+      );
+      const pulledCards = filteredCards.map(rowToCard);
       const currentCards = useCardsStore.getState().cards;
       useCardsStore.setState({ cards: mergeById(currentCards, pulledCards) });
     }
@@ -309,25 +543,41 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
     const debtsStoreUpdates: Partial<ReturnType<typeof useDebtsStore.getState>> = {};
 
     if (peopleData && peopleData.length > 0) {
-      const pulledPeople = (peopleData as PersonRow[]).map(rowToPerson);
+      const pendingPeopleIds = getPendingDeletionIdSet('people');
+      const filteredPeople = (peopleData as PersonRow[]).filter(
+        (row) => !pendingPeopleIds.has(row.id) && !pendingPeopleIds.has(toDeterministicUuid(row.id))
+      );
+      const pulledPeople = filteredPeople.map(rowToPerson);
       const currentPeople = useDebtsStore.getState().people;
       debtsStoreUpdates.people = mergeById(currentPeople, pulledPeople);
     }
 
     if (debtsData && debtsData.length > 0) {
-      const pulledDebts = (debtsData as PersonalDebtRow[]).map(rowToDebt);
+      const pendingDebtIds = getPendingDeletionIdSet('personal_debts');
+      const filteredDebts = (debtsData as PersonalDebtRow[]).filter(
+        (row) => !pendingDebtIds.has(row.id) && !pendingDebtIds.has(toDeterministicUuid(row.id))
+      );
+      const pulledDebts = filteredDebts.map(rowToDebt);
       const currentDebts = useDebtsStore.getState().personalDebts;
       debtsStoreUpdates.personalDebts = mergeById(currentDebts, pulledDebts);
     }
 
     if (loansData && loansData.length > 0) {
-      const pulledLoans = (loansData as FriendLoanRow[]).map(rowToLoan);
+      const pendingLoanIds = getPendingDeletionIdSet('friend_loans');
+      const filteredLoans = (loansData as FriendLoanRow[]).filter(
+        (row) => !pendingLoanIds.has(row.id) && !pendingLoanIds.has(toDeterministicUuid(row.id))
+      );
+      const pulledLoans = filteredLoans.map(rowToLoan);
       const currentLoans = useDebtsStore.getState().friendLoans;
       debtsStoreUpdates.friendLoans = mergeById(currentLoans, pulledLoans);
     }
 
     if (chargesData && chargesData.length > 0) {
-      const pulledCharges = (chargesData as ThirdPartyCardChargeRow[]).map(rowToCharge);
+      const pendingChargeIds = getPendingDeletionIdSet('third_party_card_charges');
+      const filteredCharges = (chargesData as ThirdPartyCardChargeRow[]).filter(
+        (row) => !pendingChargeIds.has(row.id) && !pendingChargeIds.has(toDeterministicUuid(row.id))
+      );
+      const pulledCharges = filteredCharges.map(rowToCharge);
       const currentCharges = useDebtsStore.getState().thirdPartyCharges;
       debtsStoreUpdates.thirdPartyCharges = mergeById(currentCharges, pulledCharges);
     }
@@ -337,18 +587,24 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
     }
 
     if (txData && txData.length > 0) {
-      const pulledTx = (txData as TransactionRow[]).map(rowToTransaction);
+      const pendingTxIds = getPendingDeletionIdSet('transactions');
+      const filteredTx = (txData as TransactionRow[]).filter(
+        (row) => !pendingTxIds.has(row.id) && !pendingTxIds.has(toDeterministicUuid(row.id))
+      );
+      const pulledTx = filteredTx.map(rowToTransaction);
       const currentTx = useTransactionsStore.getState().transactions;
       useTransactionsStore.setState({ transactions: mergeById(currentTx, pulledTx) });
     }
 
-    return { success: true, syncedAt: new Date().toISOString() };
+    lastSyncTimestamp = new Date().toISOString();
+    return { success: true, syncedAt: lastSyncTimestamp };
   } catch (error) {
     const errMessage =
       error instanceof Error ? error.message : 'Error de conexión o red durante syncPull';
     return { success: false, offline: true, error: errMessage };
   } finally {
     isPullInProgress = false;
+    notifySyncStatusListeners();
   }
 };
 
@@ -359,8 +615,10 @@ export const syncAll = async (userId?: string): Promise<SyncResult> => {
 
   isSyncInProgress = true;
   notifySyncListeners(true);
+  notifySyncStatusListeners();
   const safetyTimeout = setTimeout(() => {
     notifySyncListeners(false);
+    notifySyncStatusListeners();
   }, 4000);
 
   try {
@@ -373,6 +631,9 @@ export const syncAll = async (userId?: string): Promise<SyncResult> => {
       targetUserId = data.session.user.id;
     }
 
+    // Escudo de salida: procesar y vaciar prioritariamente los borrados pendientes
+    await flushPendingDeletions(targetUserId);
+
     // 1. Pull remote changes first
     const pullResult = await syncPull(targetUserId);
 
@@ -382,13 +643,17 @@ export const syncAll = async (userId?: string): Promise<SyncResult> => {
     const success = pullResult.success && pushResult.success;
     const error = pullResult.error || pushResult.error;
 
+    if (success) {
+      lastSyncTimestamp = new Date().toISOString();
+    }
+
     return {
       success,
       push: pushResult,
       pull: pullResult,
       error,
       offline: pullResult.offline || pushResult.offline,
-      syncedAt: pullResult.syncedAt || pushResult.syncedAt,
+      syncedAt: lastSyncTimestamp || pullResult.syncedAt || pushResult.syncedAt,
     };
   } catch (error) {
     const errMessage =
@@ -398,38 +663,18 @@ export const syncAll = async (userId?: string): Promise<SyncResult> => {
     clearTimeout(safetyTimeout);
     notifySyncListeners(false);
     isSyncInProgress = false;
+    notifySyncStatusListeners();
   }
 };
-
-export type SyncTable =
-  | 'transactions'
-  | 'personal_debts'
-  | 'friend_loans'
-  | 'third_party_card_charges'
-  | 'credit_cards'
-  | 'banks'
-  | 'people';
 
 export const deleteRemoteRecord = async (
   table: SyncTable,
   localId: string
 ): Promise<void> => {
   try {
-    const { data, error } = await supabase.auth.getSession();
-    const userId = data.session?.user?.id;
-    if (error || !userId) {
-      return;
-    }
-
-    const uuid = toDeterministicUuid(localId);
-
-    await supabase
-      .from(table)
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', uuid)
-      .eq('user_id', userId);
+    await enqueuePendingDeletion(table, localId);
   } catch {
-    // Silencioso ante fallas de red o indisponibilidad offline
+    // Silencioso ante fallas de persistencia o indisponibilidad offline
   }
 };
 
@@ -441,33 +686,40 @@ export const triggerBackgroundPush = (): void => {
 
 let activeRealtimeChannel: RealtimeChannel | null = null;
 let activeRealtimeUserId: string | null = null;
-let realtimeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let reconnectAttempts = 0;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-export const startRealtimeSubscription = (userId: string): void => {
-  if (!userId) return;
+export const startRealtimeSubscription = (userId?: string): void => {
+  const targetUserId = userId || activeRealtimeUserId;
+  if (!targetUserId) return;
 
-  if (activeRealtimeUserId === userId && activeRealtimeChannel) {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
+  if (
+    activeRealtimeUserId === targetUserId &&
+    activeRealtimeChannel &&
+    (activeRealtimeChannel.state === 'joined' || activeRealtimeChannel.state === 'joining')
+  ) {
     return;
   }
 
-  if (activeRealtimeChannel) {
-    stopRealtimeSubscription();
-  }
-
-  activeRealtimeUserId = userId;
-
-  const triggerDebouncedPull = (): void => {
-    if (realtimeDebounceTimer) {
-      clearTimeout(realtimeDebounceTimer);
+  const existingChannels = supabase
+    .getChannels()
+    .filter((c) => c.topic.includes('user-sync-'));
+  for (const ch of existingChannels) {
+    try {
+      supabase.removeChannel(ch);
+    } catch {
+      // Silencioso
     }
-    realtimeDebounceTimer = setTimeout(() => {
-      if (activeRealtimeUserId) {
-        syncPull(activeRealtimeUserId).catch(() => {});
-      }
-    }, 1200);
-  };
+  }
+  activeRealtimeChannel = null;
+  activeRealtimeUserId = targetUserId;
 
-  const channel = supabase.channel(`user-sync-${userId}`);
+  const channel = supabase.channel('user-sync-' + targetUserId);
 
   channel
     .on(
@@ -476,7 +728,7 @@ export const startRealtimeSubscription = (userId: string): void => {
         event: '*',
         schema: 'public',
         table: 'transactions',
-        filter: `user_id=eq.${userId}`,
+        filter: `user_id=eq.${targetUserId}`,
       },
       (payload) => {
         const eventType = payload.eventType;
@@ -493,13 +745,16 @@ export const startRealtimeSubscription = (userId: string): void => {
             });
           }
         } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+          const pendingTxIds = getPendingDeletionIdSet('transactions');
+          if (pendingTxIds.has(newRow.id) || pendingTxIds.has(toDeterministicUuid(newRow.id))) {
+            return;
+          }
           const incomingTx = rowToTransaction(newRow);
           const currentTx = useTransactionsStore.getState().transactions;
           useTransactionsStore.setState({
             transactions: mergeById(currentTx, [incomingTx]),
           });
         }
-        triggerDebouncedPull();
       }
     )
     .on(
@@ -508,46 +763,33 @@ export const startRealtimeSubscription = (userId: string): void => {
         event: '*',
         schema: 'public',
         table: 'personal_debts',
-        filter: `user_id=eq.${userId}`,
+        filter: `user_id=eq.${targetUserId}`,
       },
-      () => {
-        triggerDebouncedPull();
-      }
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'credit_cards',
-        filter: `user_id=eq.${userId}`,
-      },
-      () => {
-        triggerDebouncedPull();
-      }
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'banks',
-        filter: `user_id=eq.${userId}`,
-      },
-      () => {
-        triggerDebouncedPull();
-      }
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'third_party_card_charges',
-        filter: `user_id=eq.${userId}`,
-      },
-      () => {
-        triggerDebouncedPull();
+      (payload) => {
+        const eventType = payload.eventType;
+        const newRow = payload.new as PersonalDebtRow | null;
+        const oldRow = payload.old as Partial<PersonalDebtRow> | null;
+
+        if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
+          const idToDelete = newRow?.id || oldRow?.id;
+          if (idToDelete) {
+            const targetUuid = toDeterministicUuid(idToDelete);
+            const currentDebts = useDebtsStore.getState().personalDebts;
+            useDebtsStore.setState({
+              personalDebts: currentDebts.filter((d) => toDeterministicUuid(d.id) !== targetUuid),
+            });
+          }
+        } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+          const pendingDebtIds = getPendingDeletionIdSet('personal_debts');
+          if (pendingDebtIds.has(newRow.id) || pendingDebtIds.has(toDeterministicUuid(newRow.id))) {
+            return;
+          }
+          const incomingDebt = rowToPersonalDebt(newRow);
+          const currentDebts = useDebtsStore.getState().personalDebts;
+          useDebtsStore.setState({
+            personalDebts: mergeById(currentDebts, [incomingDebt]),
+          });
+        }
       }
     )
     .on(
@@ -556,10 +798,68 @@ export const startRealtimeSubscription = (userId: string): void => {
         event: '*',
         schema: 'public',
         table: 'friend_loans',
-        filter: `user_id=eq.${userId}`,
+        filter: `user_id=eq.${targetUserId}`,
       },
-      () => {
-        triggerDebouncedPull();
+      (payload) => {
+        const eventType = payload.eventType;
+        const newRow = payload.new as FriendLoanRow | null;
+        const oldRow = payload.old as Partial<FriendLoanRow> | null;
+
+        if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
+          const idToDelete = newRow?.id || oldRow?.id;
+          if (idToDelete) {
+            const targetUuid = toDeterministicUuid(idToDelete);
+            const currentLoans = useDebtsStore.getState().friendLoans;
+            useDebtsStore.setState({
+              friendLoans: currentLoans.filter((l) => toDeterministicUuid(l.id) !== targetUuid),
+            });
+          }
+        } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+          const pendingLoanIds = getPendingDeletionIdSet('friend_loans');
+          if (pendingLoanIds.has(newRow.id) || pendingLoanIds.has(toDeterministicUuid(newRow.id))) {
+            return;
+          }
+          const incomingLoan = rowToFriendLoan(newRow);
+          const currentLoans = useDebtsStore.getState().friendLoans;
+          useDebtsStore.setState({
+            friendLoans: mergeById(currentLoans, [incomingLoan]),
+          });
+        }
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'third_party_card_charges',
+        filter: `user_id=eq.${targetUserId}`,
+      },
+      (payload) => {
+        const eventType = payload.eventType;
+        const newRow = payload.new as ThirdPartyCardChargeRow | null;
+        const oldRow = payload.old as Partial<ThirdPartyCardChargeRow> | null;
+
+        if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
+          const idToDelete = newRow?.id || oldRow?.id;
+          if (idToDelete) {
+            const targetUuid = toDeterministicUuid(idToDelete);
+            const currentCharges = useDebtsStore.getState().thirdPartyCharges;
+            useDebtsStore.setState({
+              thirdPartyCharges: currentCharges.filter((c) => toDeterministicUuid(c.id) !== targetUuid),
+            });
+          }
+        } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+          const pendingChargeIds = getPendingDeletionIdSet('third_party_card_charges');
+          if (pendingChargeIds.has(newRow.id) || pendingChargeIds.has(toDeterministicUuid(newRow.id))) {
+            return;
+          }
+          const incomingCharge = rowToThirdPartyCharge(newRow);
+          const currentCharges = useDebtsStore.getState().thirdPartyCharges;
+          useDebtsStore.setState({
+            thirdPartyCharges: mergeById(currentCharges, [incomingCharge]),
+          });
+        }
       }
     )
     .on(
@@ -568,44 +868,191 @@ export const startRealtimeSubscription = (userId: string): void => {
         event: '*',
         schema: 'public',
         table: 'people',
-        filter: `user_id=eq.${userId}`,
+        filter: `user_id=eq.${targetUserId}`,
       },
-      () => {
-        triggerDebouncedPull();
+      (payload) => {
+        const eventType = payload.eventType;
+        const newRow = payload.new as PersonRow | null;
+        const oldRow = payload.old as Partial<PersonRow> | null;
+
+        if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
+          const idToDelete = newRow?.id || oldRow?.id;
+          if (idToDelete) {
+            const targetUuid = toDeterministicUuid(idToDelete);
+            const currentPeople = useDebtsStore.getState().people;
+            useDebtsStore.setState({
+              people: currentPeople.filter((p) => toDeterministicUuid(p.id) !== targetUuid),
+            });
+          }
+        } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+          const pendingPeopleIds = getPendingDeletionIdSet('people');
+          if (pendingPeopleIds.has(newRow.id) || pendingPeopleIds.has(toDeterministicUuid(newRow.id))) {
+            return;
+          }
+          const incomingPerson = rowToPerson(newRow);
+          const currentPeople = useDebtsStore.getState().people;
+          useDebtsStore.setState({
+            people: mergeById(currentPeople, [incomingPerson]),
+          });
+        }
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'credit_cards',
+        filter: `user_id=eq.${targetUserId}`,
+      },
+      (payload) => {
+        const eventType = payload.eventType;
+        const newRow = payload.new as CreditCardRow | null;
+        const oldRow = payload.old as Partial<CreditCardRow> | null;
+
+        if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
+          const idToDelete = newRow?.id || oldRow?.id;
+          if (idToDelete) {
+            const targetUuid = toDeterministicUuid(idToDelete);
+            const currentCards = useCardsStore.getState().cards;
+            useCardsStore.setState({
+              cards: currentCards.filter((c) => toDeterministicUuid(c.id) !== targetUuid),
+            });
+          }
+        } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+          const pendingCardIds = getPendingDeletionIdSet('credit_cards');
+          if (pendingCardIds.has(newRow.id) || pendingCardIds.has(toDeterministicUuid(newRow.id))) {
+            return;
+          }
+          const incomingCard = rowToCard(newRow);
+          const currentCards = useCardsStore.getState().cards;
+          useCardsStore.setState({
+            cards: mergeById(currentCards, [incomingCard]),
+          });
+        }
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'banks',
+        filter: `user_id=eq.${targetUserId}`,
+      },
+      (payload) => {
+        const eventType = payload.eventType;
+        const newRow = payload.new as BankRow | null;
+        const oldRow = payload.old as Partial<BankRow> | null;
+
+        if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
+          const idToDelete = newRow?.id || oldRow?.id;
+          if (idToDelete) {
+            const targetUuid = toDeterministicUuid(idToDelete);
+            const currentBanks = useCardsStore.getState().banks;
+            useCardsStore.setState({
+              banks: currentBanks.filter((b) => toDeterministicUuid(b.id) !== targetUuid),
+            });
+          }
+        } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+          const pendingBankIds = getPendingDeletionIdSet('banks');
+          if (pendingBankIds.has(newRow.id) || pendingBankIds.has(toDeterministicUuid(newRow.id))) {
+            return;
+          }
+          const incomingBank = rowToBank(newRow);
+          const currentBanks = useCardsStore.getState().banks;
+          useCardsStore.setState({
+            banks: mergeById(currentBanks, [incomingBank]),
+          });
+        }
       }
     );
 
-  channel.subscribe();
+  channel.subscribe((status, _err) => {
+    if (status === 'SUBSCRIBED') {
+      reconnectAttempts = 0;
+    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+      reconnectAttempts++;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        if (activeRealtimeChannel === channel) {
+          try {
+            supabase.removeChannel(channel);
+          } catch {
+            // Ignorar errores al desuscribir
+          }
+          activeRealtimeChannel = null;
+        }
+        startRealtimeSubscription(targetUserId);
+      }, delay);
+    }
+  });
+
   activeRealtimeChannel = channel;
 };
 
 export const stopRealtimeSubscription = (): void => {
-  if (realtimeDebounceTimer) {
-    clearTimeout(realtimeDebounceTimer);
-    realtimeDebounceTimer = null;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
   }
-  if (activeRealtimeChannel) {
+  reconnectAttempts = 0;
+
+  const existingChannels = supabase
+    .getChannels()
+    .filter((c) => c.topic.includes('user-sync-'));
+  for (const ch of existingChannels) {
     try {
-      supabase.removeChannel(activeRealtimeChannel);
+      supabase.removeChannel(ch);
     } catch {
-      // Ignorar errores al desuscribir
+      // Silencioso
     }
-    activeRealtimeChannel = null;
   }
+
+  activeRealtimeChannel = null;
   activeRealtimeUserId = null;
+};
+
+export const purgeLocalSyncState = (): void => {
+  stopRealtimeSubscription();
+  isSyncInProgress = false;
+  isPullInProgress = false;
+  isPushInProgress = false;
+  isInitialSyncActive = false;
+  lastSyncTimestamp = null;
+  pendingDeletionsCache = [];
+  try {
+    void safeStorage.removeItem(PENDING_DELETIONS_STORAGE_KEY);
+  } catch {
+    // Silencioso
+  }
+  notifySyncStatusListeners();
+  notifySyncListeners(false);
 };
 
 export const syncService = {
   syncPush,
   syncPull,
   syncAll,
+  flushPendingDeletions,
+  getPendingDeletions,
+  enqueuePendingDeletion,
+  getPendingDeletionIdSet,
   deleteRemoteRecord,
   triggerBackgroundPush,
   isSyncing,
   isInitialSyncing,
   subscribeToInitialSync,
+  getLastSyncTime,
+  subscribeToSyncStatus,
   startRealtimeSubscription,
   stopRealtimeSubscription,
+  purgeLocalSyncState,
 };
 
 setTransactionSyncHandlers({
@@ -655,3 +1102,6 @@ setCardSyncHandlers({
     syncService.deleteRemoteRecord('banks', bankId).catch(() => {});
   },
 });
+
+// Carga temprana de la cola de bajas persistidas para mantener la caché caliente
+getPendingDeletions().catch(() => {});

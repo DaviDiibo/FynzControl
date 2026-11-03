@@ -8,6 +8,7 @@ import {
   Alert,
   StyleSheet,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
@@ -19,6 +20,13 @@ import { useTransactionsStore } from '../../store/transactions-store';
 import { useDebtsStore } from '../../store/debts-store';
 import { supabase } from '../../lib/supabase';
 import { authenticateWithBiometrics } from '../../utils/biometrics';
+import {
+  syncService,
+  subscribeToSyncStatus,
+  getLastSyncTime,
+  purgeLocalSyncState,
+  type SyncStatus,
+} from '../../services/sync-service';
 
 export type CurrencyOption = CurrencyCode;
 
@@ -37,9 +45,99 @@ export const SettingsSectionList = ({
 }: SettingsSectionListProps = {}): JSX.Element => {
   const router = useRouter();
   const logout = useAuthStore((state) => state.logout);
+  const deleteAccount = useAuthStore((state) => state.deleteAccount);
 
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isResetModalVisible, setIsResetModalVisible] = useState(false);
   const [resetSuccessMessage, setResetSuccessMessage] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(() => ({
+    isSyncing: syncService.isSyncing(),
+    lastSyncTime: getLastSyncTime(),
+  }));
+
+  React.useEffect(() => {
+    const unsubscribe = subscribeToSyncStatus(setSyncStatus);
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  const formatSyncTime = (isoString: string | null): string => {
+    if (!isoString) return 'Sincronizado con Supabase';
+    try {
+      const date = new Date(isoString);
+      if (isNaN(date.getTime())) return 'Sincronizado con Supabase';
+      const hours = date.getHours().toString().padStart(2, '0');
+      const minutes = date.getMinutes().toString().padStart(2, '0');
+      return `Última sincronización: ${hours}:${minutes}`;
+    } catch {
+      return 'Sincronizado con Supabase';
+    }
+  };
+
+  const handleLogoutConfirmation = (): void => {
+    Alert.alert(
+      'Cerrar Sesión',
+      '¿Estás seguro de que deseas cerrar sesión? Tus datos locales sincronizados se conservarán de forma segura en la nube.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Cerrar Sesión',
+          style: 'destructive',
+          onPress: () => {
+            void logout();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeleteAccount = (): void => {
+    Alert.alert(
+      'Eliminar Cuenta Permanentemente',
+      '¿Estás seguro de que deseas eliminar tu cuenta? Esta acción borrará permanentemente todos tus datos contables sincronizados en la nube y en este dispositivo de forma irreversible.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Continuar',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              '¿Confirmar eliminación definitiva?',
+              'Esta acción NO se puede deshacer. Tu acceso y datos serán purgados.',
+              [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                  text: 'ELIMINAR DEFINITIVAMENTE',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setIsDeletingAccount(true);
+                    try {
+                      purgeLocalSyncState();
+                      const result = await deleteAccount();
+                      if (!result.success) {
+                        Alert.alert(
+                          'Error al eliminar',
+                          result.error || 'No se pudo completar la eliminación de la cuenta.'
+                        );
+                      }
+                    } catch {
+                      Alert.alert(
+                        'Error',
+                        'Ocurrió un error inesperado al procesar la eliminación.'
+                      );
+                    } finally {
+                      setIsDeletingAccount(false);
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
+  };
 
   const {
     currency,
@@ -233,6 +331,47 @@ export const SettingsSectionList = ({
     <View style={styles.card}>
       <Text style={styles.sectionHeader}>DATOS & ALMACENAMIENTO</Text>
 
+      <View style={styles.syncRow}>
+        <View style={styles.itemLeftFlex}>
+          <View style={styles.syncIconBadge}>
+            {syncStatus.isSyncing ? (
+              <ActivityIndicator size="small" color="#00FFA3" />
+            ) : (
+              <Ionicons name="cloud-done-outline" size={18} color="#00FFA3" />
+            )}
+          </View>
+          <View style={styles.textContainer}>
+            <Text style={styles.rowTitle}>Sincronización en la Nube</Text>
+            <Text style={styles.rowSubtitle}>
+              {syncStatus.isSyncing
+                ? 'Sincronizando cambios en vivo...'
+                : syncStatus.lastSyncTime
+                  ? formatSyncTime(syncStatus.lastSyncTime)
+                  : 'Sincronizado con Supabase'}
+            </Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          style={[styles.syncBadge, syncStatus.isSyncing && styles.syncBadgeDisabled]}
+          onPress={() => {
+            void syncService.syncAll();
+          }}
+          disabled={syncStatus.isSyncing}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.syncBadgeText,
+              syncStatus.isSyncing && styles.syncBadgeTextDisabled,
+            ]}
+          >
+            [ SINCRONIZAR ]
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.separator} />
+
       <TouchableOpacity
         style={styles.actionRow}
         onPress={handleExportBackup}
@@ -347,13 +486,43 @@ export const SettingsSectionList = ({
           <Text style={styles.devBadgeText}>[ LIMPIEZA ]</Text>
         </View>
       </TouchableOpacity>
+
+      <View style={styles.separator} />
+
+      <TouchableOpacity
+        style={styles.deleteAccountRow}
+        onPress={handleDeleteAccount}
+        disabled={isDeletingAccount}
+        activeOpacity={0.7}
+      >
+        <View style={styles.itemLeftFlex}>
+          <Ionicons name="trash-outline" size={18} color="#FF453A" />
+          <View style={styles.textContainer}>
+            <Text style={[styles.rowTitle, styles.dangerText]}>
+              Eliminar Cuenta Permanentemente
+            </Text>
+            <Text style={styles.rowSubtitle}>
+              {isDeletingAccount
+                ? 'Eliminando datos y cuenta...'
+                : 'Borrado irreversible de datos en la nube y dispositivo'}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.deleteBadge}>
+          {isDeletingAccount ? (
+            <ActivityIndicator size="small" color="#FF453A" />
+          ) : (
+            <Text style={styles.deleteBadgeText}>[ ELIMINAR ]</Text>
+          )}
+        </View>
+      </TouchableOpacity>
     </View>
   );
 
   const logoutButton = (
     <TouchableOpacity
       style={styles.logoutButton}
-      onPress={logout}
+      onPress={handleLogoutConfirmation}
       activeOpacity={0.8}
     >
       <Ionicons name="log-out-outline" size={20} color="#FF453A" />
@@ -755,6 +924,65 @@ const styles = StyleSheet.create({
   modalConfirmText: {
     color: '#FFFFFF',
     fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  syncRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+    gap: 8,
+  },
+  syncIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 255, 163, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 255, 163, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  syncBadge: {
+    borderWidth: 1,
+    borderColor: 'rgba(0, 255, 163, 0.45)',
+    backgroundColor: 'rgba(0, 255, 163, 0.1)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  syncBadgeDisabled: {
+    borderColor: 'rgba(142, 142, 147, 0.3)',
+    backgroundColor: 'rgba(142, 142, 147, 0.05)',
+  },
+  syncBadgeText: {
+    color: '#00FFA3',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  syncBadgeTextDisabled: {
+    color: '#8E8E93',
+  },
+  deleteAccountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+    gap: 8,
+  },
+  deleteBadge: {
+    borderWidth: 1,
+    borderColor: '#FF453A',
+    backgroundColor: 'rgba(255, 69, 58, 0.1)',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  deleteBadgeText: {
+    color: '#FF453A',
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
