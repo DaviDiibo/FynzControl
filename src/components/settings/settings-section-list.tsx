@@ -113,13 +113,14 @@ export const SettingsSectionList = ({
                   onPress: async () => {
                     setIsDeletingAccount(true);
                     try {
-                      purgeLocalSyncState();
                       const result = await deleteAccount();
                       if (!result.success) {
                         Alert.alert(
                           'Error al eliminar',
                           result.error || 'No se pudo completar la eliminación de la cuenta.'
                         );
+                      } else {
+                        purgeLocalSyncState();
                       }
                     } catch {
                       Alert.alert(

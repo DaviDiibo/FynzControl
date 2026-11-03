@@ -1038,3 +1038,26 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 GRANT EXECUTE ON FUNCTION record_debt_amortization_atomic TO authenticated;
 GRANT EXECUTE ON FUNCTION sync_pull TO authenticated;
 GRANT EXECUTE ON FUNCTION sync_push TO authenticated;
+
+-- ============================================================================
+-- 10. Función RPC para Eliminación Definitiva de Cuenta
+-- ============================================================================
+CREATE OR REPLACE FUNCTION delete_user_account()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_user_id UUID;
+BEGIN
+    v_user_id := auth.uid();
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION 'No se encontró un usuario autenticado para eliminar';
+    END IF;
+    DELETE FROM auth.users WHERE id = v_user_id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION delete_user_account() FROM public;
+GRANT EXECUTE ON FUNCTION delete_user_account() TO authenticated;

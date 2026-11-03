@@ -33,6 +33,13 @@ const RootLayout = (): JSX.Element | null => {
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       document.title = 'ControlFynz';
+      let iconLink = document.querySelector<HTMLLinkElement>("link[rel*='icon']");
+      if (!iconLink) {
+        iconLink = document.createElement('link');
+        iconLink.rel = 'icon';
+        document.head.appendChild(iconLink);
+      }
+      iconLink.href = '/LogoMiniaturaFynz.jpeg';
     }
   }, [segments]);
 
@@ -58,6 +65,9 @@ const RootLayout = (): JSX.Element | null => {
     <SafeAreaProvider>
       <Head>
         <title>ControlFynz</title>
+        <link rel="icon" type="image/jpeg" href="/LogoMiniaturaFynz.jpeg" />
+        <link rel="shortcut icon" href="/LogoMiniaturaFynz.jpeg" />
+        <link rel="apple-touch-icon" href="/LogoMiniaturaFynz.jpeg" />
       </Head>
       {/* @ts-ignore - expo-status-bar types in SDK 57 omit backgroundColor and translucent */}
       <StatusBar style="light" backgroundColor="#121212" translucent={false} />

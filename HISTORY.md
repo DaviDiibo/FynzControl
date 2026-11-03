@@ -1873,3 +1873,15 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
   4. **Verificación de Calidad**: Validación técnica integral con 42/42 tests unitarios aprobados al 100% (`npm test`) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
 
 
+
+
+### [TASK-ACCOUNT-PERMANENT-DELETION-RPC-FIX] - 2026-11-03
+- **Archivos Intervenidos**:
+  - `supabase/init.sql`
+  - `src/store/auth-store.ts`
+  - `src/components/settings/settings-section-list.tsx`
+- **Resumen Técnico**:
+  1. **Función RPC `delete_user_account` en Supabase**: Definición con `SECURITY DEFINER` y `SET search_path = public` en `supabase/init.sql`. Ejecuta `DELETE FROM auth.users WHERE id = auth.uid()`, aprovechando las restricciones relacionales `ON DELETE CASCADE` para eliminar atómicamente el perfil y todos los datos contables asociados (transacciones, deudas, amigos, tarjetas, bancos). Permisos asignados exclusivamente a `authenticated` y revocados a `public`.
+  2. **Blindaje en `auth-store.ts`**: Eliminación de silenciamiento con `console.warn` en `deleteAccount`. Si la llamada RPC a `delete_user_account` falla, el proceso se detiene de inmediato, resetea `isLoading: false` y retorna `{ success: false, error: rpcError.message }`, impidiendo falsos positivos de eliminación ("ghost deletion").
+  3. **Corrección de Flujo en `settings-section-list.tsx`**: La purga de estado local (`purgeLocalSyncState()`) ahora se ejecuta únicamente tras confirmar `result.success === true`. Si la eliminación falla, el usuario recibe un `Alert.alert` descriptivo y su sesión local se mantiene intacta.
+  4. **Verificación de Calidad**: 121/121 tests unitarios aprobados al 100% (`npm test`) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
