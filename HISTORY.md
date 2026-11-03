@@ -1885,3 +1885,13 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
   2. **Blindaje en `auth-store.ts`**: Eliminación de silenciamiento con `console.warn` en `deleteAccount`. Si la llamada RPC a `delete_user_account` falla, el proceso se detiene de inmediato, resetea `isLoading: false` y retorna `{ success: false, error: rpcError.message }`, impidiendo falsos positivos de eliminación ("ghost deletion").
   3. **Corrección de Flujo en `settings-section-list.tsx`**: La purga de estado local (`purgeLocalSyncState()`) ahora se ejecuta únicamente tras confirmar `result.success === true`. Si la eliminación falla, el usuario recibe un `Alert.alert` descriptivo y su sesión local se mantiene intacta.
   4. **Verificación de Calidad**: 121/121 tests unitarios aprobados al 100% (`npm test`) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+
+### [TASK-WEB-ALERT-PARITY-SETTINGS-001] - 2026-11-03
+- **Archivos Intervenidos**:
+  - `src/components/settings/settings-section-list.tsx`
+- **Resumen Técnico**:
+  1. **Paridad Web en Cierre de Sesión (`handleLogoutConfirmation`)**: Adaptador condicional con `Platform.OS === 'web'` que invoca `window.confirm` para confirmar el cierre de sesión, superando la limitación de `Alert.alert` como stub vacío en `react-native-web`. Mantiene intacto el `Alert.alert` nativo en iOS y Android.
+  2. **Paridad Web en Eliminación de Cuenta (`handleDeleteAccount`)**: Implementación de doble confirmación secuencial en Web mediante `window.confirm` (`step1` advertencia general, `step2` confirmación irreversible). Si se aceptan ambos pasos, invoca de forma asíncrona `deleteAccount()`, presenta alertas descriptivas en caso de error y ejecuta `purgeLocalSyncState()` al completar exitosamente.
+  3. **Visual Freeze**: Estilos, colores y componentes visuales 100% preservados sin alteración.
+  4. **Verificación de Calidad**: 121/121 pruebas unitarias aprobadas al 100% (`npm test`) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).

@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Modal,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
@@ -76,6 +77,15 @@ export const SettingsSectionList = ({
   };
 
   const handleLogoutConfirmation = (): void => {
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined' && window.confirm(
+        '¿Estás seguro de que deseas cerrar sesión? Tendrás que volver a autenticarte para acceder a tus datos.'
+      );
+      if (confirmed) {
+        void logout();
+      }
+      return;
+    }
     Alert.alert(
       'Cerrar Sesión',
       '¿Estás seguro de que deseas cerrar sesión? Tus datos locales sincronizados se conservarán de forma segura en la nube.',
@@ -93,6 +103,34 @@ export const SettingsSectionList = ({
   };
 
   const handleDeleteAccount = (): void => {
+    if (Platform.OS === 'web') {
+      const step1 = typeof window !== 'undefined' && window.confirm(
+        '¿Estás seguro de que deseas eliminar tu cuenta? Esta acción borrará permanentemente todos tus datos contables sincronizados en la nube y en este dispositivo de forma irreversible.'
+      );
+      if (!step1) return;
+
+      const step2 = window.confirm(
+        '¿Confirmar eliminación definitiva? Esta acción NO se puede deshacer. Tu acceso y datos serán purgados.'
+      );
+      if (!step2) return;
+
+      void (async () => {
+        setIsDeletingAccount(true);
+        try {
+          const result = await deleteAccount();
+          if (!result.success) {
+            window.alert(result.error || 'No se pudo completar la eliminación de la cuenta.');
+          } else {
+            purgeLocalSyncState();
+          }
+        } catch {
+          window.alert('Ocurrió un error inesperado al procesar la eliminación.');
+        } finally {
+          setIsDeletingAccount(false);
+        }
+      })();
+      return;
+    }
     Alert.alert(
       'Eliminar Cuenta Permanentemente',
       '¿Estás seguro de que deseas eliminar tu cuenta? Esta acción borrará permanentemente todos tus datos contables sincronizados en la nube y en este dispositivo de forma irreversible.',
