@@ -9,7 +9,6 @@ import {
   StyleSheet,
   Modal,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
@@ -49,6 +48,10 @@ export const SettingsSectionList = ({
   const deleteAccount = useAuthStore((state) => state.deleteAccount);
 
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [isLogoutModalVisible, setIsLogoutModalVisible] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
+  const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null);
   const [isResetModalVisible, setIsResetModalVisible] = useState(false);
   const [resetSuccessMessage, setResetSuccessMessage] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(() => ({
@@ -77,105 +80,47 @@ export const SettingsSectionList = ({
   };
 
   const handleLogoutConfirmation = (): void => {
-    if (Platform.OS === 'web') {
-      const confirmed = typeof window !== 'undefined' && window.confirm(
-        '¿Estás seguro de que deseas cerrar sesión? Tendrás que volver a autenticarte para acceder a tus datos.'
-      );
-      if (confirmed) {
-        void logout();
-      }
-      return;
+    setIsLogoutModalVisible(true);
+  };
+
+  const handleConfirmLogout = async (): Promise<void> => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+    } finally {
+      setIsLoggingOut(false);
+      setIsLogoutModalVisible(false);
     }
-    Alert.alert(
-      'Cerrar Sesión',
-      '¿Estás seguro de que deseas cerrar sesión? Tus datos locales sincronizados se conservarán de forma segura en la nube.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Cerrar Sesión',
-          style: 'destructive',
-          onPress: () => {
-            void logout();
-          },
-        },
-      ]
-    );
   };
 
   const handleDeleteAccount = (): void => {
-    if (Platform.OS === 'web') {
-      const step1 = typeof window !== 'undefined' && window.confirm(
-        '¿Estás seguro de que deseas eliminar tu cuenta? Esta acción borrará permanentemente todos tus datos contables sincronizados en la nube y en este dispositivo de forma irreversible.'
-      );
-      if (!step1) return;
+    setDeleteErrorMessage(null);
+    setIsDeleteModalVisible(true);
+  };
 
-      const step2 = window.confirm(
-        '¿Confirmar eliminación definitiva? Esta acción NO se puede deshacer. Tu acceso y datos serán purgados.'
+  const handleConfirmDeleteAccount = async (): Promise<void> => {
+    setIsDeletingAccount(true);
+    setDeleteErrorMessage(null);
+    try {
+      const result = await deleteAccount();
+      if (!result.success) {
+        setDeleteErrorMessage(
+          result.error || 'No se pudo completar la eliminación de la cuenta.'
+        );
+        setIsDeletingAccount(false);
+      } else {
+        purgeLocalSyncState();
+        setIsDeletingAccount(false);
+        setIsDeleteModalVisible(false);
+      }
+    } catch (err) {
+      setDeleteErrorMessage(
+        err instanceof Error
+          ? err.message
+          : 'Ocurrió un error inesperado al procesar la eliminación.'
       );
-      if (!step2) return;
-
-      void (async () => {
-        setIsDeletingAccount(true);
-        try {
-          const result = await deleteAccount();
-          if (!result.success) {
-            window.alert(result.error || 'No se pudo completar la eliminación de la cuenta.');
-          } else {
-            purgeLocalSyncState();
-          }
-        } catch {
-          window.alert('Ocurrió un error inesperado al procesar la eliminación.');
-        } finally {
-          setIsDeletingAccount(false);
-        }
-      })();
-      return;
+      setIsDeletingAccount(false);
     }
-    Alert.alert(
-      'Eliminar Cuenta Permanentemente',
-      '¿Estás seguro de que deseas eliminar tu cuenta? Esta acción borrará permanentemente todos tus datos contables sincronizados en la nube y en este dispositivo de forma irreversible.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Continuar',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              '¿Confirmar eliminación definitiva?',
-              'Esta acción NO se puede deshacer. Tu acceso y datos serán purgados.',
-              [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                  text: 'ELIMINAR DEFINITIVAMENTE',
-                  style: 'destructive',
-                  onPress: async () => {
-                    setIsDeletingAccount(true);
-                    try {
-                      const result = await deleteAccount();
-                      if (!result.success) {
-                        Alert.alert(
-                          'Error al eliminar',
-                          result.error || 'No se pudo completar la eliminación de la cuenta.'
-                        );
-                      } else {
-                        purgeLocalSyncState();
-                      }
-                    } catch {
-                      Alert.alert(
-                        'Error',
-                        'Ocurrió un error inesperado al procesar la eliminación.'
-                      );
-                    } finally {
-                      setIsDeletingAccount(false);
-                    }
-                  },
-                },
-              ]
-            );
-          },
-        },
-      ]
-    );
   };
 
   const {
@@ -710,6 +655,129 @@ export const SettingsSectionList = ({
           </View>
         </View>
       </Modal>
+
+      {/* Modal Cyberpunk de Cierre de Sesión */}
+      <Modal
+        visible={isLogoutModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isLoggingOut) {
+            setIsLogoutModalVisible(false);
+          }
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalLogoutBadge}>
+              <Text style={styles.modalLogoutBadgeText}>
+                [ CIERRE DE SESIÓN ]
+              </Text>
+            </View>
+
+            <Text style={styles.modalTitle}>¿CERRAR SESIÓN?</Text>
+
+            <Text style={styles.modalMessage}>
+              ¿Estás seguro de que deseas salir? Tus datos sincronizados se
+              conservarán de forma segura en la nube. Tendrás que volver a
+              autenticarte para acceder a tus finanzas.
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setIsLogoutModalVisible(false)}
+                disabled={isLoggingOut}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalDangerButton}
+                onPress={handleConfirmLogout}
+                disabled={isLoggingOut}
+                activeOpacity={0.8}
+              >
+                {isLoggingOut ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalDangerButtonText}>CERRAR SESIÓN</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Cyberpunk de Eliminación de Cuenta */}
+      <Modal
+        visible={isDeleteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isDeletingAccount) {
+            setIsDeleteModalVisible(false);
+            setDeleteErrorMessage(null);
+          }
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, styles.modalCardDanger]}>
+            <View style={styles.modalDangerBadge}>
+              <Text style={styles.modalDangerBadgeText}>
+                [ ZONA DE PELIGRO CRÍTICO ]
+              </Text>
+            </View>
+
+            <Text style={styles.modalTitle}>
+              ¿ELIMINAR CUENTA DEFINITIVAMENTE?
+            </Text>
+
+            <Text style={styles.modalMessage}>
+              Esta acción borrará de forma irreversible tu cuenta y todos tus
+              datos contables sincronizados en la nube y en este dispositivo.
+              Esta operación NO se puede deshacer.
+            </Text>
+
+            {deleteErrorMessage ? (
+              <View style={styles.modalErrorContainer}>
+                <Ionicons name="alert-circle-outline" size={18} color="#FF453A" />
+                <Text style={styles.modalErrorText}>{deleteErrorMessage}</Text>
+              </View>
+            ) : null}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => {
+                  setIsDeleteModalVisible(false);
+                  setDeleteErrorMessage(null);
+                }}
+                disabled={isDeletingAccount}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalDangerButton}
+                onPress={handleConfirmDeleteAccount}
+                disabled={isDeletingAccount}
+                activeOpacity={0.8}
+              >
+                {isDeletingAccount ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalDangerButtonText}>
+                    ELIMINAR DEFINITIVAMENTE
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1086,6 +1154,73 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  modalLogoutBadge: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#FF453A',
+    backgroundColor: 'rgba(255, 69, 58, 0.15)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginBottom: 12,
+  },
+  modalLogoutBadgeText: {
+    color: '#FF453A',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  modalCardDanger: {
+    borderColor: 'rgba(255, 69, 58, 0.5)',
+  },
+  modalDangerBadge: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#FF453A',
+    backgroundColor: 'rgba(255, 69, 58, 0.15)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginBottom: 12,
+  },
+  modalDangerBadgeText: {
+    color: '#FF453A',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  modalDangerButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#FF453A',
+    minWidth: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalDangerButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  modalErrorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 10,
+    backgroundColor: 'rgba(255, 69, 58, 0.12)',
+    borderRadius: 8,
+    borderColor: '#FF453A',
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  modalErrorText: {
+    color: '#FF453A',
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
   },
 });
 

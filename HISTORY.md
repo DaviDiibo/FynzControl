@@ -1895,3 +1895,14 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
   2. **Paridad Web en Eliminación de Cuenta (`handleDeleteAccount`)**: Implementación de doble confirmación secuencial en Web mediante `window.confirm` (`step1` advertencia general, `step2` confirmación irreversible). Si se aceptan ambos pasos, invoca de forma asíncrona `deleteAccount()`, presenta alertas descriptivas en caso de error y ejecuta `purgeLocalSyncState()` al completar exitosamente.
   3. **Visual Freeze**: Estilos, colores y componentes visuales 100% preservados sin alteración.
   4. **Verificación de Calidad**: 121/121 pruebas unitarias aprobadas al 100% (`npm test`) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+
+### [TASK-CYBERPUNK-MODALS-LOGOUT-AND-DELETION-001] - 2026-11-03
+- **Archivos Intervenidos**:
+  - `src/store/auth-store.ts`
+  - `src/components/settings/settings-section-list.tsx`
+- **Resumen Técnico**:
+  1. **Modales Cyberpunk In-App (`settings-section-list.tsx`)**: Reemplazo total de alertas del navegador (`window.confirm`) y `Alert.alert` por componentes `<Modal transparent animationType="fade">` estilizados al 100% en contexto con el tema oscuro de la aplicación (`#121212`, tarjeta `#1E1E1E`, peligro `#FF453A`, bordes `#2C2C2E`). Paridad visual y funcional absoluta en Web, iOS y Android.
+  2. **Feedback y Estados de Carga**: Integración de spinners `ActivityIndicator` reactivos dentro de los botones de acción para `isLoggingOut` e `isDeletingAccount`, más visualización de mensajes de error in-app (`deleteErrorMessage`) sin ventanas emergentes del navegador.
+  3. **Robustecimiento Determinista de `logout()` (`auth-store.ts`)**: Eliminación del retardo síncrono ciego de 2 segundos. Ahora cancela suscripciones Realtime primero, purga stores en memoria, ejecuta `Promise.allSettled` con `safeStorage.removeItem` para ambas claves de autenticación y `supabase.auth.signOut({ scope: 'local' })`, y garantiza el reseteo instantáneo de `isAuthenticated: false` y `user: null`.
+  4. **Verificación de Calidad**: 121/121 pruebas unitarias aprobadas al 100% (`npm test`) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
