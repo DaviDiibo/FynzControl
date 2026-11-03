@@ -21,6 +21,8 @@
   - Centro de Gestión de Pasivos y Cobros: Préstamos bancarios, préstamos a amigos y Liquidación Mensual de Terceros (Fases 1 y 2).
   - Cobertura de Testing (121/121 tests en verde): Suites en `src/__tests__/` (divisas, ciclos de facturación, amortizaciones, fechas, integración contable).
 - **Hitos Recientes Concluidos**:
+  - **Logotipos Oficiales y Branding (`[TASK-OFFICIAL-BRAND-LOGOS]`)**: Integración de `LogoMiniaturaFynz` y `LogoFynz` en `assets/images/` (`icon.png`, `splash-icon.png`, `favicon.png`, `android-icon-foreground.png`), calibración en `app.json` e integración en cabecera de `login.tsx`. 121/121 tests y 0 errores TS.
+  - **Términos y Política de Privacidad (`[TASK-LEGAL-PRIVACY-AND-TERMS]`)**: Rutas públicas y nativas `app/privacy.tsx` y `app/terms.tsx` (cero venta de datos, RLS, exención financiera bancaria), con accesos en login (`login.tsx`) y Ajustes (`settings-section-list.tsx`). 121/121 tests y 0 errores TS.
   - **Sincronización Offline-First y Realtime Granular (`[TASK-SYNC-PHASE-3-COMPLETE]`)**: `TombstoneQueue` persistida en `safeStorage`, doble escudo anti-zombis, 7 handlers granulares en memoria sobre Supabase Realtime (suprimiendo `triggerDebouncedPull`) y backoff exponencial en WebSockets (`sync-service.ts`, `use-app-hydration.ts`). 121/121 tests y 0 errores TS.
   - **Higiene Total de Dependencias y Código Huérfano (`[TASK-HYGIENE-PHASE-2-COMPLETE]`)**: Eliminación de 5 dependencias en `package.json` y purga completa de los 14 archivos huérfanos de plantilla (`animated-icon.*`, `app-tabs.*`, `external-link`, `hint-row`, `web-badge`, `themed-*`, `use-theme`, `use-color-scheme.*`, `theme.ts`, `global.css`). 121/121 tests y 0 errores TS.
   - **Eliminación Permanente de Cuenta (`[TASK-ACCOUNT-PERMANENT-DELETION]`)**: Implementación de `deleteAccount()` en `auth-store.ts`, `purgeLocalSyncState()` en `sync-service.ts` y diálogo destructivo de doble paso `Alert.alert` en `settings-section-list.tsx` cumpliendo Apple Guideline 5.1.1(v) y Google Play Data Safety. 121/121 tests en verde y 0 errores TS.
@@ -36,6 +38,7 @@
   - Continuar con la siguiente etapa de consolidación modular del módulo de deudas o siguientes optimizaciones del backlog.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
+- ❌ **NO bloquear rutas informativas públicas en el Auth Gate (Regla de Rutas Públicas)**: Declarar siempre las rutas legales (`terms`, `privacy`) en `PUBLIC_ROUTES` en `app/_layout.tsx` para permitir su consulta antes del inicio de sesión.
 - ❌ **NO registrar eventos Realtime sin purgar canales previos en `supabase.getChannels()` (Regla de Canales Realtime Limpios)**: Siempre remover instancias previas con `supabase.removeChannel()` antes de crear un canal nuevo con el mismo tópico para evitar `cannot add postgres_changes callbacks after subscribe()`.
 - ❌ **NO cerrar sesión sin confirmación explícita (Regla de Confirmación de Logout)**: Siempre proteger el cierre de sesión con `Alert.alert` para prevenir purgas accidentales de caché local.
 - ❌ **NO usar padding inferior menor a 110dp en scrolls de pestañas principales (Regla de Scroll Padding Homogéneo)**: Todos los contenedores de scroll en las pestañas principales deben mantener `paddingBottom: 110` para librar el TabBar flotante.

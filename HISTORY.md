@@ -7,6 +7,58 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 ## Bitácora de Tareas Concluidas
 
+- `[TASK-OFFICIAL-BRAND-LOGOS]` (2026-11-03): Integración de Logotipos Oficiales, Iconos y Splash Screen:
+  - Archivos intervenidos:
+    * `assets/images/icon.png`
+    * `assets/images/favicon.png`
+    * `assets/images/android-icon-foreground.png`
+    * `assets/images/splash-icon.png`
+    * `app.json`
+    * `app/(auth)/login.tsx`
+  - Resumen técnico:
+    * Se procesaron y generaron los activos de imagen oficiales a partir de `public/LogoMiniaturaFynz.jpeg` y `public/LogoFynz.jpeg`: icono de aplicación móvil, icono adaptativo de Android, favicon web y splash screen de alta resolución con fondo oscuro `#121212`.
+    * En `app.json`: Se calibraron las dimensiones y fondo de `expo-splash-screen` (`imageWidth: 150`, `backgroundColor: "#121212"`) y el icono adaptativo de Android.
+    * En `app/(auth)/login.tsx`: Se integró el logotipo oficial de ControlFynz en la cabecera de autenticación tanto para la vista móvil como para el panel responsivo de escritorio.
+  - Decisiones permanentes y verificación:
+    * Erradicación total de iconos y recursos de demostración de Expo, cumpliendo las directrices de identidad visual para tiendas.
+    * Verificación: 121/121 tests unitarios en verde (100% pass) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-AUTH-GATE-PUBLIC-ROUTES]` (2026-11-03): Excepción de Rutas Públicas Legales en Auth Gate (`_layout.tsx`):
+  - Archivos intervenidos:
+    * `app/_layout.tsx`
+  - Resumen técnico:
+    * Se corrigió la redirección forzada a login al pulsar los enlaces legales desde la pantalla de autenticación.
+    * Se definió la lista blanca `PUBLIC_ROUTES = ['terms', 'privacy']` y se integró la condición `!isPublicRoute` en el hook de navegación del Auth Gate, permitiendo que usuarios no autenticados puedan consultar libremente los Términos y Condiciones y la Política de Privacidad y regresar al login con `router.back()`.
+  - Decisiones permanentes y verificación:
+    * Regla de Rutas Públicas: Las páginas de consulta legal pre-login deben estar registradas en la lista blanca de rutas públicas para no ser interceptadas por el guardia de sesión.
+    * Verificación: 121/121 tests unitarios en verde (100% pass) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-TERMS-AND-CONDITIONS-SCREEN]` (2026-11-03): Pantalla de Términos y Condiciones y Enlaces de Acceso:
+  - Archivos intervenidos:
+    * `app/terms.tsx` (nuevo archivo)
+    * `app/(auth)/login.tsx`
+    * `src/components/settings/settings-section-list.tsx`
+  - Resumen técnico:
+    * Se creó la ruta autónoma `app/terms.tsx` con redacción jurídica exhaustiva adaptada a ControlFynz: aceptación del servicio, cláusula expresa de exención aclarando que la app es de gestión y cálculo personal y no una entidad bancaria ni asesor financiero regulado, titularidad de propiedad intelectual, funcionamiento offline-first con Supabase RLS y derecho a rescisión mediante la eliminación definitiva de la cuenta en Ajustes.
+    * En `app/(auth)/login.tsx`: Se actualizó el pie de página de autenticación para enlazar con un toque tanto a `/terms` como a `/privacy`.
+    * En `src/components/settings/settings-section-list.tsx`: Se agregó en la sección de SEGURIDAD & PRIVACIDAD la opción navegable a `/terms` con icono `document-text-outline`.
+  - Decisiones permanentes y verificación:
+    * Requisito de blindaje jurídico y cumplimiento para publicación en Google Cloud Console, Google Play y App Store Connect.
+    * Verificación: 121/121 tests unitarios en verde (100% pass) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+- `[TASK-PRIVACY-POLICY-SCREEN]` (2026-11-03): Pantalla de Política de Privacidad y Enlaces de Acceso:
+  - Archivos intervenidos:
+    * `app/privacy.tsx` (nuevo archivo)
+    * `app/(auth)/login.tsx`
+    * `src/components/settings/settings-section-list.tsx`
+  - Resumen técnico:
+    * Se creó la ruta `app/privacy.tsx` adaptada a la arquitectura real de ControlFynz: términos legales rigurosos sobre recolección exclusiva de datos financieros y de cuenta, declaración taxativa de no comercialización ni monetización de datos, almacenamiento local seguro con Supabase PostgreSQL y políticas RLS aisladas por `auth.uid()`, y explicación del derecho de supresión permanente mediante el botón en Ajustes.
+    * En `app/(auth)/login.tsx`: Se incorporó al pie del formulario el texto legal interactivo con enlace a `/privacy` para usuarios previos al registro o login.
+    * En `src/components/settings/settings-section-list.tsx`: Se agregó en la tarjeta de SEGURIDAD & PRIVACIDAD la opción navegable a `/privacy` con icono de escudo neón.
+  - Decisiones permanentes y verificación:
+    * Cumplimiento con Apple Guideline 5.1.1 y Google Play User Data Policy para aprobación en tiendas y publicación de OAuth Consent Screen en Google Cloud Console.
+    * Verificación: 121/121 tests unitarios en verde (100% pass) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[TASK-FIX-REALTIME-SUBSCRIPTION-RACE]` (2026-11-03): Corrección de Ciclo de Vida y Limpieza de Canales en Supabase Realtime:
   - Archivos intervenidos:
     * `src/services/sync-service.ts`
@@ -156,19 +208,19 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
     * Título Web Estático: Usar `<Head><title>ControlFynz</title></Head>` y `document.title` en `app/_layout.tsx` para mantener el título de la pestaña del navegador estático sin que se altere por rutas o query params de OAuth.
     * Verificación y calidad: 121/121 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
 
-- `[TASK-TRANSACTIONS-CHRONOLOGICAL-SORTING]` (2026-11-01): Ordenamiento Cronológico Estricto de Movimientos (Fecha y Hora):
-  - Archivos intervenidos:
-    * `app/(app)/(tabs)/transactions.tsx`
-    * `app/(app)/(tabs)/index.tsx`
-    * `src/services/sync-service.ts`
-  - Resumen técnico:
-    * En `app/(app)/(tabs)/transactions.tsx`: Se ordenó descendentemente el array `monthTransactions` por timestamp exacto (`t.date || t.createdAt`), logrando que los grupos diarios y los movimientos individuales se listen estrictamente por hora de ingreso (más reciente arriba).
-    * En `app/(app)/(tabs)/index.tsx`: Se ordenaron las transacciones por fecha y hora antes de tomar los 5 primeros elementos con `.slice(0, 5)` para el widget de "Últimos Movimientos".
-    * En `src/services/sync-service.ts`: Se añadió `.order('date', { ascending: false })` en las consultas de Supabase y se garantizó el orden cronológico en `mergeById` y eventos Realtime. Aplicación de la Regla 9 de limpieza continua de código.
-  - Decisiones permanentes y verificación:
-    * Ordenamiento Cronológico de Movimientos: SIEMPRE ordenar transacciones descendentemente por timestamp (`b.date - a.date`) antes de agrupar o hacer `.slice()`, garantizando que el último gasto registrado aparezca en la cima.
-    * Verificación y calidad: 121/121 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
-
+- `[TASK-TRANSACTIONS-CHRONOLOGICAL-SORTING]` (2026-11-01): Ordenamiento Cronológico Estricto de Movimientos (Fecha y Hora):
+  - Archivos intervenidos:
+    * `app/(app)/(tabs)/transactions.tsx`
+    * `app/(app)/(tabs)/index.tsx`
+    * `src/services/sync-service.ts`
+  - Resumen técnico:
+    * En `app/(app)/(tabs)/transactions.tsx`: Se ordenó descendentemente el array `monthTransactions` por timestamp exacto (`t.date || t.createdAt`), logrando que los grupos diarios y los movimientos individuales se listen estrictamente por hora de ingreso (más reciente arriba).
+    * En `app/(app)/(tabs)/index.tsx`: Se ordenaron las transacciones por fecha y hora antes de tomar los 5 primeros elementos con `.slice(0, 5)` para el widget de "Últimos Movimientos".
+    * En `src/services/sync-service.ts`: Se añadió `.order('date', { ascending: false })` en las consultas de Supabase y se garantizó el orden cronológico en `mergeById` y eventos Realtime. Aplicación de la Regla 9 de limpieza continua de código.
+  - Decisiones permanentes y verificación:
+    * Ordenamiento Cronológico de Movimientos: SIEMPRE ordenar transacciones descendentemente por timestamp (`b.date - a.date`) antes de agrupar o hacer `.slice()`, garantizando que el último gasto registrado aparezca en la cima.
+    * Verificación y calidad: 121/121 tests unitarios en verde (100% pass) en `npm test` y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
 - `[TASK-MULTI-DEVICE-CLOUD-SYNC]` (2026-11-01): Sincronización Automática Multi-Dispositivo (Supabase Pull & Realtime):
   - Archivos intervenidos:
     * `src/store/auth-store.ts`
