@@ -1955,3 +1955,17 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
      - Captura asíncrona de retorno con `onUrl()`, cierre seguro del puerto en bloque `finally` e intercambio de código mediante `supabase.auth.exchangeCodeForSession(code)`.
      - Preservación 100% inalterada de flujos Web y Móvil.
   4. **Verificación de Calidad**: `cargo check` código 0, `tsc --noEmit` 0 errores y 121/121 tests en verde (100% pass en Jest).
+
+
+### [TASK-DESKTOP-ACL-PERMISSIONS-FIX-001] - 2026-11-04
+- **Archivos Intervenidos**:
+  - `src-tauri/capabilities/default.json`
+  - `src-tauri/tauri.conf.json`
+  - `src/store/auth-store.ts`
+  - `src-tauri/target/release/bundle/nsis/ControlFynz_1.0.0_x64-setup.exe`
+- **Resumen Técnico**:
+  1. **Corrección de Permisos IPC de Tauri v2 (`default.json`)**: Sustitución de `"oauth:default"` (inexistente en el plugin) por los permisos atómicos `"oauth:allow-start"` y `"oauth:allow-cancel"`, autorizando la apertura y cierre del microservidor HTTP loopback para Google OAuth.
+  2. **Habilitación de DevTools (`tauri.conf.json`)**: Inclusión de `"devtools": true` en la ventana principal de la app para permitir inspección en vivo de la consola WebView2 vía F12.
+  3. **Tolerancia y Diagnóstico de Errores (`auth-store.ts`)**: Propagación explícita del mensaje de error real (`err.message`) en el bloque `catch` de `loginWithGoogle`.
+  4. **Re-compilación y Generación del Instalador**: Generación exitosa de `ControlFynz_1.0.0_x64-setup.exe` (~6.69 MiB).
+  5. **Verificación de Calidad**: `tsc --noEmit` 0 errores y 121/121 tests unitarios aprobados al 100% (`npm test`).

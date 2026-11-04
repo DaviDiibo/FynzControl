@@ -7,7 +7,8 @@
   ],
   "permissions": [
     "core:default",
-    "oauth:default",
+    "oauth:allow-start",
+    "oauth:allow-cancel",
     "opener:default"
   ]
 }

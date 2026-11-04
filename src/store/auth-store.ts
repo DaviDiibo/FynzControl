@@ -410,9 +410,10 @@ export const useAuthStore = create<AuthState>()(
 
           set({ isLoading: false });
           return { error: null };
-        } catch {
+        } catch (err: unknown) {
           set({ isLoading: false });
-          return { error: 'Ocurrió un error inesperado al iniciar sesión con Google.' };
+          const message = err instanceof Error ? err.message : String(err);
+          return { error: `Error al iniciar sesión con Google: ${message}` };
         }
       },
 

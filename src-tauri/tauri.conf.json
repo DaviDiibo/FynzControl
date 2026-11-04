@@ -20,6 +20,7 @@
         "maxWidth": 1280,
         "maxHeight": 980,
         "center": true,
+        "devtools": true,
         "backgroundColor": "#121212",
         "resizable": true,
         "fullscreen": false
