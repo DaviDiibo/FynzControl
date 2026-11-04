@@ -1981,3 +1981,19 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
   2. **Integración con Tauri Loopback (`src/store/auth-store.ts`)**: Suministro de `response: OAUTH_SUCCESS_HTML` en `start()` para que el servidor local en Rust sirva la respuesta estilizada preservando la inyección de token en `<head>`.
   3. **Re-compilación y Generación del Instalador**: Generación exitosa de `ControlFynz_1.0.0_x64-setup.exe` (~6.69 MiB).
   4. **Verificación de Calidad**: `tsc --noEmit` 0 errores y 121/121 tests unitarios aprobados al 100% (`npm test`).
+
+
+### [TASK-DESKTOP-BRANDING-TASKBAR-AND-INSTALLER-001] - 2026-11-04
+- **Archivos Intervenidos**:
+  - `src-tauri/Cargo.toml`
+  - `src-tauri/Cargo.lock`
+  - `src-tauri/src/main.rs`
+  - `src-tauri/tauri.conf.json`
+  - `src-tauri/icons/*`
+  - `src-tauri/target/release/bundle/nsis/ControlFynz_1.0.0_x64-setup.exe`
+- **Resumen Técnico**:
+  1. **Regeneración de Iconos Multi-Resolución**: Sustitución de los iconos genéricos por defecto de Tauri en `src-tauri/icons/` mediante `tauri icon` a partir de `assets/images/icon.png`. Generación de `icon.ico` (multi-capa Windows), `icon.icns` y variantes `Square*.png`.
+  2. **Configuración de Instalador NSIS (`tauri.conf.json`)**: Definición explícita de `bundle.windows.nsis.installerIcon: "icons/icon.ico"`, incrustando el logotipo oficial en el archivo `.exe` del instalador y en el desinstalador de Windows.
+  3. **Vincular Barra de Tareas con AppUserModelId (`main.rs` & `Cargo.toml`)**: Implementación de `SetCurrentProcessExplicitAppUserModelID("com.controlfynz.app")` con `windows-sys (Win32_UI_Shell)`, garantizando que Windows asigne y fije el icono oficial en la barra de tareas cuando la aplicación está en ejecución.
+  4. **Re-compilación de Instalador**: Generación exitosa de `ControlFynz_1.0.0_x64-setup.exe` (~6.88 MiB) con branding oficial completo.
+  5. **Verificación de Calidad**: `cargo check` 0 errores, `tsc --noEmit` 0 errores y 121/121 tests unitarios aprobados al 100% (`npm test`).
