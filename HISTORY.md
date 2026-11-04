@@ -1997,3 +1997,15 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
   3. **Vincular Barra de Tareas con AppUserModelId (`main.rs` & `Cargo.toml`)**: Implementación de `SetCurrentProcessExplicitAppUserModelID("com.controlfynz.app")` con `windows-sys (Win32_UI_Shell)`, garantizando que Windows asigne y fije el icono oficial en la barra de tareas cuando la aplicación está en ejecución.
   4. **Re-compilación de Instalador**: Generación exitosa de `ControlFynz_1.0.0_x64-setup.exe` (~6.88 MiB) con branding oficial completo.
   5. **Verificación de Calidad**: `cargo check` 0 errores, `tsc --noEmit` 0 errores y 121/121 tests unitarios aprobados al 100% (`npm test`).
+
+
+### [TASK-DESKTOP-TASKBAR-WM-SETICON-001] - 2026-11-04
+- **Archivos Intervenidos**:
+  - `src-tauri/src/lib.rs`
+  - `src-tauri/build.rs`
+  - `src-tauri/target/release/bundle/nsis/ControlFynz_1.0.0_x64-setup.exe`
+- **Resumen Técnico**:
+  1. **Asignación Explícita de Icono en Runtime (`src-tauri/src/lib.rs`)**: Importación de `tauri::Manager` y ejecución condicional para escritorio (`#[cfg(desktop)]`) obteniendo la ventana `"main"` para llamar `window.set_icon(tauri::include_image!("icons/128x128.png"))`. Esto envía el mensaje nativo `WM_SETICON` de Win32 forzando a Windows a asociar la ventana y la barra de tareas con el logotipo 3D oficial de ControlFynz en tiempo de ejecución.
+  2. **Directivas de Detección de Cambios (`src-tauri/build.rs`)**: Incorporación de `cargo:rerun-if-changed` para `icons/icon.ico`, `icons/128x128.png` y `icons/32x32.png`, asegurando que `tauri-build` empaquete siempre los recursos gráficos actualizados.
+  3. **Re-compilación de Instalador NSIS**: Generación exitosa de `ControlFynz_1.0.0_x64-setup.exe` (~6.91 MiB) con el icono incrustado en recursos PE e inyectado en runtime.
+  4. **Verificación de Calidad**: `tsc --noEmit` 0 errores y 121/121 tests unitarios aprobados al 100% (`npm test`).
