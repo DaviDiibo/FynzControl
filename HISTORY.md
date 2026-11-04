@@ -1933,3 +1933,25 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
   2. **Compilación de Núcleo Nativo con Tauri v2 y Rust**: Compilación en perfil `release` con Cargo/Rust y generación de instalador NSIS de Windows (`tauri build -b nsis`).
   3. **Artefacto Generado**: Instalador `ControlFynz_1.0.0_x64-setup.exe` (~6.62 MB) con asistente de instalación, accesos directos, desinstalador nativo en Panel de Control y ejecución sobre Microsoft Edge WebView2.
   4. **Verificación**: Exit code 0, instalador validado y disponible en el disco local.
+
+
+### [TASK-DESKTOP-GOOGLE-OAUTH-TAURI-001] - 2026-11-04
+- **Archivos Intervenidos**:
+  - `src-tauri/Cargo.toml`
+  - `src-tauri/src/lib.rs`
+  - `src-tauri/capabilities/default.json`
+  - `package.json`
+  - `package-lock.json`
+  - `src/utils/tauri-helpers.ts`
+  - `src/store/auth-store.ts`
+- **Resumen Técnico**:
+  1. **Integración Nativa de Tauri v2 (`src-tauri/`)**: Registro de `tauri-plugin-oauth` v2.1.0 (microservidor HTTP loopback efímero) y `tauri-plugin-opener` v2.7.2 (manejador de apertura de navegadores del sistema). Permisos IPC autorizados en `default.json` (`oauth:default`, `opener:default`).
+  2. **Detección de Plataforma Desacoplada (`src/utils/tauri-helpers.ts`)**: Implementación de `isTauri(): boolean` evaluando `window.__TAURI_INTERNALS__` sin dependencias estáticas frágiles.
+  3. **Flujo OAuth Seguro de Escritorio (`auth-store.ts`)**:
+     - Carga dinámica perezosa de `@fabianlars/tauri-plugin-oauth` y `@tauri-apps/plugin-opener`.
+     - Inicio de servidor loopback local dinámico con `start()`.
+     - Llamada a `supabase.auth.signInWithOAuth` con `skipBrowserRedirect: true` y redirección a `http://localhost:${port}`.
+     - Apertura del navegador del sistema (Chrome/Edge) con `openUrl(data.url)`, evitando el bloqueo `403: disallowed_useragent` de Google.
+     - Captura asíncrona de retorno con `onUrl()`, cierre seguro del puerto en bloque `finally` e intercambio de código mediante `supabase.auth.exchangeCodeForSession(code)`.
+     - Preservación 100% inalterada de flujos Web y Móvil.
+  4. **Verificación de Calidad**: `cargo check` código 0, `tsc --noEmit` 0 errores y 121/121 tests en verde (100% pass en Jest).
