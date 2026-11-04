@@ -1,6 +1,6 @@
 import { useEffect, type JSX } from 'react';
-import { AppState, Platform } from 'react-native';
-import { Slot, useRouter, useSegments } from 'expo-router';
+import { AppState, Platform, View } from 'react-native';
+import { Slot, useRouter, useSegments, DarkTheme, ThemeProvider, type Theme } from 'expo-router';
 import Head from 'expo-router/head';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -12,6 +12,16 @@ import { useAppHydration } from '../src/hooks/use-app-hydration';
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const PUBLIC_ROUTES = ['terms', 'privacy'];
+
+const customDarkTheme: Theme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    background: '#121212',
+    card: '#121212',
+    border: '#2C2C2E',
+  },
+};
 
 const RootLayout = (): JSX.Element | null => {
   const isHydrated = useAppHydration();
@@ -57,10 +67,6 @@ const RootLayout = (): JSX.Element | null => {
     }
   }, [isHydrated, isAuthenticated, segments, router]);
 
-  if (!isHydrated) {
-    return null;
-  }
-
   return (
     <SafeAreaProvider>
       <Head>
@@ -68,10 +74,21 @@ const RootLayout = (): JSX.Element | null => {
         <link rel="icon" type="image/jpeg" href="/LogoMiniaturaFynz.jpeg" />
         <link rel="shortcut icon" href="/LogoMiniaturaFynz.jpeg" />
         <link rel="apple-touch-icon" href="/LogoMiniaturaFynz.jpeg" />
+        <style id="cf-dark-root">{`
+          html, body, #root {
+            background-color: #121212 !important;
+            margin: 0;
+            padding: 0;
+          }
+        `}</style>
       </Head>
       {/* @ts-ignore - expo-status-bar types in SDK 57 omit backgroundColor and translucent */}
       <StatusBar style="light" backgroundColor="#121212" translucent={false} />
-      <Slot />
+      <ThemeProvider value={customDarkTheme}>
+        <View style={{ flex: 1, backgroundColor: '#121212' }}>
+          {isHydrated ? <Slot /> : null}
+        </View>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 };

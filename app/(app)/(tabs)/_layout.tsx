@@ -13,6 +13,9 @@ const TabsLayout = (): JSX.Element => {
     <Tabs
       screenOptions={{
         headerShown: false,
+        lazy: false,
+        animation: 'fade',
+        sceneStyle: { backgroundColor: '#121212' },
         tabBarActiveTintColor: '#00FFA3',
         tabBarInactiveTintColor: '#8E8E93',
         tabBarStyle: isWide

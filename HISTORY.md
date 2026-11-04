@@ -2009,3 +2009,17 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
   2. **Directivas de Detección de Cambios (`src-tauri/build.rs`)**: Incorporación de `cargo:rerun-if-changed` para `icons/icon.ico`, `icons/128x128.png` y `icons/32x32.png`, asegurando que `tauri-build` empaquete siempre los recursos gráficos actualizados.
   3. **Re-compilación de Instalador NSIS**: Generación exitosa de `ControlFynz_1.0.0_x64-setup.exe` (~6.91 MiB) con el icono incrustado en recursos PE e inyectado en runtime.
   4. **Verificación de Calidad**: `tsc --noEmit` 0 errores y 121/121 tests unitarios aprobados al 100% (`npm test`).
+
+
+### [TASK-DESKTOP-DARK-THEME-TAB-TRANSITION-001] - 2026-11-04
+- **Archivos Intervenidos**:
+  - `app/_layout.tsx`
+  - `app/(app)/_layout.tsx`
+  - `app/(app)/(tabs)/_layout.tsx`
+  - `src-tauri/target/release/bundle/nsis/ControlFynz_1.0.0_x64-setup.exe`
+- **Resumen Técnico**:
+  1. **Blindaje de Fondo y Tema Oscuro Global (`app/_layout.tsx`)**: Inyección en `<Head>` de regla CSS `html, body, #root { background-color: #121212 !important; margin: 0; padding: 0; }` para neutralizar el canvas blanco por defecto de Chromium/WebView2. Envoltura de la aplicación en `<ThemeProvider value={customDarkTheme}>` adaptado desde `DarkTheme` y contenedor base con `backgroundColor: '#121212'`, erradicando el tema claro `DefaultTheme` (`rgb(242, 242, 242)`) de React Navigation.
+  2. **Contenedor Oscuro Continuo en Stack (`app/(app)/_layout.tsx`)**: Configuración de `contentStyle: { backgroundColor: '#121212' }` en `screenOptions` del `<Stack>` principal para prevenir marcos transparentes o blancos durante cambios de ruta.
+  3. **Optimización de Pestañas y Transición Fade (`app/(app)/(tabs)/_layout.tsx`)**: Configuración en `screenOptions` de `<Tabs>` con `sceneStyle: { backgroundColor: '#121212' }`, `lazy: false` para precargar las 5 escenas suprimiendo el retardo de montaje en frío (*cold mount*), y `animation: 'fade'` para lograr un fundido suave y continuo.
+  4. **Re-compilación de Instalador NSIS**: Generación exitosa de `ControlFynz_1.0.0_x64-setup.exe` (~6.92 MiB).
+  5. **Verificación de Calidad**: `tsc --noEmit` 0 errores y 121/121 tests unitarios aprobados al 100% (`npm test`).
