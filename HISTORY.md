@@ -1922,3 +1922,14 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
      - `app/(app)/(tabs)/_layout.tsx`: Evaluación segura `typeof color === 'string' ? color : undefined` en iconos para compatibilidad con `ColorValue`.
      - `src/hooks/use-responsive.ts`: Modernización del hook con `useWindowDimensions()`, eliminando suscripciones imperativas a `Dimensions.addEventListener` y resolviendo `implicit any`.
   3. **Verificación de Calidad**: 121/121 pruebas unitarias aprobadas al 100% (`npm test`) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+
+### [TASK-DESKTOP-TAURI-BUILD-001] - 2026-11-04
+- **Archivos Intervenidos**:
+  - `dist/` (build web estático exportado)
+  - `src-tauri/target/release/bundle/nsis/ControlFynz_1.0.0_x64-setup.exe` (instalador generado)
+- **Resumen Técnico**:
+  1. **Exportación Web de Producción**: Generación de bundles JS minificados y 46 rutas estáticas optimizadas mediante `npm run build:web` en `ControlFynz/dist/`.
+  2. **Compilación de Núcleo Nativo con Tauri v2 y Rust**: Compilación en perfil `release` con Cargo/Rust y generación de instalador NSIS de Windows (`tauri build -b nsis`).
+  3. **Artefacto Generado**: Instalador `ControlFynz_1.0.0_x64-setup.exe` (~6.62 MB) con asistente de instalación, accesos directos, desinstalador nativo en Panel de Control y ejecución sobre Microsoft Edge WebView2.
+  4. **Verificación**: Exit code 0, instalador validado y disponible en el disco local.
