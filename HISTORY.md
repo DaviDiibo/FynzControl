@@ -1969,3 +1969,15 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
   3. **Tolerancia y Diagnóstico de Errores (`auth-store.ts`)**: Propagación explícita del mensaje de error real (`err.message`) en el bloque `catch` de `loginWithGoogle`.
   4. **Re-compilación y Generación del Instalador**: Generación exitosa de `ControlFynz_1.0.0_x64-setup.exe` (~6.69 MiB).
   5. **Verificación de Calidad**: `tsc --noEmit` 0 errores y 121/121 tests unitarios aprobados al 100% (`npm test`).
+
+
+### [TASK-DESKTOP-OAUTH-HTML-TEMPLATE-001] - 2026-11-04
+- **Archivos Intervenidos**:
+  - `src/utils/tauri-helpers.ts`
+  - `src/store/auth-store.ts`
+  - `src-tauri/target/release/bundle/nsis/ControlFynz_1.0.0_x64-setup.exe`
+- **Resumen Técnico**:
+  1. **Plantilla Cyberpunk de Retorno OAuth (`src/utils/tauri-helpers.ts`)**: Implementación de `OAUTH_SUCCESS_HTML` sustituyendo la pantalla plana en blanco por una interfaz inmersiva con fondo `#121212`, tarjeta `#1E1E1E`, resplandor `#00FFA3`, badge `CONTROLFYNZ OS // SESIÓN CONFIRMADA`, icono animado de éxito, temporizador de cierre automático a los 3 segundos y botón manual de cierre de pestaña.
+  2. **Integración con Tauri Loopback (`src/store/auth-store.ts`)**: Suministro de `response: OAUTH_SUCCESS_HTML` en `start()` para que el servidor local en Rust sirva la respuesta estilizada preservando la inyección de token en `<head>`.
+  3. **Re-compilación y Generación del Instalador**: Generación exitosa de `ControlFynz_1.0.0_x64-setup.exe` (~6.69 MiB).
+  4. **Verificación de Calidad**: `tsc --noEmit` 0 errores y 121/121 tests unitarios aprobados al 100% (`npm test`).
