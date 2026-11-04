@@ -1906,3 +1906,19 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
   2. **Feedback y Estados de Carga**: Integración de spinners `ActivityIndicator` reactivos dentro de los botones de acción para `isLoggingOut` e `isDeletingAccount`, más visualización de mensajes de error in-app (`deleteErrorMessage`) sin ventanas emergentes del navegador.
   3. **Robustecimiento Determinista de `logout()` (`auth-store.ts`)**: Eliminación del retardo síncrono ciego de 2 segundos. Ahora cancela suscripciones Realtime primero, purga stores en memoria, ejecuta `Promise.allSettled` con `safeStorage.removeItem` para ambas claves de autenticación y `supabase.auth.signOut({ scope: 'local' })`, y garantiza el reseteo instantáneo de `isAuthenticated: false` y `user: null`.
   4. **Verificación de Calidad**: 121/121 pruebas unitarias aprobadas al 100% (`npm test`) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).
+
+
+### [TASK-EXPO-SDK-58-UPGRADE] - 2026-11-04
+- **Archivos Intervenidos**:
+  - `package.json`
+  - `package-lock.json`
+  - `src/types/react-native-augmentations.d.ts`
+  - `app/(app)/(tabs)/_layout.tsx`
+  - `src/hooks/use-responsive.ts`
+- **Resumen Técnico**:
+  1. **Actualización del Ecosistema a Expo SDK 58**: Migración oficial de `expo` a `~58.0.23`, `react-native` a `0.88.1`, `expo-router` a `~58.0.30`, `jest-expo` a `~58.0.14` y dependencias asociadas (`expo-image`, `expo-font`, `react-native-reanimated` 4.7.1, `react-native-worklets` 0.13.0). Compatibilidad total restaurada para Expo Go en dispositivos Apple (iOS).
+  2. **Resolución Estricta de Tipado en React Native 0.88**:
+     - `src/types/react-native-augmentations.d.ts`: Aumentación de `React.JSX.IntrinsicAttributes` para soportar `backgroundColor?: string` en `<StatusBar>` globalmente sin modificar pantallas individuales.
+     - `app/(app)/(tabs)/_layout.tsx`: Evaluación segura `typeof color === 'string' ? color : undefined` en iconos para compatibilidad con `ColorValue`.
+     - `src/hooks/use-responsive.ts`: Modernización del hook con `useWindowDimensions()`, eliminando suscripciones imperativas a `Dimensions.addEventListener` y resolviendo `implicit any`.
+  3. **Verificación de Calidad**: 121/121 pruebas unitarias aprobadas al 100% (`npm test`) y 0 errores de compilación TypeScript (`npx tsc --noEmit`).

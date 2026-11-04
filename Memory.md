@@ -3,13 +3,13 @@
 > **Límite Estricto**: Este archivo mantiene el contexto de trabajo activo y NO debe superar las 100 líneas. Para la bitácora de tareas concluidas, consultar `HISTORY.md` bajo demanda.
 
 ## 1. Arquitectura y Stack Base
-- **Framework**: Expo SDK 57 (React Native) + Expo Router (`app/` en la raíz).
+- **Framework**: Expo SDK 58 (React Native 0.88) + Expo Router (`app/` en la raíz).
 - **Lenguaje & Tipado**: TypeScript estricto, arrow functions con tipado inline obligatorio (`const Comp = (props: Props): JSX.Element => ...`), cero `any` o `unknown`.
 - **Estado y Persistencia**: Zustand con adaptador `safeStorage` (con respaldo resiliente en memoria). Claves activas: `*-storage-v2`.
 - **UI & Tema**: Modo oscuro cyberpunk/neón (`#121212`, tarjetas `#1E1E1E`, acento `#00FFA3`, peligro `#FF453A`). Modales interactivos transparentes, nunca diálogos toscos nativos.
 - **Multiplataforma**: Paridad iOS (KeyboardOffset 48dp, Safe Area), Android (KeyboardOffset 0dp, Edge-to-edge) y Web/Tauri Desktop (`useIsWide(768)`).
 - **Backend / Infra & Sync**: Arquitectura Offline-First con proyección a Supabase (Auth, RLS, PostgreSQL). Sincronización Multi-Dispositivo en `sync-service.ts` y `use-app-hydration.ts`: Pull en hidratación, Focus Sync en Web/Móvil, Supabase Realtime e indicador de estado reactivo.
-- **Testing & QA**: Jest 29 + `jest-expo` (~57.0.6). Verificación doble obligatoria (`npm test` 100% pass [121/121] + `npx tsc --noEmit` 0 errores) previo a cerrar cualquier tarea.
+- **Testing & QA**: Jest 30 + `jest-expo` (~58.0.14). Verificación doble obligatoria (`npm test` 100% pass [121/121] + `npx tsc --noEmit` 0 errores) previo a cerrar cualquier tarea.
 
 ## 2. Estado Activo del Sprint y Foco Inmediato
 - **Módulos Principales Culminados**:
@@ -25,6 +25,7 @@
   - **Términos y Política de Privacidad (`[TASK-LEGAL-PRIVACY-AND-TERMS]`)**: Rutas públicas y nativas `app/privacy.tsx` y `app/terms.tsx` (cero venta de datos, RLS, exención financiera bancaria), con accesos en login (`login.tsx`) y Ajustes (`settings-section-list.tsx`). 121/121 tests y 0 errores TS.
   - **Sincronización Offline-First y Realtime Granular (`[TASK-SYNC-PHASE-3-COMPLETE]`)**: `TombstoneQueue` persistida en `safeStorage`, doble escudo anti-zombis, 7 handlers granulares en memoria sobre Supabase Realtime (suprimiendo `triggerDebouncedPull`) y backoff exponencial en WebSockets (`sync-service.ts`, `use-app-hydration.ts`). 121/121 tests y 0 errores TS.
   - **Higiene Total de Dependencias y Código Huérfano (`[TASK-HYGIENE-PHASE-2-COMPLETE]`)**: Eliminación de 5 dependencias en `package.json` y purga completa de los 14 archivos huérfanos de plantilla (`animated-icon.*`, `app-tabs.*`, `external-link`, `hint-row`, `web-badge`, `themed-*`, `use-theme`, `use-color-scheme.*`, `theme.ts`, `global.css`). 121/121 tests y 0 errores TS.
+  - **Actualización a Expo SDK 58 y React Native 0.88 (`[TASK-EXPO-SDK-58-UPGRADE]`)**: Migración oficial a `expo@~58.0.23`, `react-native@0.88.1` y `expo-router@~58.0.30` restaurando compatibilidad con Expo Go en iOS (Apple); ambient augmentation `react-native-augmentations.d.ts`, modernización con `useWindowDimensions` en `useIsWide` y guardas de color en `Tabs`. 121/121 tests en verde y 0 errores TS.
   - **Modales In-App Cyberpunk para Logout y Eliminación (`[TASK-CYBERPUNK-MODALS-LOGOUT-AND-DELETION-001]`)**: Reemplazo total de alertas nativas/navegador por componentes `<Modal transparent>` estilizados (`#1E1E1E`, acento `#FF453A`, spinners y feedback in-app) para salida y borrado de cuenta en `settings-section-list.tsx`; `logout()` instantáneo con `{ scope: 'local' }` y purga explícita en `auth-store.ts`. 121/121 tests en verde y 0 errores TS.
   - **Eliminación Permanente de Cuenta e Integridad RPC (`[TASK-ACCOUNT-PERMANENT-DELETION-RPC-FIX]`)**: Función RPC `delete_user_account()` con `SECURITY DEFINER` y `DELETE FROM auth.users` en cascada atómica relacional; blindaje contra silenciamiento de errores RPC en `auth-store.ts` y flujo estricto de purga en `settings-section-list.tsx`. 121/121 tests en verde y 0 errores TS.
   - **Confirmación de Logout, Scroll en Dashboard e Indicador de Sync (`[TASK-POLISH-LOGOUT-SCROLL-SYNC-INDICATOR]`)**: Diálogo `Alert.alert` preventivo en cierre de sesión (`settings-section-list.tsx`), indicador de sync reactivo con `subscribeToSyncStatus` y botón interactivo en Ajustes (`sync-service.ts`), y homologación de `paddingBottom: 110` en Dashboard (`index.tsx`). 121/121 tests y 0 errores TS.
