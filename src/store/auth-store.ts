@@ -10,6 +10,7 @@ import { syncService } from '../services/sync-service';
 import { useTransactionsStore } from './transactions-store';
 import { useDebtsStore } from './debts-store';
 import { useCardsStore } from './cards-store';
+import { isTauri } from '../utils/tauri-helpers';
 import type { User, AuthResponse } from '../types';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -185,6 +186,128 @@ export const useAuthStore = create<AuthState>()(
       loginWithGoogle: async (): Promise<AuthResponse> => {
         set({ isLoading: true });
         try {
+          if (isTauri()) {
+            const [{ start, cancel, onUrl }, { openUrl }] = await Promise.all([
+              import('@fabianlars/tauri-plugin-oauth'),
+              import('@tauri-apps/plugin-opener'),
+            ]);
+
+            const port = await start();
+            const redirectUrl = `http://localhost:${port}`;
+            let unlisten: (() => void) | null = null;
+            let callbackUrl: string;
+
+            try {
+              const { data, error } = await supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: {
+                  redirectTo: redirectUrl,
+                  skipBrowserRedirect: true,
+                },
+              });
+
+              if (error) {
+                set({ isLoading: false });
+                return { error: error.message };
+              }
+              if (!data?.url) {
+                set({ isLoading: false });
+                return { error: 'No se pudo generar la URL de autenticación.' };
+              }
+
+              const authPromise = new Promise<string>((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                  reject(new Error('El inicio de sesión expiró o fue cancelado.'));
+                }, 120000);
+
+                onUrl((url: string) => {
+                  clearTimeout(timeout);
+                  resolve(url);
+                }).then((unlistenFn) => {
+                  unlisten = unlistenFn;
+                }).catch(reject);
+              });
+
+              await openUrl(data.url);
+              callbackUrl = await authPromise;
+            } finally {
+              const activeUnlisten = unlisten as (() => void) | null;
+              if (activeUnlisten) {
+                try {
+                  activeUnlisten();
+                } catch {
+                  // Silencioso
+                }
+              }
+              try {
+                await cancel(port);
+              } catch {
+                // Silencioso
+              }
+            }
+
+            let code: string | null = null;
+            let access_token: string | null = null;
+            let refresh_token: string | null = null;
+            let authError: string | null = null;
+            let authErrorDescription: string | null = null;
+
+            try {
+              const parsedUrl = new URL(callbackUrl);
+              code = parsedUrl.searchParams.get('code');
+              access_token = parsedUrl.searchParams.get('access_token');
+              refresh_token = parsedUrl.searchParams.get('refresh_token');
+              authError = parsedUrl.searchParams.get('error');
+              authErrorDescription = parsedUrl.searchParams.get('error_description');
+
+              const hash = parsedUrl.hash.startsWith('#') ? parsedUrl.hash.substring(1) : parsedUrl.hash;
+              if (hash) {
+                const hashParams = new URLSearchParams(hash);
+                if (!code) code = hashParams.get('code');
+                if (!access_token) access_token = hashParams.get('access_token');
+                if (!refresh_token) refresh_token = hashParams.get('refresh_token');
+                if (!authError) authError = hashParams.get('error');
+                if (!authErrorDescription) authErrorDescription = hashParams.get('error_description');
+              }
+            } catch {
+              const getParam = (name: string, url: string): string | null => {
+                const match = url.match(new RegExp(`[?&#]${name}=([^&#]+)`));
+                return match ? decodeSafe(match[1]) : null;
+              };
+              code = getParam('code', callbackUrl);
+              access_token = getParam('access_token', callbackUrl);
+              refresh_token = getParam('refresh_token', callbackUrl);
+              authError = getParam('error', callbackUrl);
+              authErrorDescription = getParam('error_description', callbackUrl);
+            }
+
+            if (authError || authErrorDescription) {
+              set({ isLoading: false });
+              const rawMsg = authErrorDescription || authError || 'Error de autenticación.';
+              return { error: decodeSafe(rawMsg) };
+            }
+
+            if (code) {
+              const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+              if (exchangeError) {
+                set({ isLoading: false });
+                return { error: exchangeError.message };
+              }
+            } else if (access_token && refresh_token) {
+              const { error: sessionError } = await supabase.auth.setSession({ access_token, refresh_token });
+              if (sessionError) {
+                set({ isLoading: false });
+                return { error: sessionError.message };
+              }
+            } else {
+              set({ isLoading: false });
+              return { error: 'No se recibieron credenciales de autenticación válidas.' };
+            }
+
+            set({ isLoading: false });
+            return { error: null };
+          }
+
           if (Platform.OS === 'web') {
             const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
             const { error } = await supabase.auth.signInWithOAuth({

@@ -6,6 +6,8 @@
     "main"
   ],
   "permissions": [
-    "core:default"
+    "core:default",
+    "oauth:default",
+    "opener:default"
   ]
 }
