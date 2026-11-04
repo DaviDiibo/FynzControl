@@ -60,7 +60,7 @@ const TabsLayout = (): JSX.Element => {
         options={{
           title: 'Resumen',
           tabBarIcon: ({ color }) => (
-            <Ionicons name="wallet-outline" size={26} color={color} />
+            <Ionicons name="wallet-outline" size={26} color={typeof color === 'string' ? color : undefined} />
           ),
         }}
       />
@@ -69,7 +69,7 @@ const TabsLayout = (): JSX.Element => {
         options={{
           title: 'Movimientos',
           tabBarIcon: ({ color }) => (
-            <Ionicons name="swap-horizontal-outline" size={26} color={color} />
+            <Ionicons name="swap-horizontal-outline" size={26} color={typeof color === 'string' ? color : undefined} />
           ),
         }}
       />
@@ -78,7 +78,7 @@ const TabsLayout = (): JSX.Element => {
         options={{
           title: 'Deudas',
           tabBarIcon: ({ color }) => (
-            <Ionicons name="card-outline" size={26} color={color} />
+            <Ionicons name="card-outline" size={26} color={typeof color === 'string' ? color : undefined} />
           ),
         }}
       />
@@ -87,7 +87,7 @@ const TabsLayout = (): JSX.Element => {
         options={{
           title: 'Estadísticas',
           tabBarIcon: ({ color }) => (
-            <Ionicons name="pie-chart-outline" size={26} color={color} />
+            <Ionicons name="pie-chart-outline" size={26} color={typeof color === 'string' ? color : undefined} />
           ),
         }}
       />
@@ -96,7 +96,7 @@ const TabsLayout = (): JSX.Element => {
         options={{
           title: 'Ajustes',
           tabBarIcon: ({ color }) => (
-            <Ionicons name="settings-outline" size={26} color={color} />
+            <Ionicons name="settings-outline" size={26} color={typeof color === 'string' ? color : undefined} />
           ),
         }}
       />
