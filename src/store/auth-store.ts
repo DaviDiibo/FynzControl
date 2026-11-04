@@ -10,7 +10,7 @@ import { syncService } from '../services/sync-service';
 import { useTransactionsStore } from './transactions-store';
 import { useDebtsStore } from './debts-store';
 import { useCardsStore } from './cards-store';
-import { isTauri } from '../utils/tauri-helpers';
+import { isTauri, OAUTH_SUCCESS_HTML } from '../utils/tauri-helpers';
 import type { User, AuthResponse } from '../types';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -192,7 +192,7 @@ export const useAuthStore = create<AuthState>()(
               import('@tauri-apps/plugin-opener'),
             ]);
 
-            const port = await start();
+            const port = await start({ response: OAUTH_SUCCESS_HTML });
             const redirectUrl = `http://localhost:${port}`;
             let unlisten: (() => void) | null = null;
             let callbackUrl: string;
