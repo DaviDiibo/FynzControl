@@ -2023,3 +2023,14 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
   3. **Optimización de Pestañas y Transición Fade (`app/(app)/(tabs)/_layout.tsx`)**: Configuración en `screenOptions` de `<Tabs>` con `sceneStyle: { backgroundColor: '#121212' }`, `lazy: false` para precargar las 5 escenas suprimiendo el retardo de montaje en frío (*cold mount*), y `animation: 'fade'` para lograr un fundido suave y continuo.
   4. **Re-compilación de Instalador NSIS**: Generación exitosa de `ControlFynz_1.0.0_x64-setup.exe` (~6.92 MiB).
   5. **Verificación de Calidad**: `tsc --noEmit` 0 errores y 121/121 tests unitarios aprobados al 100% (`npm test`).
+
+
+### [TASK-DESKTOP-UPDATER-PHASE-1] - 2026-11-04
+- **Archivos Intervenidos**:
+  - `src-tauri/Cargo.toml`
+  - `src-tauri/src/lib.rs`
+  - `src-tauri/Cargo.lock`
+- **Resumen Técnico**:
+  1. **Integración de Dependencia Nativa Rust (`src-tauri/Cargo.toml`)**: Incorporación de la crate oficial `tauri-plugin-updater = "2"` bajo `[dependencies]`.
+  2. **Registro de Plugin en Runtime (`src-tauri/src/lib.rs`)**: Registro de `.plugin(tauri_plugin_updater::Builder::new().build())` en la función `run()` dentro de `tauri::Builder::default()`.
+  3. **Verificación de Calidad**: `cargo check` 0 errores, `tsc --noEmit` 0 errores y 121/121 tests unitarios aprobados al 100% (`npm test`).
