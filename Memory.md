@@ -21,9 +21,7 @@
   - Centro de Gestión de Pasivos y Cobros: Préstamos bancarios, préstamos a amigos y Liquidación Mensual de Terceros (Fases 1 y 2).
   - Cobertura de Testing (130/130 tests en verde): Suites en `src/__tests__/` (divisas, ciclos de facturación, amortizaciones, fechas, integración contable, updater-service).
 - **Hitos Recientes Concluidos**:
-  - **Actualizador Desktop Fase 3 (`[TASK-DESKTOP-UPDATER-PHASE-3]`)**: Cliente `@tauri-apps/plugin-updater`, servicio `updater-service.ts` y suite Jest; 130/130 tests y 0 errores TS.
-  - **Actualizador Desktop Fase 2 (`[TASK-DESKTOP-UPDATER-PHASE-2]`)**: Claves Minisign, `"updater:default"` en `capabilities/default.json` y config de `plugins.updater` en `tauri.conf.json`; `cargo check` 0 errores, 121/121 tests y 0 errores TS.
-  - **Actualizador Desktop Fase 1 (`[TASK-DESKTOP-UPDATER-PHASE-1]`)**: Dependencia nativa `tauri-plugin-updater = "2"` en `Cargo.toml` y registro de plugin en `lib.rs`; `cargo check` 0 errores, 121/121 tests y 0 errores TS.
+  - **Actualizador Desktop Auto-Update Completo (`[TASK-DESKTOP-UPDATER-COMPLETE]`)**: Sistema nativo Tauri v2 Updater (Fases 1-4). Plugin Rust `tauri-plugin-updater`, claves Minisign, capacidades IPC, servicio cliente `updater-service.ts`, suite Jest (130/130) y UI Cyberpunk en Ajustes con modal de descarga y reinicio. Instalador NSIS re-compilado (7.96 MB). 0 errores TS.
   - **Transición 100% Oscura y Cero Destello en Tabs (`[TASK-DESKTOP-DARK-THEME-TAB-TRANSITION-001]`)**: Inyección CSS `#121212` en `<Head>`, `ThemeProvider` oscuro, `sceneStyle`, `lazy: false` y `animation: 'fade'` en `<Tabs>`; instalador NSIS re-compilado (6.92 MB). 121/121 tests y 0 errores TS.
   - **Icono Runtime en Barra de Tareas Desktop (`[TASK-DESKTOP-TASKBAR-WM-SETICON-001]`)**: Asignación explícita `window.set_icon` (`WM_SETICON`) con `include_image!("icons/128x128.png")` en `lib.rs` y `cargo:rerun-if-changed` en `build.rs`; instalador NSIS re-compilado (6.91 MB). 121/121 tests y 0 errores TS.
   - **Logotipos Oficiales, Favicon y Branding (`[TASK-OFFICIAL-BRAND-LOGOS]`)**: Integración de `LogoMiniaturaFynz` y `LogoFynz` en `assets/images/` y `public/` (favicon web, icon, splash nativo), calibración en `app.json`, inyección `<Head>` en `_layout.tsx` y cabecera en `login.tsx`. 121/121 tests y 0 errores TS.
@@ -40,7 +38,7 @@
   - **Eliminación Permanente de Cuenta e Integridad RPC (`[TASK-ACCOUNT-PERMANENT-DELETION-RPC-FIX]`)**: Función RPC `delete_user_account()` con `SECURITY DEFINER` y `DELETE FROM auth.users` en cascada atómica relacional; blindaje contra silenciamiento de errores RPC en `auth-store.ts` y flujo estricto de purga en `settings-section-list.tsx`. 121/121 tests en verde y 0 errores TS.
   - **Sincronización y UX Base Web/Móvil (`[TASK-MULTI-DEVICE-CLOUD-SYNC]`, `[TASK-TRANSACTIONS-CHRONOLOGICAL-SORTING]`, `[TASK-STATIC-WEB-TAB-TITLE]`, `[TASK-POLISH-LOGOUT-SCROLL-SYNC-INDICATOR]`)**: Título web estático, orden cronológico de movimientos, focus sync, indicador reactivo y confirmación de logout. 121/121 tests en verde y 0 errores TS.
 - **Próximo Foco Inmediato**:
-  - Fase 4 del actualizador de escritorio Tauri (interfaz de usuario / modal de confirmación y progreso de descarga).
+  - Monitoreo en producción, release v1.0.0 y soporte continuo de sincronización y UX.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
 - ❌ **NO usar alertas nativas ni `window.confirm` para acciones de sesión o borrado (Regla de Modales In-App)**: Usar siempre componentes `<Modal transparent>` con diseño Cyberpunk y spinners integrados para garantizar paridad visual y funcional entre Web, iOS y Android.
