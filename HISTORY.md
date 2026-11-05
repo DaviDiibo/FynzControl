@@ -2059,3 +2059,15 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
   2. **Servicio Tipado de Actualizaciones (`src/services/updater-service.ts`)**: Implementación modular con guarda `isTauri()`, tipos estructurados (`UpdateCheckResult`, `UpdateProgress`), invocación a `check()`, y `downloadAndInstallUpdate()` con cómputo de progreso porcentual y captura segura de errores sin fugas de excepciones.
   3. **Suite Exhaustiva de Pruebas Unitarias (`src/__tests__/updater-service.test.ts`)**: 9 pruebas automatizadas en Jest validando guardas de plataforma (retorno inerte en Web/Móvil), actualización disponible, estado al día, cálculo de progreso en descargas y tolerancia a fallos.
   4. **Verificación de Calidad**: `tsc --noEmit` 0 errores y 130/130 tests unitarios aprobados al 100% (7 suites en verde en `npm test`).
+
+
+### [TASK-DESKTOP-UPDATER-PHASE-4] - 2026-11-04
+- **Archivos Intervenidos**:
+  - `src/components/settings/update-checker-card.tsx`
+  - `src/components/settings/settings-section-list.tsx`
+  - `src-tauri/target/release/bundle/nsis/ControlFynz_1.0.0_x64-setup.exe`
+- **Resumen Técnico**:
+  1. **Componente Visual y Modal Cyberpunk (`src/components/settings/update-checker-card.tsx`)**: Implementación con tipado inline estricto y guarda `isTauri()`. Interfaz de consulta bajo demanda, indicador de estado ("Al día", "Buscando", "Error") y modal interactivo con badge `CONTROLFYNZ OS // ACTUALIZACIÓN`, visor scrolleable de notas de versión, barra de progreso neón reactiva en tiempo real y botones de acción ("Actualizar ahora" / "Más tarde").
+  2. **Integración en Pantalla de Ajustes (`src/components/settings/settings-section-list.tsx`)**: Montaje en el layout responsivo de Ajustes (grilla ancha `isWide` de escritorio y layout vertical estándar), manteniendo inalterada la apariencia en Web y Móvil.
+  3. **Re-compilación y Generación del Instalador NSIS**: Exportación web limpia (`dist/`) y compilación release con `npx tauri build -b nsis`, generando `ControlFynz_1.0.0_x64-setup.exe` (~7.96 MiB) con el sistema de auto-actualización plenamente operativo.
+  4. **Verificación de Calidad**: `tsc --noEmit` 0 errores y 130/130 tests unitarios aprobados al 100% (7 suites en verde en `npm test`).
