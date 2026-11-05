@@ -21,6 +21,7 @@
   - Centro de Gestión de Pasivos y Cobros: Préstamos bancarios, préstamos a amigos y Liquidación Mensual de Terceros (Fases 1 y 2).
   - Cobertura de Testing (121/121 tests en verde): Suites en `src/__tests__/` (divisas, ciclos de facturación, amortizaciones, fechas, integración contable).
 - **Hitos Recientes Concluidos**:
+  - **Actualizador Desktop Fase 1 (`[TASK-DESKTOP-UPDATER-PHASE-1]`)**: Dependencia nativa `tauri-plugin-updater = "2"` en `Cargo.toml` y registro de plugin en `lib.rs`; `cargo check` 0 errores, 121/121 tests y 0 errores TS.
   - **Transición 100% Oscura y Cero Destello en Tabs (`[TASK-DESKTOP-DARK-THEME-TAB-TRANSITION-001]`)**: Inyección CSS `#121212` en `<Head>`, `ThemeProvider` oscuro, `sceneStyle`, `lazy: false` y `animation: 'fade'` en `<Tabs>`; instalador NSIS re-compilado (6.92 MB). 121/121 tests y 0 errores TS.
   - **Icono Runtime en Barra de Tareas Desktop (`[TASK-DESKTOP-TASKBAR-WM-SETICON-001]`)**: Asignación explícita `window.set_icon` (`WM_SETICON`) con `include_image!("icons/128x128.png")` en `lib.rs` y `cargo:rerun-if-changed` en `build.rs`; instalador NSIS re-compilado (6.91 MB). 121/121 tests y 0 errores TS.
   - **Logotipos Oficiales, Favicon y Branding (`[TASK-OFFICIAL-BRAND-LOGOS]`)**: Integración de `LogoMiniaturaFynz` y `LogoFynz` en `assets/images/` y `public/` (favicon web, icon, splash nativo), calibración en `app.json`, inyección `<Head>` en `_layout.tsx` y cabecera en `login.tsx`. 121/121 tests y 0 errores TS.
@@ -39,10 +40,8 @@
   - **Título Estático de la Pestaña Web (`[TASK-STATIC-WEB-TAB-TITLE]`)**: `<Head><title>ControlFynz</title></Head>` y `document.title = 'ControlFynz'` en `app/_layout.tsx` para fijar el título en Web. 121/121 tests en verde y 0 errores TS.
   - **Ordenamiento Cronológico Estricto de Movimientos (`[TASK-TRANSACTIONS-CHRONOLOGICAL-SORTING]`)**: Orden descendente por timestamp exacto (`t.date || t.createdAt`) en `transactions.tsx`, `index.tsx` ("Últimos Movimientos") y `sync-service.ts`. 121/121 tests y 0 errores TS.
   - **Sincronización Automática Multi-Dispositivo (`[TASK-MULTI-DEVICE-CLOUD-SYNC]`)**: Pull silencioso al hidratar, Focus Sync con cooldown de 6s y suscripción a Supabase Realtime (`user-sync-${userId}`) para replicación instantánea vía WebSockets. 121/121 tests en verde y 0 errores TS.
-  - **Pantalla de Detalle y Bitácora de Deudas (`[TASK-DEBT-DETAIL-SCREEN-PHASE-2]`)**: `app/(app)/debts/[id].tsx` con Hero Card Financiero, barra de progreso de cuotas, bitácora cronológica de pagos bancarios vinculados y barra flotante de abonos. 121/121 tests en verde y 0 errores TS.
-  - **Calibración de Semáforos en Dashboard (`[TASK-DASHBOARD-URGENCY-CALIBRATION-1B]`)**: Semáforo preventivo en `upcoming-debts-card.tsx` con `getDashboardUrgencyStatus` (`warning` <= 7d dorado `#FFD60A`). 121/121 tests en verde y 0 errores TS.
 - **Próximo Foco Inmediato**:
-  - Continuar con la siguiente etapa de consolidación modular del módulo de deudas o siguientes optimizaciones del backlog.
+  - Continuar con la Fase 2 del actualizador de escritorio Tauri (configuración de endpoint, claves públicas y UI de actualización).
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
 - ❌ **NO usar alertas nativas ni `window.confirm` para acciones de sesión o borrado (Regla de Modales In-App)**: Usar siempre componentes `<Modal transparent>` con diseño Cyberpunk y spinners integrados para garantizar paridad visual y funcional entre Web, iOS y Android.
