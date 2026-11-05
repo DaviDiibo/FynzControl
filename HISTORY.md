@@ -2046,3 +2046,16 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
   3. **Configuración de Manifiesto (`src-tauri/tauri.conf.json`)**: Configuración de `"plugins.updater"` con la clave pública Minisign, el endpoint oficial de versiones (`https://github.com/DaviDiibo/FynzControl/releases/latest/download/latest.json`) y `windows.installMode: "passive"`.
   4. **Verificación de Calidad**: `cargo check` 0 errores, `tsc --noEmit` 0 errores y 121/121 tests unitarios aprobados al 100% (`npm test`).
 
+
+
+### [TASK-DESKTOP-UPDATER-PHASE-3] - 2026-11-04
+- **Archivos Intervenidos**:
+  - `package.json`
+  - `package-lock.json`
+  - `src/services/updater-service.ts`
+  - `src/__tests__/updater-service.test.ts`
+- **Resumen Técnico**:
+  1. **Dependencia Cliente Oficial (`package.json`)**: Adición e instalación de `@tauri-apps/plugin-updater: ^2.14.1`, garantizando compatibilidad con el ecosistema `@tauri-apps/api: ^2.12.0`.
+  2. **Servicio Tipado de Actualizaciones (`src/services/updater-service.ts`)**: Implementación modular con guarda `isTauri()`, tipos estructurados (`UpdateCheckResult`, `UpdateProgress`), invocación a `check()`, y `downloadAndInstallUpdate()` con cómputo de progreso porcentual y captura segura de errores sin fugas de excepciones.
+  3. **Suite Exhaustiva de Pruebas Unitarias (`src/__tests__/updater-service.test.ts`)**: 9 pruebas automatizadas en Jest validando guardas de plataforma (retorno inerte en Web/Móvil), actualización disponible, estado al día, cálculo de progreso en descargas y tolerancia a fallos.
+  4. **Verificación de Calidad**: `tsc --noEmit` 0 errores y 130/130 tests unitarios aprobados al 100% (7 suites en verde en `npm test`).
