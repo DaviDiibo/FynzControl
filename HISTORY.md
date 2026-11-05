@@ -2034,3 +2034,15 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
   1. **Integración de Dependencia Nativa Rust (`src-tauri/Cargo.toml`)**: Incorporación de la crate oficial `tauri-plugin-updater = "2"` bajo `[dependencies]`.
   2. **Registro de Plugin en Runtime (`src-tauri/src/lib.rs`)**: Registro de `.plugin(tauri_plugin_updater::Builder::new().build())` en la función `run()` dentro de `tauri::Builder::default()`.
   3. **Verificación de Calidad**: `cargo check` 0 errores, `tsc --noEmit` 0 errores y 121/121 tests unitarios aprobados al 100% (`npm test`).
+
+
+### [TASK-DESKTOP-UPDATER-PHASE-2] - 2026-11-04
+- **Archivos Intervenidos**:
+  - `src-tauri/capabilities/default.json`
+  - `src-tauri/tauri.conf.json`
+- **Resumen Técnico**:
+  1. **Generación de Claves Criptográficas Minisign**: Creación del par de claves asimétricas en `~/.tauri/` (clave privada `controlfynz.key` resguardada fuera del repositorio; clave pública obtenida para la verificación de firmas).
+  2. **Capacidades de Seguridad IPC (`src-tauri/capabilities/default.json`)**: Inclusión del permiso `"updater:default"` autorizando las operaciones de verificación, descarga e instalación en la ventana principal.
+  3. **Configuración de Manifiesto (`src-tauri/tauri.conf.json`)**: Configuración de `"plugins.updater"` con la clave pública Minisign, el endpoint oficial de versiones (`https://github.com/DaviDiibo/FynzControl/releases/latest/download/latest.json`) y `windows.installMode: "passive"`.
+  4. **Verificación de Calidad**: `cargo check` 0 errores, `tsc --noEmit` 0 errores y 121/121 tests unitarios aprobados al 100% (`npm test`).
+

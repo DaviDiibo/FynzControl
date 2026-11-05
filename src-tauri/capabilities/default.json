@@ -9,6 +9,7 @@
     "core:default",
     "oauth:allow-start",
     "oauth:allow-cancel",
-    "opener:default"
+    "opener:default",
+    "updater:default"
   ]
 }
