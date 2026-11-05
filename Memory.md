@@ -9,7 +9,7 @@
 - **UI & Tema**: Modo oscuro cyberpunk/neón (`#121212`, tarjetas `#1E1E1E`, acento `#00FFA3`, peligro `#FF453A`). Modales interactivos transparentes, nunca diálogos toscos nativos.
 - **Multiplataforma**: Paridad iOS (KeyboardOffset 48dp, Safe Area), Android (KeyboardOffset 0dp, Edge-to-edge) y Web/Tauri Desktop (`useIsWide(768)`).
 - **Backend / Infra & Sync**: Arquitectura Offline-First con proyección a Supabase (Auth, RLS, PostgreSQL). Sincronización Multi-Dispositivo en `sync-service.ts` y `use-app-hydration.ts`: Pull en hidratación, Focus Sync en Web/Móvil, Supabase Realtime e indicador de estado reactivo.
-- **Testing & QA**: Jest 30 + `jest-expo` (~58.0.14). Verificación doble obligatoria (`npm test` 100% pass [121/121] + `npx tsc --noEmit` 0 errores) previo a cerrar cualquier tarea.
+- **Testing & QA**: Jest 30 + `jest-expo` (~58.0.14). Verificación doble obligatoria (`npm test` 100% pass [130/130] + `npx tsc --noEmit` 0 errores) previo a cerrar cualquier tarea.
 
 ## 2. Estado Activo del Sprint y Foco Inmediato
 - **Módulos Principales Culminados**:
@@ -19,8 +19,9 @@
   - Detalle de Tarjeta (`cards/[id].tsx`) con layout responsivo en 2 columnas para Web/Tauri y motor de proyección multi-período.
   - Pantalla de Detalle de Deudas en `app/(app)/debts/[id].tsx` con trazabilidad y auditoría histórica completa de pasivos propios y préstamos a amigos.
   - Centro de Gestión de Pasivos y Cobros: Préstamos bancarios, préstamos a amigos y Liquidación Mensual de Terceros (Fases 1 y 2).
-  - Cobertura de Testing (121/121 tests en verde): Suites en `src/__tests__/` (divisas, ciclos de facturación, amortizaciones, fechas, integración contable).
+  - Cobertura de Testing (130/130 tests en verde): Suites en `src/__tests__/` (divisas, ciclos de facturación, amortizaciones, fechas, integración contable, updater-service).
 - **Hitos Recientes Concluidos**:
+  - **Actualizador Desktop Fase 3 (`[TASK-DESKTOP-UPDATER-PHASE-3]`)**: Cliente `@tauri-apps/plugin-updater`, servicio `updater-service.ts` y suite Jest; 130/130 tests y 0 errores TS.
   - **Actualizador Desktop Fase 2 (`[TASK-DESKTOP-UPDATER-PHASE-2]`)**: Claves Minisign, `"updater:default"` en `capabilities/default.json` y config de `plugins.updater` en `tauri.conf.json`; `cargo check` 0 errores, 121/121 tests y 0 errores TS.
   - **Actualizador Desktop Fase 1 (`[TASK-DESKTOP-UPDATER-PHASE-1]`)**: Dependencia nativa `tauri-plugin-updater = "2"` en `Cargo.toml` y registro de plugin en `lib.rs`; `cargo check` 0 errores, 121/121 tests y 0 errores TS.
   - **Transición 100% Oscura y Cero Destello en Tabs (`[TASK-DESKTOP-DARK-THEME-TAB-TRANSITION-001]`)**: Inyección CSS `#121212` en `<Head>`, `ThemeProvider` oscuro, `sceneStyle`, `lazy: false` y `animation: 'fade'` en `<Tabs>`; instalador NSIS re-compilado (6.92 MB). 121/121 tests y 0 errores TS.
@@ -39,7 +40,7 @@
   - **Eliminación Permanente de Cuenta e Integridad RPC (`[TASK-ACCOUNT-PERMANENT-DELETION-RPC-FIX]`)**: Función RPC `delete_user_account()` con `SECURITY DEFINER` y `DELETE FROM auth.users` en cascada atómica relacional; blindaje contra silenciamiento de errores RPC en `auth-store.ts` y flujo estricto de purga en `settings-section-list.tsx`. 121/121 tests en verde y 0 errores TS.
   - **Sincronización y UX Base Web/Móvil (`[TASK-MULTI-DEVICE-CLOUD-SYNC]`, `[TASK-TRANSACTIONS-CHRONOLOGICAL-SORTING]`, `[TASK-STATIC-WEB-TAB-TITLE]`, `[TASK-POLISH-LOGOUT-SCROLL-SYNC-INDICATOR]`)**: Título web estático, orden cronológico de movimientos, focus sync, indicador reactivo y confirmación de logout. 121/121 tests en verde y 0 errores TS.
 - **Próximo Foco Inmediato**:
-  - Continuar con la Fase 3 del actualizador de escritorio Tauri (servicio o UI de verificación/descarga en el frontend).
+  - Fase 4 del actualizador de escritorio Tauri (interfaz de usuario / modal de confirmación y progreso de descarga).
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
 - ❌ **NO usar alertas nativas ni `window.confirm` para acciones de sesión o borrado (Regla de Modales In-App)**: Usar siempre componentes `<Modal transparent>` con diseño Cyberpunk y spinners integrados para garantizar paridad visual y funcional entre Web, iOS y Android.
