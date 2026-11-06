@@ -418,12 +418,12 @@ export const rowToCharge = (row: ThirdPartyCardChargeRow): ThirdPartyCardCharge 
   id: row.id,
   personName: row.person_name,
   personId: row.person_id ?? undefined,
-  cardName: row.card_name,
+  cardName: row.card_name ?? '',
   cardId: row.card_id ?? undefined,
   concept: row.concept,
   amount: Number(row.amount),
   totalAmount: Number(row.total_amount),
-  remainingAmount: Number(row.remaining_amount),
+  remainingAmount: Number(row.remaining_amount ?? row.total_amount ?? row.amount ?? 0),
   installmentsCount: Number(row.installments_count),
   monthlyInstallmentAmount: Number(row.monthly_installment_amount),
   currentPeriodPaidAmount: Number(row.current_period_paid_amount || 0),
@@ -434,7 +434,7 @@ export const rowToCharge = (row: ThirdPartyCardChargeRow): ThirdPartyCardCharge 
   date: row.date,
   settled: Boolean(row.settled),
   settledAt: row.settled_at ?? undefined,
-  createdAt: row.created_at,
+  createdAt: row.created_at || row.date || new Date().toISOString(),
 });
 
 export const loanToRow = (

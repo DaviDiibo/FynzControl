@@ -104,13 +104,35 @@ export const useAppHydration = (): boolean => {
     const appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
 
     let removeWebListener: (() => void) | null = null;
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    if (Platform.OS === 'web') {
       const onWindowFocus = (): void => {
         triggerFocusSync();
       };
-      window.addEventListener('focus', onWindowFocus);
+
+      const onVisibilityChange = (): void => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+          triggerFocusSync();
+          const currentUser = useAuthStore.getState().user;
+          if (currentUser?.id) {
+            syncService.startRealtimeSubscription(currentUser.id);
+          }
+        }
+      };
+
+      if (typeof window !== 'undefined') {
+        window.addEventListener('focus', onWindowFocus);
+      }
+      if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', onVisibilityChange);
+      }
+
       removeWebListener = (): void => {
-        window.removeEventListener('focus', onWindowFocus);
+        if (typeof window !== 'undefined') {
+          window.removeEventListener('focus', onWindowFocus);
+        }
+        if (typeof document !== 'undefined') {
+          document.removeEventListener('visibilitychange', onVisibilityChange);
+        }
       };
     }
 

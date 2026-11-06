@@ -13,7 +13,7 @@
 
 ## 2. Estado Activo del Sprint y Foco Inmediato
 - **Sprint Activo**: Lanzamiento de versión oficial v1.0.1 completado para Windows Desktop (firmado con Minisign), Web y Móvil.
-- **Hitos Recientes Concluidos**: `[RELEASE-V1.0.1-DESKTOP-AND-WEB]` (v1.0.1, Minisign x64 installer y updater bundle), `[TASK-DEFENSIVE-NULL-SAFETY-STRINGS]`, `[TASK-FIX-EXIGIBLE-DROP-AND-REALTIME-DELETION]`.
+- **Hitos Recientes Concluidos**: `[TASK-WEB-VISIBILITY-REALTIME-RECONNECT]`, `[RELEASE-V1.0.1-DESKTOP-AND-WEB]`, `[TASK-DEFENSIVE-NULL-SAFETY-STRINGS]`, `[TASK-FIX-EXIGIBLE-DROP-AND-REALTIME-DELETION]`.
 - **Propuestas Técnicas Pendientes**: Cola de propuestas técnicas pendientes 100% limpia y completada.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
@@ -86,6 +86,7 @@
 - **Unificación y Proyección de Cuotas en Detalle de Tarjeta (`cards/[id].tsx`)**: Eliminación de cálculos inline duplicados mediante `computeCardBillingStatement`; visualización de cuota activa (`"Cuota X de Y"`), importe mensual prorrateado y proyección multi-período (+1 y +2 meses) de cuotas vigentes.
 - **Invarianza de Exigible y Sincronización Inmediata de Bajas**: Eliminado redondeo al alza de cuotas en debts-store.ts (isFullySettled = newRemaining <= 0.05 con Math.floor), baja inmediata a Supabase en deleteRemoteRecord, escudo anti-resurrección en syncPush y purga de bajas remotas en syncPull.
 - **Blindaje Defensivo Null-Safety en Cadenas**: Normalización defensiva obligatoria con `(c.name ?? '').toLowerCase().trim()` en `transactions-store.ts` y `card-accounting.ts` ante entidades en caché o red con campos de nombre nulos o incompletos.
+- **Reconexión Realtime y Sync Web por Visibilidad**: Sincronización al recuperar visibilidad de pestaña (`visibilitychange`), blindaje contra `NaN` en `sync-adapters.ts` y captura de excepciones en callbacks de socket con reseteo de canal en `sync-service.ts`.
 
 ## 5. Referencia Histórica
 - Para la bitácora histórica completa de tareas concluidas, archivos modificados y trazabilidad técnica, consultar bajo demanda: `HISTORY.md`.
