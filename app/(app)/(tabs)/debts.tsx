@@ -420,13 +420,11 @@ const DebtsScreen = (): JSX.Element => {
         }
       }
 
+      const preCycleRemaining = parseFloat(((c.remainingAmount ?? 0) + (c.currentPeriodPaidAmount || 0)).toFixed(2));
       const chargeMonthlyDue =
         c.installmentsCount <= 1
-          ? parseFloat((c.remainingAmount + (c.currentPeriodPaidAmount || 0)).toFixed(2))
-          : Math.min(
-              c.monthlyInstallmentAmount,
-              parseFloat((c.remainingAmount + (c.currentPeriodPaidAmount || 0)).toFixed(2))
-            );
+          ? preCycleRemaining
+          : Math.min(c.monthlyInstallmentAmount, preCycleRemaining);
       const chargeMonthlyPaid = c.currentPeriodPaidAmount || 0;
 
       summary.monthlyDueAmount = parseFloat(

@@ -615,19 +615,17 @@ export const useDebtsStore = create<DebtsState>()(
               ? Math.min(
                   charge.installmentsCount,
                   Math.max(
-                    0,
-                    Math.round(
+                    charge.initialPaidInstallments ?? 0,
+                    Math.floor(
                       parseFloat(
-                        ((charge.totalAmount - newRemaining) / charge.monthlyInstallmentAmount).toFixed(4)
+                        (((charge.totalAmount ?? charge.amount) - newRemaining) / charge.monthlyInstallmentAmount).toFixed(4)
                       )
                     )
                   )
                 )
               : charge.paidInstallmentsCount;
 
-            const isFullySettled =
-              newRemaining <= 0.05 ||
-              (charge.installmentsCount > 1 && newPaidInstallments >= charge.installmentsCount);
+            const isFullySettled = newRemaining <= 0.05;
 
             if (isFullySettled) {
               newRemaining = 0;
@@ -833,19 +831,17 @@ export const useDebtsStore = create<DebtsState>()(
                 ? Math.min(
                     cargo.installmentsCount,
                     Math.max(
-                      0,
-                      Math.round(
+                      cargo.initialPaidInstallments ?? 0,
+                      Math.floor(
                         parseFloat(
-                          ((cargo.totalAmount - newRemaining) / cargo.monthlyInstallmentAmount).toFixed(4)
+                          (((cargo.totalAmount ?? cargo.amount) - newRemaining) / cargo.monthlyInstallmentAmount).toFixed(4)
                         )
                       )
                     )
                   )
                 : cargo.paidInstallmentsCount;
 
-            const isFullySettled =
-              newRemaining <= 0.05 ||
-              (cargo.installmentsCount > 1 && newPaidInstallments >= cargo.installmentsCount);
+            const isFullySettled = newRemaining <= 0.05;
 
             if (isFullySettled) {
               newRemaining = 0;
