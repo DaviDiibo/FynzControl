@@ -2318,3 +2318,27 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
      - 139/139 pruebas unitarias aprobadas al 100% en `npm test` (7 suites en verde).
 - **Decisiones Permanentes**:
   - Toda versión de escritorio para el canal de actualización debe generarse firmada con la clave Minisign de producción para ser aceptada por `@tauri-apps/plugin-updater`.
+
+
+
+### [TASK-WEB-VISIBILITY-REALTIME-RECONNECT] - 2026-11-06
+- **Archivos Intervenidos**:
+  - `src/hooks/use-app-hydration.ts`
+  - `src/lib/sync-adapters.ts`
+  - `src/services/sync-service.ts`
+- **Resumen Técnico**:
+  1. **Sincronización Web por `visibilitychange` (`src/hooks/use-app-hydration.ts`)**:
+     - Adición de listener para el evento web estándar `visibilitychange` al reactivarse la pestaña (`document.visibilityState === 'visible'`). Dispara `triggerFocusSync()` y re-suscribe el canal Realtime si el usuario está autenticado, resolviendo el problema de suspensión de sockets en segundo plano de navegadores web.
+     - Limpieza segura de listeners en el retorno del efecto.
+  2. **Robustez y Resiliencia en Adaptador Contable (`src/lib/sync-adapters.ts`)**:
+     - En `rowToCharge`: blindaje de `remainingAmount` con fallback múltiple `Number(row.remaining_amount ?? row.total_amount ?? row.amount ?? 0)` impidiendo generación de `NaN` en cálculos de deudas.
+     - Fallbacks seguros para `cardName` (`row.card_name ?? ''`) y `createdAt` (`row.created_at || row.date || new Date().toISOString()`).
+  3. **Tolerancia a Fallos y Reconexión en Realtime (`src/services/sync-service.ts`)**:
+     - Envoltura defensiva con `try/catch` en todos los callbacks de eventos de PostgreSQL (`transactions`, `personal_debts`, `friend_loans`, `third_party_card_charges`, etc.).
+     - Detección y manejo explícito de errores de canal (`CHANNEL_ERROR`, `TIMED_OUT`, `CLOSED`) reseteando `activeRealtimeChannel = null` para permitir reconexión automática sin estados fantasma.
+  4. **Calidad**:
+     - TypeScript: 0 errores (`npx tsc --noEmit`).
+     - Jest: 139/139 pruebas en verde (100% pass).
+- **Decisiones Permanentes**:
+  - En entornos web, la detección de actividad debe contemplar siempre `visibilitychange` además de `focus`.
+  - Todo callback de suscripción a sockets debe estar protegido por `try/catch` para evitar caídas silenciosas del canal.

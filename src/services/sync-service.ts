@@ -913,29 +913,33 @@ export const startRealtimeSubscription = (userId?: string): void => {
         filter: `user_id=eq.${targetUserId}`,
       },
       (payload) => {
-        const eventType = payload.eventType;
-        const newRow = payload.new as TransactionRow | null;
-        const oldRow = payload.old as Partial<TransactionRow> | null;
+        try {
+          const eventType = payload.eventType;
+          const newRow = payload.new as TransactionRow | null;
+          const oldRow = payload.old as Partial<TransactionRow> | null;
 
-        if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
-          const idToDelete = newRow?.id || oldRow?.id;
-          if (idToDelete) {
-            const targetUuid = toDeterministicUuid(idToDelete);
+          if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
+            const idToDelete = newRow?.id || oldRow?.id;
+            if (idToDelete) {
+              const targetUuid = toDeterministicUuid(idToDelete);
+              const currentTx = useTransactionsStore.getState().transactions;
+              useTransactionsStore.setState({
+                transactions: currentTx.filter((t) => toDeterministicUuid(t.id) !== targetUuid),
+              });
+            }
+          } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+            const pendingTxIds = getPendingDeletionIdSet('transactions');
+            if (pendingTxIds.has(newRow.id) || pendingTxIds.has(toDeterministicUuid(newRow.id))) {
+              return;
+            }
+            const incomingTx = rowToTransaction(newRow);
             const currentTx = useTransactionsStore.getState().transactions;
             useTransactionsStore.setState({
-              transactions: currentTx.filter((t) => toDeterministicUuid(t.id) !== targetUuid),
+              transactions: mergeById(currentTx, [incomingTx]),
             });
           }
-        } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
-          const pendingTxIds = getPendingDeletionIdSet('transactions');
-          if (pendingTxIds.has(newRow.id) || pendingTxIds.has(toDeterministicUuid(newRow.id))) {
-            return;
-          }
-          const incomingTx = rowToTransaction(newRow);
-          const currentTx = useTransactionsStore.getState().transactions;
-          useTransactionsStore.setState({
-            transactions: mergeById(currentTx, [incomingTx]),
-          });
+        } catch (err) {
+          console.error('[SyncRealtime] Error procesando evento de transactions:', err);
         }
       }
     )
@@ -948,29 +952,33 @@ export const startRealtimeSubscription = (userId?: string): void => {
         filter: `user_id=eq.${targetUserId}`,
       },
       (payload) => {
-        const eventType = payload.eventType;
-        const newRow = payload.new as PersonalDebtRow | null;
-        const oldRow = payload.old as Partial<PersonalDebtRow> | null;
+        try {
+          const eventType = payload.eventType;
+          const newRow = payload.new as PersonalDebtRow | null;
+          const oldRow = payload.old as Partial<PersonalDebtRow> | null;
 
-        if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
-          const idToDelete = newRow?.id || oldRow?.id;
-          if (idToDelete) {
-            const targetUuid = toDeterministicUuid(idToDelete);
+          if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
+            const idToDelete = newRow?.id || oldRow?.id;
+            if (idToDelete) {
+              const targetUuid = toDeterministicUuid(idToDelete);
+              const currentDebts = useDebtsStore.getState().personalDebts;
+              useDebtsStore.setState({
+                personalDebts: currentDebts.filter((d) => toDeterministicUuid(d.id) !== targetUuid),
+              });
+            }
+          } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+            const pendingDebtIds = getPendingDeletionIdSet('personal_debts');
+            if (pendingDebtIds.has(newRow.id) || pendingDebtIds.has(toDeterministicUuid(newRow.id))) {
+              return;
+            }
+            const incomingDebt = rowToPersonalDebt(newRow);
             const currentDebts = useDebtsStore.getState().personalDebts;
             useDebtsStore.setState({
-              personalDebts: currentDebts.filter((d) => toDeterministicUuid(d.id) !== targetUuid),
+              personalDebts: mergeById(currentDebts, [incomingDebt]),
             });
           }
-        } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
-          const pendingDebtIds = getPendingDeletionIdSet('personal_debts');
-          if (pendingDebtIds.has(newRow.id) || pendingDebtIds.has(toDeterministicUuid(newRow.id))) {
-            return;
-          }
-          const incomingDebt = rowToPersonalDebt(newRow);
-          const currentDebts = useDebtsStore.getState().personalDebts;
-          useDebtsStore.setState({
-            personalDebts: mergeById(currentDebts, [incomingDebt]),
-          });
+        } catch (err) {
+          console.error('[SyncRealtime] Error procesando evento de personal_debts:', err);
         }
       }
     )
@@ -983,29 +991,33 @@ export const startRealtimeSubscription = (userId?: string): void => {
         filter: `user_id=eq.${targetUserId}`,
       },
       (payload) => {
-        const eventType = payload.eventType;
-        const newRow = payload.new as FriendLoanRow | null;
-        const oldRow = payload.old as Partial<FriendLoanRow> | null;
+        try {
+          const eventType = payload.eventType;
+          const newRow = payload.new as FriendLoanRow | null;
+          const oldRow = payload.old as Partial<FriendLoanRow> | null;
 
-        if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
-          const idToDelete = newRow?.id || oldRow?.id;
-          if (idToDelete) {
-            const targetUuid = toDeterministicUuid(idToDelete);
+          if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
+            const idToDelete = newRow?.id || oldRow?.id;
+            if (idToDelete) {
+              const targetUuid = toDeterministicUuid(idToDelete);
+              const currentLoans = useDebtsStore.getState().friendLoans;
+              useDebtsStore.setState({
+                friendLoans: currentLoans.filter((l) => toDeterministicUuid(l.id) !== targetUuid),
+              });
+            }
+          } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+            const pendingLoanIds = getPendingDeletionIdSet('friend_loans');
+            if (pendingLoanIds.has(newRow.id) || pendingLoanIds.has(toDeterministicUuid(newRow.id))) {
+              return;
+            }
+            const incomingLoan = rowToFriendLoan(newRow);
             const currentLoans = useDebtsStore.getState().friendLoans;
             useDebtsStore.setState({
-              friendLoans: currentLoans.filter((l) => toDeterministicUuid(l.id) !== targetUuid),
+              friendLoans: mergeById(currentLoans, [incomingLoan]),
             });
           }
-        } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
-          const pendingLoanIds = getPendingDeletionIdSet('friend_loans');
-          if (pendingLoanIds.has(newRow.id) || pendingLoanIds.has(toDeterministicUuid(newRow.id))) {
-            return;
-          }
-          const incomingLoan = rowToFriendLoan(newRow);
-          const currentLoans = useDebtsStore.getState().friendLoans;
-          useDebtsStore.setState({
-            friendLoans: mergeById(currentLoans, [incomingLoan]),
-          });
+        } catch (err) {
+          console.error('[SyncRealtime] Error procesando evento de friend_loans:', err);
         }
       }
     )
@@ -1018,29 +1030,33 @@ export const startRealtimeSubscription = (userId?: string): void => {
         filter: `user_id=eq.${targetUserId}`,
       },
       (payload) => {
-        const eventType = payload.eventType;
-        const newRow = payload.new as ThirdPartyCardChargeRow | null;
-        const oldRow = payload.old as Partial<ThirdPartyCardChargeRow> | null;
+        try {
+          const eventType = payload.eventType;
+          const newRow = payload.new as ThirdPartyCardChargeRow | null;
+          const oldRow = payload.old as Partial<ThirdPartyCardChargeRow> | null;
 
-        if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
-          const idToDelete = newRow?.id || oldRow?.id;
-          if (idToDelete) {
-            const targetUuid = toDeterministicUuid(idToDelete);
+          if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
+            const idToDelete = newRow?.id || oldRow?.id;
+            if (idToDelete) {
+              const targetUuid = toDeterministicUuid(idToDelete);
+              const currentCharges = useDebtsStore.getState().thirdPartyCharges;
+              useDebtsStore.setState({
+                thirdPartyCharges: currentCharges.filter((c) => toDeterministicUuid(c.id) !== targetUuid),
+              });
+            }
+          } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+            const pendingChargeIds = getPendingDeletionIdSet('third_party_card_charges');
+            if (pendingChargeIds.has(newRow.id) || pendingChargeIds.has(toDeterministicUuid(newRow.id))) {
+              return;
+            }
+            const incomingCharge = rowToThirdPartyCharge(newRow);
             const currentCharges = useDebtsStore.getState().thirdPartyCharges;
             useDebtsStore.setState({
-              thirdPartyCharges: currentCharges.filter((c) => toDeterministicUuid(c.id) !== targetUuid),
+              thirdPartyCharges: mergeById(currentCharges, [incomingCharge]),
             });
           }
-        } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
-          const pendingChargeIds = getPendingDeletionIdSet('third_party_card_charges');
-          if (pendingChargeIds.has(newRow.id) || pendingChargeIds.has(toDeterministicUuid(newRow.id))) {
-            return;
-          }
-          const incomingCharge = rowToThirdPartyCharge(newRow);
-          const currentCharges = useDebtsStore.getState().thirdPartyCharges;
-          useDebtsStore.setState({
-            thirdPartyCharges: mergeById(currentCharges, [incomingCharge]),
-          });
+        } catch (err) {
+          console.error('[SyncRealtime] Error procesando evento de third_party_card_charges:', err);
         }
       }
     )
@@ -1053,29 +1069,33 @@ export const startRealtimeSubscription = (userId?: string): void => {
         filter: `user_id=eq.${targetUserId}`,
       },
       (payload) => {
-        const eventType = payload.eventType;
-        const newRow = payload.new as PersonRow | null;
-        const oldRow = payload.old as Partial<PersonRow> | null;
+        try {
+          const eventType = payload.eventType;
+          const newRow = payload.new as PersonRow | null;
+          const oldRow = payload.old as Partial<PersonRow> | null;
 
-        if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
-          const idToDelete = newRow?.id || oldRow?.id;
-          if (idToDelete) {
-            const targetUuid = toDeterministicUuid(idToDelete);
+          if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
+            const idToDelete = newRow?.id || oldRow?.id;
+            if (idToDelete) {
+              const targetUuid = toDeterministicUuid(idToDelete);
+              const currentPeople = useDebtsStore.getState().people;
+              useDebtsStore.setState({
+                people: currentPeople.filter((p) => toDeterministicUuid(p.id) !== targetUuid),
+              });
+            }
+          } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+            const pendingPeopleIds = getPendingDeletionIdSet('people');
+            if (pendingPeopleIds.has(newRow.id) || pendingPeopleIds.has(toDeterministicUuid(newRow.id))) {
+              return;
+            }
+            const incomingPerson = rowToPerson(newRow);
             const currentPeople = useDebtsStore.getState().people;
             useDebtsStore.setState({
-              people: currentPeople.filter((p) => toDeterministicUuid(p.id) !== targetUuid),
+              people: mergeById(currentPeople, [incomingPerson]),
             });
           }
-        } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
-          const pendingPeopleIds = getPendingDeletionIdSet('people');
-          if (pendingPeopleIds.has(newRow.id) || pendingPeopleIds.has(toDeterministicUuid(newRow.id))) {
-            return;
-          }
-          const incomingPerson = rowToPerson(newRow);
-          const currentPeople = useDebtsStore.getState().people;
-          useDebtsStore.setState({
-            people: mergeById(currentPeople, [incomingPerson]),
-          });
+        } catch (err) {
+          console.error('[SyncRealtime] Error procesando evento de people:', err);
         }
       }
     )
@@ -1088,29 +1108,33 @@ export const startRealtimeSubscription = (userId?: string): void => {
         filter: `user_id=eq.${targetUserId}`,
       },
       (payload) => {
-        const eventType = payload.eventType;
-        const newRow = payload.new as CreditCardRow | null;
-        const oldRow = payload.old as Partial<CreditCardRow> | null;
+        try {
+          const eventType = payload.eventType;
+          const newRow = payload.new as CreditCardRow | null;
+          const oldRow = payload.old as Partial<CreditCardRow> | null;
 
-        if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
-          const idToDelete = newRow?.id || oldRow?.id;
-          if (idToDelete) {
-            const targetUuid = toDeterministicUuid(idToDelete);
+          if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
+            const idToDelete = newRow?.id || oldRow?.id;
+            if (idToDelete) {
+              const targetUuid = toDeterministicUuid(idToDelete);
+              const currentCards = useCardsStore.getState().cards;
+              useCardsStore.setState({
+                cards: currentCards.filter((c) => toDeterministicUuid(c.id) !== targetUuid),
+              });
+            }
+          } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+            const pendingCardIds = getPendingDeletionIdSet('credit_cards');
+            if (pendingCardIds.has(newRow.id) || pendingCardIds.has(toDeterministicUuid(newRow.id))) {
+              return;
+            }
+            const incomingCard = rowToCard(newRow);
             const currentCards = useCardsStore.getState().cards;
             useCardsStore.setState({
-              cards: currentCards.filter((c) => toDeterministicUuid(c.id) !== targetUuid),
+              cards: mergeById(currentCards, [incomingCard]),
             });
           }
-        } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
-          const pendingCardIds = getPendingDeletionIdSet('credit_cards');
-          if (pendingCardIds.has(newRow.id) || pendingCardIds.has(toDeterministicUuid(newRow.id))) {
-            return;
-          }
-          const incomingCard = rowToCard(newRow);
-          const currentCards = useCardsStore.getState().cards;
-          useCardsStore.setState({
-            cards: mergeById(currentCards, [incomingCard]),
-          });
+        } catch (err) {
+          console.error('[SyncRealtime] Error procesando evento de credit_cards:', err);
         }
       }
     )
@@ -1123,37 +1147,44 @@ export const startRealtimeSubscription = (userId?: string): void => {
         filter: `user_id=eq.${targetUserId}`,
       },
       (payload) => {
-        const eventType = payload.eventType;
-        const newRow = payload.new as BankRow | null;
-        const oldRow = payload.old as Partial<BankRow> | null;
+        try {
+          const eventType = payload.eventType;
+          const newRow = payload.new as BankRow | null;
+          const oldRow = payload.old as Partial<BankRow> | null;
 
-        if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
-          const idToDelete = newRow?.id || oldRow?.id;
-          if (idToDelete) {
-            const targetUuid = toDeterministicUuid(idToDelete);
+          if (eventType === 'DELETE' || (newRow && Boolean(newRow.deleted_at))) {
+            const idToDelete = newRow?.id || oldRow?.id;
+            if (idToDelete) {
+              const targetUuid = toDeterministicUuid(idToDelete);
+              const currentBanks = useCardsStore.getState().banks;
+              useCardsStore.setState({
+                banks: currentBanks.filter((b) => toDeterministicUuid(b.id) !== targetUuid),
+              });
+            }
+          } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+            const pendingBankIds = getPendingDeletionIdSet('banks');
+            if (pendingBankIds.has(newRow.id) || pendingBankIds.has(toDeterministicUuid(newRow.id))) {
+              return;
+            }
+            const incomingBank = rowToBank(newRow);
             const currentBanks = useCardsStore.getState().banks;
             useCardsStore.setState({
-              banks: currentBanks.filter((b) => toDeterministicUuid(b.id) !== targetUuid),
+              banks: mergeById(currentBanks, [incomingBank]),
             });
           }
-        } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
-          const pendingBankIds = getPendingDeletionIdSet('banks');
-          if (pendingBankIds.has(newRow.id) || pendingBankIds.has(toDeterministicUuid(newRow.id))) {
-            return;
-          }
-          const incomingBank = rowToBank(newRow);
-          const currentBanks = useCardsStore.getState().banks;
-          useCardsStore.setState({
-            banks: mergeById(currentBanks, [incomingBank]),
-          });
+        } catch (err) {
+          console.error('[SyncRealtime] Error procesando evento de banks:', err);
         }
       }
     );
 
-  channel.subscribe((status, _err) => {
+  channel.subscribe((status, err) => {
     if (status === 'SUBSCRIBED') {
       reconnectAttempts = 0;
     } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      console.warn(`[SyncRealtime] Canal en estado ${status}:`, err);
+      activeRealtimeChannel = null;
+
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
@@ -1162,13 +1193,10 @@ export const startRealtimeSubscription = (userId?: string): void => {
       reconnectAttempts++;
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
-        if (activeRealtimeChannel === channel) {
-          try {
-            supabase.removeChannel(channel);
-          } catch {
-            // Ignorar errores al desuscribir
-          }
-          activeRealtimeChannel = null;
+        try {
+          supabase.removeChannel(channel);
+        } catch {
+          // Ignorar errores al desuscribir
         }
         startRealtimeSubscription(targetUserId);
       }, delay);
