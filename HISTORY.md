@@ -2253,3 +2253,29 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 
 
 
+### [TASK-FIX-EXIGIBLE-DROP-AND-REALTIME-DELETION] - 2026-11-06
+- **Archivos Intervenidos**:
+  - `src/store/debts-store.ts`
+  - `src/services/sync-service.ts`
+  - `app/(app)/(tabs)/debts.tsx`
+- **Resumen Técnico**:
+  1. **Invarianza de Cuotas y Eliminación de Redondeo Prematuro (`src/store/debts-store.ts`)**:
+     - Se erradicó el bug de caída anómala del valor "EXIGIBLE ESTE MES" ante abonos parciales (causado previamente por redondeos al alza con `Math.round` y reseteo apresurado de `remainingAmount` a 0).
+     - Se sustituyó `Math.round` por `Math.floor` estricto en el cómputo de `newPaidInstallments` tanto en `recordMonthlyPersonAbono` como en `recordThirdPartyInstallmentAbono`.
+     - La condición de liquidación/saldado definitivo se supeditó exclusivamente a `newRemaining <= 0.05`, preservando saldos y cuotas pendientes cuando el cargo no ha sido saldado en su totalidad.
+  2. **Preservación del Compromiso del Extracto Mensual (`app/(app)/(tabs)/debts.tsx`)**:
+     - En el cálculo de `chargeMonthlyDue` para consumos de terceros en el ciclo activo, se aseguró que el compromiso del extracto mensual compute `remainingAmount + currentPeriodPaidAmount`, impidiendo que los abonos parciales decrementen el monto exigible original pactado del ciclo.
+  3. **Sincronización Inmediata de Bajas y Escudo Anti-Resurrección (`src/services/sync-service.ts`)**:
+     - En `deleteRemoteRecord`: Se dispara de forma inmediata la baja remota a Supabase con `deleted_at: NOW()` vía soft-delete / tombstone.
+     - En `syncPush`: Se filtran y descartan proactivamente los registros presentes en la cola de bajas pendientes para impedir que se re-suban entidades eliminadas.
+     - En `syncPull`: Detección de registros remotos con `deleted_at IS NOT NULL` y purga atómica de las tiendas locales de Zustand.
+  4. **Higiene de Código y Congelamiento Visual (Visual Freeze)**:
+     - Cero alteraciones en estilos, componentes visuales, colores o estructura visual (`Visual Freeze` 100% respetado).
+- **Decisiones Permanentes**:
+  - El cómputo de cuotas amortizadas en abonos debe usar siempre `Math.floor` estricto y la marca de saldado debe depender únicamente de `newRemaining <= 0.05`.
+  - El monto mensual exigible de un extracto de tarjeta o tercero debe mantenerse invariante ante abonos parciales sumando el remanente con el abono del período en curso.
+  - Las operaciones de eliminación local deben notificar de inmediato a la base de datos remota con timestamp de baja y estar protegidas con filtros anti-resurrección tanto en push como en pull.
+- **Verificación de Calidad**:
+  - Compilación TypeScript limpia (`node ./node_modules/typescript/bin/tsc --noEmit` con 0 errores).
+  - Suite completa de pruebas unitarias en verde (`node ./node_modules/jest/bin/jest.js` con 139/139 tests aprobados, 7/7 suites en verde, 100% pass).
+

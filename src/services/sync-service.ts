@@ -322,7 +322,11 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
     const { transactions } = useTransactionsStore.getState();
 
     // 1. Bancos
-    const bankRows: BankRow[] = (banks || []).map((b) => bankToRow(b, targetUserId));
+    const pendingBankIds = getPendingDeletionIdSet('banks');
+    const filteredBanks = (banks || []).filter(
+      (b) => !pendingBankIds.has(b.id) && !pendingBankIds.has(toDeterministicUuid(b.id))
+    );
+    const bankRows: BankRow[] = filteredBanks.map((b) => bankToRow(b, targetUserId));
     const validBankIds = new Set<string>(bankRows.map((b) => b.id));
     if (bankRows.length > 0) {
       const { error } = await supabase.from('banks').upsert(bankRows, { onConflict: 'id' });
@@ -331,8 +335,12 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
       }
     }
 
-    // 2. Tarjetas de crédito
-    const cardRows: CreditCardRow[] = (cards || []).map((c) => {
+    // 2. Tarjetas de cr??dito
+    const pendingCardIds = getPendingDeletionIdSet('credit_cards');
+    const filteredCards = (cards || []).filter(
+      (c) => !pendingCardIds.has(c.id) && !pendingCardIds.has(toDeterministicUuid(c.id))
+    );
+    const cardRows: CreditCardRow[] = filteredCards.map((c) => {
       const matchingBank = (banks || []).find(
         (b) => b.name.toLowerCase() === c.bankName.toLowerCase()
       );
@@ -349,7 +357,11 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
     }
 
     // 3. Contactos / Personas
-    const peopleRows: PersonRow[] = (people || []).map((p) => personToRow(p, targetUserId));
+    const pendingPeopleIds = getPendingDeletionIdSet('people');
+    const filteredPeople = (people || []).filter(
+      (p) => !pendingPeopleIds.has(p.id) && !pendingPeopleIds.has(toDeterministicUuid(p.id))
+    );
+    const peopleRows: PersonRow[] = filteredPeople.map((p) => personToRow(p, targetUserId));
     const validPersonIds = new Set<string>(peopleRows.map((p) => p.id));
     if (peopleRows.length > 0) {
       const { error } = await supabase.from('people').upsert(peopleRows, { onConflict: 'id' });
@@ -359,7 +371,11 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
     }
 
     // 4. Deudas Personales
-    const debtRows: PersonalDebtRow[] = (personalDebts || []).map((d) =>
+    const pendingDebtIds = getPendingDeletionIdSet('personal_debts');
+    const filteredDebts = (personalDebts || []).filter(
+      (d) => !pendingDebtIds.has(d.id) && !pendingDebtIds.has(toDeterministicUuid(d.id))
+    );
+    const debtRows: PersonalDebtRow[] = filteredDebts.map((d) =>
       debtToRow(d, targetUserId, validBankIds, validCardIds)
     );
     const validDebtIds = new Set<string>(debtRows.map((d) => d.id));
@@ -372,8 +388,12 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
       }
     }
 
-    // 5. Préstamos a Amigos
-    const loanRows: FriendLoanRow[] = (friendLoans || []).map((l) =>
+    // 5. Pr??stamos a Amigos
+    const pendingLoanIds = getPendingDeletionIdSet('friend_loans');
+    const filteredLoans = (friendLoans || []).filter(
+      (l) => !pendingLoanIds.has(l.id) && !pendingLoanIds.has(toDeterministicUuid(l.id))
+    );
+    const loanRows: FriendLoanRow[] = filteredLoans.map((l) =>
       loanToRow(l, targetUserId, validPersonIds)
     );
     const validLoanIds = new Set<string>(loanRows.map((l) => l.id));
@@ -387,7 +407,11 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
     }
 
     // 6. Compras de Terceros
-    const chargeRows: ThirdPartyCardChargeRow[] = (thirdPartyCharges || []).map((tc) =>
+    const pendingChargeIds = getPendingDeletionIdSet('third_party_card_charges');
+    const filteredCharges = (thirdPartyCharges || []).filter(
+      (tc) => !pendingChargeIds.has(tc.id) && !pendingChargeIds.has(toDeterministicUuid(tc.id))
+    );
+    const chargeRows: ThirdPartyCardChargeRow[] = filteredCharges.map((tc) =>
       chargeToRow(tc, targetUserId, validPersonIds, validCardIds)
     );
     const validChargeIds = new Set<string>(chargeRows.map((c) => c.id));
@@ -401,7 +425,11 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
     }
 
     // 7. Transacciones del Libro Diario
-    const txRows: TransactionRow[] = (transactions || []).map((t) =>
+    const pendingTxIds = getPendingDeletionIdSet('transactions');
+    const filteredTx = (transactions || []).filter(
+      (t) => !pendingTxIds.has(t.id) && !pendingTxIds.has(toDeterministicUuid(t.id))
+    );
+    const txRows: TransactionRow[] = filteredTx.map((t) =>
       transactionToRow(t, targetUserId, {
         cardIds: validCardIds,
         bankIds: validBankIds,
@@ -419,7 +447,6 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
         return { success: false, offline: true, error: error.message };
       }
     }
-
     lastSyncTimestamp = new Date().toISOString();
     return { success: true, syncedAt: lastSyncTimestamp };
   } catch (error) {
@@ -466,6 +493,11 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
     if (banksErr) {
       return { success: false, offline: true, error: banksErr.message };
     }
+    const { data: deletedBanksData } = await supabase
+      .from('banks')
+      .select('id')
+      .eq('user_id', targetUserId)
+      .not('deleted_at', 'is', null);
 
     // 2. Pull tarjetas
     const { data: cardsData, error: cardsErr } = await supabase
@@ -476,6 +508,11 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
     if (cardsErr) {
       return { success: false, offline: true, error: cardsErr.message };
     }
+    const { data: deletedCardsData } = await supabase
+      .from('credit_cards')
+      .select('id')
+      .eq('user_id', targetUserId)
+      .not('deleted_at', 'is', null);
 
     // 3. Pull personas
     const { data: peopleData, error: peopleErr } = await supabase
@@ -486,6 +523,11 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
     if (peopleErr) {
       return { success: false, offline: true, error: peopleErr.message };
     }
+    const { data: deletedPeopleData } = await supabase
+      .from('people')
+      .select('id')
+      .eq('user_id', targetUserId)
+      .not('deleted_at', 'is', null);
 
     // 4. Pull deudas personales
     const { data: debtsData, error: debtsErr } = await supabase
@@ -496,8 +538,13 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
     if (debtsErr) {
       return { success: false, offline: true, error: debtsErr.message };
     }
+    const { data: deletedDebtsData } = await supabase
+      .from('personal_debts')
+      .select('id')
+      .eq('user_id', targetUserId)
+      .not('deleted_at', 'is', null);
 
-    // 5. Pull préstamos a amigos
+    // 5. Pull pr??stamos a amigos
     const { data: loansData, error: loansErr } = await supabase
       .from('friend_loans')
       .select('*')
@@ -506,6 +553,11 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
     if (loansErr) {
       return { success: false, offline: true, error: loansErr.message };
     }
+    const { data: deletedLoansData } = await supabase
+      .from('friend_loans')
+      .select('id')
+      .eq('user_id', targetUserId)
+      .not('deleted_at', 'is', null);
 
     // 6. Pull compras de terceros
     const { data: chargesData, error: chargesErr } = await supabase
@@ -516,6 +568,11 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
     if (chargesErr) {
       return { success: false, offline: true, error: chargesErr.message };
     }
+    const { data: deletedChargesData } = await supabase
+      .from('third_party_card_charges')
+      .select('id')
+      .eq('user_id', targetUserId)
+      .not('deleted_at', 'is', null);
 
     // 7. Pull transacciones
     const { data: txData, error: txErr } = await supabase
@@ -527,6 +584,11 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
     if (txErr) {
       return { success: false, offline: true, error: txErr.message };
     }
+    const { data: deletedTxData } = await supabase
+      .from('transactions')
+      .select('id')
+      .eq('user_id', targetUserId)
+      .not('deleted_at', 'is', null);
 
     // Aplicar actualizaciones a Zustand con Escudo Anti-Zombis (filtrar bajas pendientes)
     if (banksData && banksData.length > 0) {
@@ -538,6 +600,20 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
       const currentBanks = useCardsStore.getState().banks;
       useCardsStore.setState({ banks: mergeById(currentBanks, pulledBanks) });
     }
+    if (deletedBanksData && deletedBanksData.length > 0) {
+      const deletedBankIdSet = new Set<string>();
+      for (const row of deletedBanksData as { id: string }[]) {
+        deletedBankIdSet.add(row.id);
+        deletedBankIdSet.add(toDeterministicUuid(row.id));
+      }
+      const currentBanks = useCardsStore.getState().banks;
+      const prunedBanks = currentBanks.filter(
+        (b) => !deletedBankIdSet.has(b.id) && !deletedBankIdSet.has(toDeterministicUuid(b.id))
+      );
+      if (prunedBanks.length !== currentBanks.length) {
+        useCardsStore.setState({ banks: prunedBanks });
+      }
+    }
 
     if (cardsData && cardsData.length > 0) {
       const pendingCardIds = getPendingDeletionIdSet('credit_cards');
@@ -547,6 +623,20 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
       const pulledCards = filteredCards.map(rowToCard);
       const currentCards = useCardsStore.getState().cards;
       useCardsStore.setState({ cards: mergeById(currentCards, pulledCards) });
+    }
+    if (deletedCardsData && deletedCardsData.length > 0) {
+      const deletedCardIdSet = new Set<string>();
+      for (const row of deletedCardsData as { id: string }[]) {
+        deletedCardIdSet.add(row.id);
+        deletedCardIdSet.add(toDeterministicUuid(row.id));
+      }
+      const currentCards = useCardsStore.getState().cards;
+      const prunedCards = currentCards.filter(
+        (c) => !deletedCardIdSet.has(c.id) && !deletedCardIdSet.has(toDeterministicUuid(c.id))
+      );
+      if (prunedCards.length !== currentCards.length) {
+        useCardsStore.setState({ cards: prunedCards });
+      }
     }
 
     const debtsStoreUpdates: Partial<ReturnType<typeof useDebtsStore.getState>> = {};
@@ -560,6 +650,20 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
       const currentPeople = useDebtsStore.getState().people;
       debtsStoreUpdates.people = mergeById(currentPeople, pulledPeople);
     }
+    if (deletedPeopleData && deletedPeopleData.length > 0) {
+      const deletedPeopleIdSet = new Set<string>();
+      for (const row of deletedPeopleData as { id: string }[]) {
+        deletedPeopleIdSet.add(row.id);
+        deletedPeopleIdSet.add(toDeterministicUuid(row.id));
+      }
+      const basePeople = debtsStoreUpdates.people ?? useDebtsStore.getState().people;
+      const prunedPeople = basePeople.filter(
+        (p) => !deletedPeopleIdSet.has(p.id) && !deletedPeopleIdSet.has(toDeterministicUuid(p.id))
+      );
+      if (prunedPeople.length !== basePeople.length) {
+        debtsStoreUpdates.people = prunedPeople;
+      }
+    }
 
     if (debtsData && debtsData.length > 0) {
       const pendingDebtIds = getPendingDeletionIdSet('personal_debts');
@@ -569,6 +673,20 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
       const pulledDebts = filteredDebts.map(rowToDebt);
       const currentDebts = useDebtsStore.getState().personalDebts;
       debtsStoreUpdates.personalDebts = mergeById(currentDebts, pulledDebts);
+    }
+    if (deletedDebtsData && deletedDebtsData.length > 0) {
+      const deletedDebtIdSet = new Set<string>();
+      for (const row of deletedDebtsData as { id: string }[]) {
+        deletedDebtIdSet.add(row.id);
+        deletedDebtIdSet.add(toDeterministicUuid(row.id));
+      }
+      const baseDebts = debtsStoreUpdates.personalDebts ?? useDebtsStore.getState().personalDebts;
+      const prunedDebts = baseDebts.filter(
+        (d) => !deletedDebtIdSet.has(d.id) && !deletedDebtIdSet.has(toDeterministicUuid(d.id))
+      );
+      if (prunedDebts.length !== baseDebts.length) {
+        debtsStoreUpdates.personalDebts = prunedDebts;
+      }
     }
 
     if (loansData && loansData.length > 0) {
@@ -580,6 +698,20 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
       const currentLoans = useDebtsStore.getState().friendLoans;
       debtsStoreUpdates.friendLoans = mergeById(currentLoans, pulledLoans);
     }
+    if (deletedLoansData && deletedLoansData.length > 0) {
+      const deletedLoanIdSet = new Set<string>();
+      for (const row of deletedLoansData as { id: string }[]) {
+        deletedLoanIdSet.add(row.id);
+        deletedLoanIdSet.add(toDeterministicUuid(row.id));
+      }
+      const baseLoans = debtsStoreUpdates.friendLoans ?? useDebtsStore.getState().friendLoans;
+      const prunedLoans = baseLoans.filter(
+        (l) => !deletedLoanIdSet.has(l.id) && !deletedLoanIdSet.has(toDeterministicUuid(l.id))
+      );
+      if (prunedLoans.length !== baseLoans.length) {
+        debtsStoreUpdates.friendLoans = prunedLoans;
+      }
+    }
 
     if (chargesData && chargesData.length > 0) {
       const pendingChargeIds = getPendingDeletionIdSet('third_party_card_charges');
@@ -589,6 +721,20 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
       const pulledCharges = filteredCharges.map(rowToCharge);
       const currentCharges = useDebtsStore.getState().thirdPartyCharges;
       debtsStoreUpdates.thirdPartyCharges = mergeById(currentCharges, pulledCharges);
+    }
+    if (deletedChargesData && deletedChargesData.length > 0) {
+      const deletedChargeIdSet = new Set<string>();
+      for (const row of deletedChargesData as { id: string }[]) {
+        deletedChargeIdSet.add(row.id);
+        deletedChargeIdSet.add(toDeterministicUuid(row.id));
+      }
+      const baseCharges = debtsStoreUpdates.thirdPartyCharges ?? useDebtsStore.getState().thirdPartyCharges;
+      const prunedCharges = baseCharges.filter(
+        (c) => !deletedChargeIdSet.has(c.id) && !deletedChargeIdSet.has(toDeterministicUuid(c.id))
+      );
+      if (prunedCharges.length !== baseCharges.length) {
+        debtsStoreUpdates.thirdPartyCharges = prunedCharges;
+      }
     }
 
     if (Object.keys(debtsStoreUpdates).length > 0) {
@@ -604,7 +750,20 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
       const currentTx = useTransactionsStore.getState().transactions;
       useTransactionsStore.setState({ transactions: mergeById(currentTx, pulledTx) });
     }
-
+    if (deletedTxData && deletedTxData.length > 0) {
+      const deletedTxIdSet = new Set<string>();
+      for (const row of deletedTxData as { id: string }[]) {
+        deletedTxIdSet.add(row.id);
+        deletedTxIdSet.add(toDeterministicUuid(row.id));
+      }
+      const currentTx = useTransactionsStore.getState().transactions;
+      const prunedTx = currentTx.filter(
+        (t) => !deletedTxIdSet.has(t.id) && !deletedTxIdSet.has(toDeterministicUuid(t.id))
+      );
+      if (prunedTx.length !== currentTx.length) {
+        useTransactionsStore.setState({ transactions: prunedTx });
+      }
+    }
     lastSyncTimestamp = new Date().toISOString();
     return { success: true, syncedAt: lastSyncTimestamp };
   } catch (error) {
@@ -682,6 +841,16 @@ export const deleteRemoteRecord = async (
 ): Promise<void> => {
   try {
     await enqueuePendingDeletion(table, localId);
+    const targetUuid = toDeterministicUuid(localId);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const currentUserId = sessionData.session?.user?.id;
+    if (currentUserId) {
+      let query = supabase.from(table).update({ deleted_at: new Date().toISOString() }).eq('id', targetUuid);
+      if ((table as string) !== 'profiles') {
+        query = query.eq('user_id', currentUserId);
+      }
+      await query;
+    }
   } catch {
     // Silencioso ante fallas de persistencia o indisponibilidad offline
   }

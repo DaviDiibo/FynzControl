@@ -13,7 +13,7 @@
 
 ## 2. Estado Activo del Sprint y Foco Inmediato
 - **Sprint Activo**: Auditoría y blindaje técnico integral completados con éxito (Fases 1 a 4).
-- **Hitos Recientes Concluidos**: `[TASK-CARD-INSTALLMENTS-UI-AND-PROJECTION]` (Visualización de cuotas "Cuota X de Y", importe prorrateado y proyección multi-período en `cards/[id].tsx`), `[TASK-CARD-INSTALLMENTS-ACCOUNTING-CORE]` (Núcleo contable de cuotas directas).
+- **Hitos Recientes Concluidos**: `[TASK-FIX-EXIGIBLE-DROP-AND-REALTIME-DELETION]` (Invarianza de exigible ante abonos parciales y baja inmediata/anti-resurrección en Supabase), `[TASK-CARD-INSTALLMENTS-UI-AND-PROJECTION]`, `[TASK-CARD-INSTALLMENTS-ACCOUNTING-CORE]`.
 - **Propuestas Técnicas Pendientes**: Cola de propuestas técnicas pendientes 100% limpia y completada.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
@@ -84,6 +84,7 @@
 - **Sanitización de Errores de Actualizador Desktop**: Mapeo defensivo de errores crudos de Rust/Tauri (404, red, Minisign) a mensajes amigables en español con `formatUpdaterErrorMessage` en `updater-service.ts`.
 - **Liquidación Mensual Exacta de Compras en Tarjeta a Cuotas**: Imputación de cuota mensual activa con `monthsDiff` y consolidación de deuda diferida remanente (`directInstallmentsRemainingTotal`) en `card-accounting.ts` y `transactions-store.ts`.
 - **Unificación y Proyección de Cuotas en Detalle de Tarjeta (`cards/[id].tsx`)**: Eliminación de cálculos inline duplicados mediante `computeCardBillingStatement`; visualización de cuota activa (`"Cuota X de Y"`), importe mensual prorrateado y proyección multi-período (+1 y +2 meses) de cuotas vigentes.
+- **Invarianza de Exigible y Sincronización Inmediata de Bajas**: Eliminado redondeo al alza de cuotas en debts-store.ts (isFullySettled = newRemaining <= 0.05 con Math.floor), baja inmediata a Supabase en deleteRemoteRecord, escudo anti-resurrección en syncPush y purga de bajas remotas en syncPull.
 
 ## 5. Referencia Histórica
 - Para la bitácora histórica completa de tareas concluidas, archivos modificados y trazabilidad técnica, consultar bajo demanda: `HISTORY.md`.
