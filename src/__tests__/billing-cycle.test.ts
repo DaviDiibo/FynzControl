@@ -2,6 +2,7 @@
 import { useTransactionsStore } from '../store/transactions-store';
 import { useCardsStore } from '../store/cards-store';
 import { useDebtsStore } from '../store/debts-store';
+import { computeCardBillingStatement } from '../utils/card-accounting';
 import {
   getProjectedCardBillingPeriod,
   isOneTimeExpenseInPeriod,
@@ -1007,3 +1008,184 @@ describe('Proyección de Consumos y Cuotas Futuras (Offsets +1 y +2 meses)', () 
     expect(actualCovered.badgeLabel).toBe('Cuota 5 de 8 • Cubierta');
   });
 });
+
+describe('Fase 1: Compras directas en cuotas con tarjeta de crédito (Single Source of Truth)', () => {
+  const testCard = {
+    id: 'test-card-installments',
+    name: 'Visa Cuotas',
+    bankName: 'Banco Cuotas',
+    closingDay: 20,
+    paymentDay: 5,
+    cutOffDay: 20,
+    isDefault: true,
+    createdAt: new Date().toISOString(),
+  };
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    useTransactionsStore.getState().clearAllTransactions();
+    useDebtsStore.getState().clearAllDebts();
+
+    useCardsStore.setState({
+      cards: [testCard],
+      banks: [],
+    });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('1. Compra en cuotas pre-corte: $600 en 6 cuotas el 10 de octubre de 2026 (corte 20)', () => {
+    // 10 de Octubre 2026 (antes del corte del día 20)
+    jest.setSystemTime(new Date('2026-10-10T12:00:00Z'));
+
+    useTransactionsStore.getState().addTransaction({
+      title: 'Compra en 6 cuotas pre-corte',
+      amount: 600,
+      type: 'expense',
+      category: 'Shopping',
+      paymentMethod: 'credit_card',
+      cardId: testCard.id,
+      installmentsCount: 6,
+      date: '2026-10-10T12:00:00Z',
+    });
+
+    // En octubre: devuelve $100 (no $600)
+    expect(useTransactionsStore.getState().getCurrentMonthExpense()).toBe(100);
+
+    // Avanzar el tiempo a noviembre 2026: sigue siendo $100 (cuota 2)
+    jest.setSystemTime(new Date('2026-11-10T12:00:00Z'));
+    expect(useTransactionsStore.getState().getCurrentMonthExpense()).toBe(100);
+
+    // Avanzar a marzo 2027: $100 (cuota 6)
+    jest.setSystemTime(new Date('2027-03-10T12:00:00Z'));
+    expect(useTransactionsStore.getState().getCurrentMonthExpense()).toBe(100);
+
+    // Avanzar a abril 2027: $0 (extinguida)
+    jest.setSystemTime(new Date('2027-04-10T12:00:00Z'));
+    expect(useTransactionsStore.getState().getCurrentMonthExpense()).toBe(0);
+  });
+
+  it('2. Compra en cuotas post-corte con salto de año: $300 en 3 cuotas el 25 de noviembre de 2026 (corte 20)', () => {
+    // 25 de Noviembre 2026 (después del corte del día 20)
+    jest.setSystemTime(new Date('2026-11-25T12:00:00Z'));
+
+    useTransactionsStore.getState().addTransaction({
+      title: 'Compra en 3 cuotas post-corte',
+      amount: 300,
+      type: 'expense',
+      category: 'Tecnología',
+      paymentMethod: 'credit_card',
+      cardId: testCard.id,
+      installmentsCount: 3,
+      date: '2026-11-25T12:00:00Z',
+    });
+
+    // Noviembre: $0 (diferido al corte siguiente)
+    expect(useTransactionsStore.getState().getCurrentMonthExpense()).toBe(0);
+
+    // Diciembre: $100 (cuota 1)
+    jest.setSystemTime(new Date('2026-12-10T12:00:00Z'));
+    expect(useTransactionsStore.getState().getCurrentMonthExpense()).toBe(100);
+
+    // Enero 2027: $100 (cuota 2)
+    jest.setSystemTime(new Date('2027-01-10T12:00:00Z'));
+    expect(useTransactionsStore.getState().getCurrentMonthExpense()).toBe(100);
+
+    // Febrero 2027: $100 (cuota 3)
+    jest.setSystemTime(new Date('2027-02-10T12:00:00Z'));
+    expect(useTransactionsStore.getState().getCurrentMonthExpense()).toBe(100);
+
+    // Marzo 2027: $0 (extinguida)
+    jest.setSystemTime(new Date('2027-03-10T12:00:00Z'));
+    expect(useTransactionsStore.getState().getCurrentMonthExpense()).toBe(0);
+  });
+
+  it('3. computeCardBillingStatement: rawMonthDue refleja cuota del mes ($100) y cardTotalDebt refleja totalidad diferida restante', () => {
+    // Compra de $600 en 6 cuotas el 10 de octubre de 2026 (corte 20)
+    jest.setSystemTime(new Date('2026-10-10T12:00:00Z'));
+
+    useTransactionsStore.getState().addTransaction({
+      title: 'Laptop 6 cuotas',
+      amount: 600,
+      type: 'expense',
+      category: 'Tecnología',
+      paymentMethod: 'credit_card',
+      cardId: testCard.id,
+      installmentsCount: 6,
+      date: '2026-10-10T12:00:00Z',
+    });
+
+    const txs = useTransactionsStore.getState().transactions;
+    const pDebts = useDebtsStore.getState().personalDebts;
+    const tpCharges = useDebtsStore.getState().thirdPartyCharges;
+
+    // Mes 1: Octubre 2026
+    const statementOct = computeCardBillingStatement({
+      card: testCard,
+      transactions: txs,
+      personalDebts: pDebts,
+      thirdPartyCharges: tpCharges,
+      referenceDate: new Date('2026-10-15T12:00:00Z'),
+    });
+    expect(statementOct.rawMonthDue).toBe(100);
+    expect(statementOct.cycleTransactionsTotal).toBe(100);
+    expect(statementOct.cardCurrentMonthDebt).toBe(100);
+    expect(statementOct.cardTotalDebt).toBe(600);
+    expect(statementOct.rawTotalDebt).toBe(600);
+    expect(statementOct.cycleTransactions.length).toBe(1);
+
+    // Mes 2: Noviembre 2026
+    const statementNov = computeCardBillingStatement({
+      card: testCard,
+      transactions: txs,
+      personalDebts: pDebts,
+      thirdPartyCharges: tpCharges,
+      referenceDate: new Date('2026-11-15T12:00:00Z'),
+    });
+    expect(statementNov.rawMonthDue).toBe(100);
+    expect(statementNov.cycleTransactionsTotal).toBe(100);
+    expect(statementNov.cardCurrentMonthDebt).toBe(100);
+    expect(statementNov.cardTotalDebt).toBe(500);
+    expect(statementNov.rawTotalDebt).toBe(500);
+
+    // Mes 3: Diciembre 2026
+    const statementDic = computeCardBillingStatement({
+      card: testCard,
+      transactions: txs,
+      personalDebts: pDebts,
+      thirdPartyCharges: tpCharges,
+      referenceDate: new Date('2026-12-15T12:00:00Z'),
+    });
+    expect(statementDic.rawMonthDue).toBe(100);
+    expect(statementDic.cardTotalDebt).toBe(400);
+
+    // Mes 6: Marzo 2027 (Última cuota)
+    const statementMar = computeCardBillingStatement({
+      card: testCard,
+      transactions: txs,
+      personalDebts: pDebts,
+      thirdPartyCharges: tpCharges,
+      referenceDate: new Date('2027-03-15T12:00:00Z'),
+    });
+    expect(statementMar.rawMonthDue).toBe(100);
+    expect(statementMar.cardTotalDebt).toBe(100);
+
+    // Mes 7: Abril 2027 (Extinguida)
+    const statementAbr = computeCardBillingStatement({
+      card: testCard,
+      transactions: txs,
+      personalDebts: pDebts,
+      thirdPartyCharges: tpCharges,
+      referenceDate: new Date('2027-04-15T12:00:00Z'),
+    });
+    expect(statementAbr.rawMonthDue).toBe(0);
+    expect(statementAbr.cycleTransactionsTotal).toBe(0);
+    expect(statementAbr.cardCurrentMonthDebt).toBe(0);
+    expect(statementAbr.cardTotalDebt).toBe(0);
+    expect(statementAbr.rawTotalDebt).toBe(0);
+    expect(statementAbr.cycleTransactions.length).toBe(0);
+  });
+});
+
