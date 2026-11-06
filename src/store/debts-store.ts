@@ -1,39 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { StateStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { toDeterministicUuid } from '../lib/sync-adapters';
-
-// Memoria fallback en caso de retraso en enlace nativo
-const memoryStorage = new Map<string, string>();
-
-const safeStorage: StateStorage = {
-  getItem: async (name: string): Promise<string | null> => {
-    try {
-      const value = await AsyncStorage.getItem(name);
-      return value;
-    } catch {
-      return memoryStorage.get(name) ?? null;
-    }
-  },
-  setItem: async (name: string, value: string): Promise<void> => {
-    try {
-      memoryStorage.set(name, value);
-      await AsyncStorage.setItem(name, value);
-    } catch {
-      // Silently fallback to memory storage
-    }
-  },
-  removeItem: async (name: string): Promise<void> => {
-    try {
-      memoryStorage.delete(name);
-      await AsyncStorage.removeItem(name);
-    } catch {
-      // Silently fallback to memory storage
-    }
-  },
-};
+import { safeStorage } from './safe-storage';
 
 export type DebtSyncHandlers = {
   onDebtAddedOrUpdated?: () => void;
@@ -462,22 +431,37 @@ export const useDebtsStore = create<DebtsState>()(
             const isInstallmentLoan =
               debt.debtType === 'installment_loan' || Boolean(debt.totalInstallments);
 
+            const newPaid =
+              isInstallmentLoan && debt.paidInstallments !== undefined
+                ? Math.max(0, (debt.paidInstallments || 0) - count)
+                : debt.paidInstallments;
+
+            const hasRemainingPayments =
+              (isInstallmentLoan &&
+                ((newPaid !== undefined && newPaid > 0) ||
+                  (debt.initialPaidInstallments ?? 0) > 0)) ||
+              newTotalActualPaid > 0 ||
+              (debt.totalAmount ? newRemaining < debt.totalAmount : false);
+
             // Determinar lastPaymentDate revertido
             let newLastPaymentDate: string | undefined;
             if (options?.previousPaymentDate !== undefined) {
               newLastPaymentDate = options.previousPaymentDate || undefined;
+            } else if (hasRemainingPayments) {
+              newLastPaymentDate = debt.lastPaymentDate;
             } else {
               newLastPaymentDate = undefined;
             }
 
             if (isInstallmentLoan && debt.paidInstallments !== undefined) {
-              const newPaid = Math.max(0, (debt.paidInstallments || 0) - count);
               const newPrepaidLast =
                 mode === 'last'
                   ? Math.max(0, (debt.prepaidLastInstallments || 0) - count)
                   : debt.prepaidLastInstallments || 0;
 
-              const isSettled = newRemaining <= 0.001 || (debt.totalInstallments ? newPaid >= debt.totalInstallments : false);
+              const isSettled =
+                newRemaining <= 0.001 ||
+                (debt.totalInstallments ? (newPaid ?? 0) >= debt.totalInstallments : false);
 
               return {
                 ...debt,

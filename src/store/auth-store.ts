@@ -159,7 +159,7 @@ export const useAuthStore = create<AuthState>()(
             };
 
             const currentUser = get().user;
-            if (!currentUser || currentUser.id !== mappedUser.id) {
+            if (currentUser && currentUser.id !== mappedUser.id) {
               purgeAllDomainStores();
             }
 
@@ -454,7 +454,7 @@ export const useAuthStore = create<AuthState>()(
 
             if (data.session) {
               const currentUser = get().user;
-              if (!currentUser || currentUser.id !== mappedUser.id) {
+              if (currentUser && currentUser.id !== mappedUser.id) {
                 purgeAllDomainStores();
               }
 
@@ -545,7 +545,7 @@ export const useAuthStore = create<AuthState>()(
           };
 
           const currentUser = get().user;
-          if (!currentUser || currentUser.id !== mappedUser.id) {
+          if (currentUser && currentUser.id !== mappedUser.id) {
             purgeAllDomainStores();
           }
 
@@ -667,7 +667,7 @@ supabase.auth.onAuthStateChange((event, session) => {
       };
 
       const currentUser = useAuthStore.getState().user;
-      if (!currentUser || currentUser.id !== mappedUser.id) {
+      if (currentUser && currentUser.id !== mappedUser.id) {
         purgeAllDomainStores();
       }
 

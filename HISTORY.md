@@ -2071,3 +2071,185 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
   2. **Integración en Pantalla de Ajustes (`src/components/settings/settings-section-list.tsx`)**: Montaje en el layout responsivo de Ajustes (grilla ancha `isWide` de escritorio y layout vertical estándar), manteniendo inalterada la apariencia en Web y Móvil.
   3. **Re-compilación y Generación del Instalador NSIS**: Exportación web limpia (`dist/`) y compilación release con `npx tauri build -b nsis`, generando `ControlFynz_1.0.0_x64-setup.exe` (~7.96 MiB) con el sistema de auto-actualización plenamente operativo.
   4. **Verificación de Calidad**: `tsc --noEmit` 0 errores y 130/130 tests unitarios aprobados al 100% (7 suites en verde en `npm test`).
+
+
+### [TASK-AUDIT-PHASE-1-AUTH-SYNC-SHIELD] - 2026-11-05
+- **Archivos Intervenidos**:
+  - `src/store/auth-store.ts`
+  - `src/services/sync-service.ts`
+- **Resumen Técnico**:
+  1. **Blindaje contra Purga Accidental de Tiendas (`src/store/auth-store.ts`)**: Se corrigió la condición de reseteo en `initializeAuth`, `login`, `loginWithGoogle` y en el listener de `supabase.auth.onAuthStateChange`. Anteriormente se evaluaba `if (!currentUser || currentUser.id !== mappedUser.id)`, lo que provocaba que al arrancar o hidratar la app con `currentUser === null`, se ejecutara `purgeAllDomainStores()` eliminando indebidamente los datos locales de Zustand en caché. Se reemplazó por la guarda estricta `if (currentUser && currentUser.id !== mappedUser.id)`, asegurando que las tiendas solo se purguen si existe un usuario previo y su identificador difiere del nuevo usuario autenticado (cambio de cuenta), o ante un evento explícito de `SIGNED_OUT`.
+  2. **Debouncing Cancelable y Cola de Reintento Concurrente en Push (`src/services/sync-service.ts`)**: En `triggerBackgroundPush()`, se implementó debouncing real con cancelación de temporizador (`clearTimeout(pushDebounceTimer)`) para evitar ráfagas descontroladas de peticiones. En `syncPush()`, cuando ya existe un push en ejecución (`isPushInProgress === true`), se activa la bandera `hasPendingPushRequest = true` en lugar de descartar la sincronización. En el bloque `finally`, si `hasPendingPushRequest` está activo, se reprograma automáticamente un nuevo `syncPush` tras 100ms, erradicando la pérdida silenciosa de mutaciones concurrentes. Asimismo, se incorporó la limpieza de temporizadores y banderas en `purgeLocalSyncState()`.
+  3. **Decisiones Permanentes**:
+     - Las tiendas de dominio offline jamás deben resetearse durante el arranque o login del mismo usuario.
+     - Toda mutación local en segundo plano queda garantizada por la cola de reintento concurrente de `syncPush`.
+  4. **Verificación de Calidad**: `npx tsc --noEmit` con 0 errores y 130/130 pruebas unitarias aprobadas al 100% en Jest (`npm test`).
+
+
+### [TASK-AUDIT-PHASE-2-ACCOUNTING-ID-INTEGRITY] - 2026-11-05
+- **Archivos Intervenidos**:
+  - `src/store/safe-storage.ts`
+  - `src/store/transactions-store.ts`
+  - `src/store/debts-store.ts`
+- **Resumen Técnico**:
+  1. **Centralización y Robustez de Almacenamiento Seguro (`src/store/safe-storage.ts`)**:
+     - Se eliminaron las implementaciones duplicadas locales de `safeStorage` y los mapas aislados `memoryStorage` en `transactions-store.ts` y `debts-store.ts`.
+     - Ambas tiendas ahora consumen la instancia centralizada exportada desde `src/store/safe-storage.ts`.
+     - Se reforzó `safeStorage` para que, al obtener un valor exitosamente de `AsyncStorage`, actualice automáticamente la copia en `memoryStorage.set(name, value)`. Esto asegura consistencia inmediata en memoria y elimina discrepancias de hidratación o lecturas obsoletas.
+  2. **Paridad de Identidad Bancaria y Prevención de Desajustes de Saldo (`src/store/transactions-store.ts`)**:
+     - Implementación de la función pura `isSameBankId(a, b)` con normalización determinista mediante `toDeterministicUuid`.
+     - Aplicación de `isSameBankId` en los selectores contables fundamentales `getBankComputedBalance` y `getBankCustodyAmount`.
+     - Se erradicaron desajustes de saldo bancario y cálculo de fondos en custodia causados por transacciones locales que poseían identificadores temporales/locales frente a bancos sincronizados con UUIDs de Supabase (o viceversa).
+  3. **Clamping Defensivo de Fin de Mes en Ciclos de Tarjetas (`src/store/transactions-store.ts`)**:
+     - En el cálculo de flujo de caja mensual `computeMonthlyCashFlowBreakdown`, se incorporó tolerancia a `cutOffDay` y clamping estricto del día de corte: `Math.min(Math.max(1, closingDay), maxDaysInMonth)`.
+     - Previene distorsiones y desfasajes en la asignación de consumos al extracto mensual para tarjetas configuradas con día de corte 31 durante meses cortos de 28, 29 o 30 días.
+  4. **Preservación Condicional de `lastPaymentDate` en Reversión de Deudas (`src/store/debts-store.ts`)**:
+     - En `revertDebtPayment`, se corrigió la anulación incondicional de la fecha de último abono (`lastPaymentDate = undefined`).
+     - Se introdujo el cálculo reactivo `hasRemainingPayments` que verifica si el préstamo aún conserva cuotas pagadas (`newPaid > 0` o `initialPaidInstallments > 0`), abonos acumulados (`newTotalActualPaid > 0`) o saldo amortizado (`newRemaining < totalAmount`).
+     - Si `hasRemainingPayments` es verdadero y no se proveyó un `previousPaymentDate`, se preserva intacto `debt.lastPaymentDate`. Solo se asigna `undefined` cuando la deuda queda sin ningún abono histórico.
+  5. **Decisiones Permanentes**:
+     - Prohibición estricta de duplicar adaptadores de persistencia en stores individuales; todo Zustand persistente debe importar `safeStorage` desde `src/store/safe-storage.ts`.
+     - Toda comparación de claves foráneas bancarias o entidades sincronizables debe usar `isSameBankId` para admitir paridad UUID/local.
+     - Cualquier cómputo temporal atado a días específicos del mes debe aplicar clamping contra el último día del mes en curso (`new Date(y, m + 1, 0).getDate()`).
+     - La reversión de transacciones vinculadas a deudas debe validar el estado residual de la deuda antes de resetear fechas históricas.
+  6. **Verificación de Calidad**: `npx tsc --noEmit` con 0 errores y 130/130 tests unitarios aprobados al 100% en Jest (`npm test`).
+
+
+### [TASK-AUDIT-PHASE-3-ZERO-DEAD-CODE] - 2026-11-05
+- **Archivos Intervenidos**:
+  - `package.json`
+  - `src/lib/sync-adapters.ts`
+  - `src/utils/session.ts`
+- **Resumen Técnico**:
+  1. **Higiene de Dependencias y Poda de Paquetes Huérfanos (`package.json`)**:
+     - Se realizó una auditoría minuciosa de todas las dependencias declaradas en `package.json`, contrastándolas contra la totalidad del código fuente de la aplicación.
+     - Se eliminaron 5 paquetes huérfanos sin importación alguna:
+       * `@tauri-apps/api` (la funcionalidad de escritorio y actualización se canaliza a través de los plugins especializados `@tauri-apps/plugin-updater` y `@tauri-apps/plugin-opener`).
+       * `expo-constants` (residuo de plantilla de Expo sin llamadas en la app).
+       * `expo-device` (sin uso activo en la lógica de plataforma).
+       * `expo-font` (la tipografía se maneja mediante fuentes del sistema y temas nativos).
+       * `expo-linking` (la navegación y rutas se gestionan íntegramente con `expo-router`).
+     - Se redujo el footprint del bundle y se previenen incompatibilidades o advertencias de dependencias transitivas durante futuras actualizaciones de SDK.
+  2. **Zero Dead Code y Privacidad en Adaptadores de Sincronización (`src/lib/sync-adapters.ts`)**:
+     - Se eliminaron exports innecesarios y helpers no consumidos fuera del archivo (`isValidUuid` y `formatIsoToSpanishDate`).
+     - En `toDeterministicUuid`, se sustituyó la llamada indirecta por la validación directa mediante `UUID_REGEX.test(input)`.
+     - En `rowToTransaction`, se internalizó la lógica de formateo y agrupamiento de fechas en español (`dateFormatted` y `dateGroup`), garantizando que la transformación de registros de transacciones permanezca autónoma y sin acoplamiento a funciones globales inertes.
+  3. **Saneamiento de Sesión y Ciclo de Vida de AppState (`src/utils/session.ts`)**:
+     - Se eliminó la constante inactiva `INACTIVITY_LOCK_MS = 15 * 60 * 1000` y la condición de bloqueo zombi (`currentTime - lastActiveTimestamp > INACTIVITY_LOCK_MS`), la cual invocaba `lockApp()` sin contar con un flujo de interfaz de usuario de desbloqueo orquestado.
+     - Se simplificó `handleAppStateChange` para enfocarlo puramente en su objetivo operacional: notificar a `useAuthStore.getState().updateActivity()` cuando el estado de la aplicación cambia a `'active'`.
+  4. **Decisiones Permanentes**:
+     - Mantener el proyecto bajo la política estricta de Zero Dead Code: ninguna dependencia en `package.json` sin uso real en el código ni utilidades auxiliares exportadas sin consumidores externos.
+     - Los adaptadores de persistencia y sincronización deben encapsular internamente su lógica de formateo específico a menos que exista un caso de uso multi-módulo justificado.
+     - Los gestores de ciclo de vida (`AppState`) no deben alojar temporizadores o candados de seguridad que no estén plenamente coordinados con la UI y los stores correspondientes.
+  5. **Verificación de Calidad**:
+     - Compilación TypeScript limpia (`npx tsc --noEmit` / `node ./node_modules/typescript/bin/tsc --noEmit` con 0 errores).
+     - Verificación completa de pruebas unitarias (`node ./node_modules/jest/bin/jest.js` con 130/130 pruebas aprobadas, 7/7 suites en verde, 100% pass).
+
+
+### [TASK-AUDIT-PHASE-4-TRANSACTIONS-PERFORMANCE] - 2026-11-05
+- **Archivos Intervenidos**:
+  - `src/components/transactions/transaction-item-card.tsx`
+  - `app/(app)/(tabs)/transactions.tsx`
+- **Resumen Técnico**:
+  1. **Virtualización de Listado en Móvil con FlatList (`app/(app)/(tabs)/transactions.tsx`)**:
+     - Se reemplazó el `ScrollView` con mapeo lineal monolítico por un `FlatList` optimizado para dispositivos móviles (preservando el `ScrollView` de dos columnas exclusivamente para pantallas anchas `isWide`).
+     - Se diseñó un modelo de datos aplanado heterogéneo (`TransactionListItem`) que alterna dinámicamente elementos de tipo `header` (agrupadores por fecha) y de tipo `item` (tarjetas de movimiento), eliminando anidamientos profundos de vistas.
+     - Se implementó un `keyExtractor` determinista (`header_${dateGroup}` para cabeceras y `item.id` para transacciones).
+     - Se configuraron parámetros de rendimiento óptimos: `initialNumToRender={15}`, `maxToRenderPerBatch={10}`, `windowSize={5}`, `removeClippedSubviews={Platform.OS === 'android'}` y `keyboardDismissMode="on-drag"`.
+  2. **Preservación de Foco en Búsqueda y Memoización de Controles (`app/(app)/(tabs)/transactions.tsx`)**:
+     - Se memoizó el `ListHeaderComponent` mediante `useMemo` (`listHeaderElement`), consolidando el resumen financiero (`TransactionsSummaryHeader`), la barra de búsqueda y los filtros de tipo de movimiento.
+     - Esta estructura previene que `FlatList` desmonte o recree el `<TextInput>` de búsqueda mientras el usuario escribe, erradicando por completo el bug de pérdida de foco y cierre recurrente del teclado virtual.
+     - Se envolvieron los callbacks de interacción (`handlePressTransaction`, `handleLongPressTransaction`, `handlePromptDelete`, `renderListItem`) con `useCallback` para garantizar referencias estables.
+  3. **Blindaje de Re-renderizados en Items (`src/components/transactions/transaction-item-card.tsx`)**:
+     - Se estabilizó `TransactionItemCardBase` envolviendo sus manejadores de pulsación (`handlePress`, `handleLongPress`, `handleDelete`) en `useCallback`.
+     - Se reforzó la exportación mediante `React.memo` con el comparador personalizado `arePropsEqual`, validando individualmente propiedades críticas (`item.id`, `item.amount`, `item.description`, `item.date`, `item.category`, `item.type`, `item.paymentMethod`, `currencySymbol`).
+     - Previene que las tarjetas de transacción no afectadas se re-rendericen masivamente ante mutaciones del texto de búsqueda o conmutación de filtros de período.
+  4. **Decisiones Permanentes**:
+     - Todo listado potencialmente extenso en vistas móviles debe implementarse mediante `FlatList` virtualizado con modelo aplanado.
+     - Los campos de entrada de texto (`TextInput`) que coexistan con listas virtualizadas deben montarse en un `ListHeaderComponent` debidamente memoizado para salvaguardar el foco del teclado.
+     - Las tarjetas de elementos repetitivos deben protegerse siempre con `React.memo` y comparadores de propiedades para aislar el re-renderizado.
+  5. **Verificación de Calidad**:
+     - Compilación TypeScript limpia (`node ./node_modules/typescript/bin/tsc --noEmit` con 0 errores).
+     - Suite completa de pruebas unitarias en verde (`node ./node_modules/jest/bin/jest.js` con 130/130 tests aprobados, 7/7 suites en verde, 100% pass).
+
+
+### [TASK-DESKTOP-UPDATER-ERROR-LOCALIZATION] - 2026-11-05
+- **Archivos Intervenidos**:
+  - `src/services/updater-service.ts`
+  - `src/components/settings/update-checker-card.tsx`
+  - `src/__tests__/updater-service.test.ts`
+- **Resumen Técnico**:
+  1. **Sanitización y Localización de Errores en Updater Desktop (`src/services/updater-service.ts`)**:
+     - Se implementó y exportó la función pura `formatUpdaterErrorMessage(error: unknown): string`.
+     - Mapeo defensivo de errores crudos devueltos por Tauri Updater / Rust / HTTP a mensajes en español concisos y amigables:
+       * Fallos 404 / ausencia de releases (`release JSON`, `404`, `not found`) -> "No hay versiones publicadas en el servidor de actualizaciones."
+       * Errores de red / conexión / DNS / timeout (`network`, `dns`, `connection`, `timeout`, `offline`) -> "No se pudo conectar con el servidor de actualizaciones. Revisa tu conexión a internet."
+       * Fallos de validación de firma Minisign (`signature`, `minisign`, `verify`) -> "Error de validación de firma en la actualización descargada."
+       * Fallback general amigable para excepciones imprevistas -> "No fue posible verificar actualizaciones en este momento."
+  2. **Integración en Componente de Ajustes (`src/components/settings/update-checker-card.tsx`)**:
+     - Se conectó `formatUpdaterErrorMessage` en el bloque `catch` de `handleCheckUpdates`.
+     - Se garantiza que el usuario reciba retroalimentación inteligible en español sin alterar estilos ni layout (`Visual Freeze`).
+  3. **Pruebas Unitarias Integrales (`src/__tests__/updater-service.test.ts`)**:
+     - Se añadieron 6 casos de prueba unitaria cubriendo exhaustivamente todos los tipos de errores (404, red, firma Minisign, errores como string, instancias de `Error` y fallos desconocidos).
+     - Suite global de pruebas unitarias elevada a 136/136 tests aprobados al 100% (8/8 suites en verde).
+- **Decisiones Permanentes**:
+  - Toda interacción con APIs o plugins nativos de Tauri debe filtrar y traducir mensajes de error crudos de Rust/C antes de exponerlos al usuario.
+  - La lógica de normalización de errores debe aislarse en funciones puras en `src/services/` para garantizar verificabilidad unitaria determinista.
+- **Verificación de Calidad**:
+  - Compilación TypeScript limpia (`npx tsc --noEmit` con 0 errores).
+  - Suite completa de pruebas unitarias en verde (`npm test` con 136/136 tests aprobados, 8/8 suites en verde, 100% pass).
+
+
+### [TASK-CARD-INSTALLMENTS-ACCOUNTING-CORE] - 2026-11-05
+- **Archivos Intervenidos**:
+  - `src/utils/card-accounting.ts`
+  - `src/store/transactions-store.ts`
+  - `src/__tests__/billing-cycle.test.ts`
+- **Resumen Técnico**:
+  1. **Núcleo Contable de Compras Directas en Cuotas (`src/utils/card-accounting.ts`)**:
+     - Se corrigió y completó la liquidación de compras directas a cuotas con tarjeta de crédito (`paymentMethod: 'credit_card'`, `installmentsCount > 1`).
+     - Se implementó el cálculo determinista del primer mes y año de liquidación (`firstBillMonth`, `firstBillYear`) aplicando clamping en el día de corte efectivo del mes de compra (`Math.min(Math.max(1, closingDay), maxDaysInPurchaseMonth)`).
+     - Si la compra se efectúa en o antes del día de corte, el primer ciclo de liquidación es el mes de la compra; si se efectúa después del corte, el primer ciclo pasa al mes subsiguiente (gestionando saltos de año de forma determinista).
+     - Cálculo de `monthsDiff`: se computa la diferencia exacta de períodos mensuales entre el ciclo consultado (`statementMonth`, `statementYear`) y el ciclo inicial (`firstBillMonth`, `firstBillYear`).
+     - Cómputo de cuota mensual exigible en el extracto (`Math.round((amount / installmentsCount) * 100) / 100`): se suma únicamente si el ciclo consultado cae dentro del rango activo de la compra (`0 <= monthsDiff < installmentsCount`).
+     - Consolidación del remanente diferido total (`directInstallmentsRemainingTotal`): para cada compra activa o futura, se suma la deuda no vencida (`amount - (monthsDiff * monthlyQuota)` si `monthsDiff >= 0`, o el monto total si `monthsDiff < 0`) acumulándola en `rawTotalDebt`.
+  2. **Imputación de Gastos Mensuales por Cuota en Store (`src/store/transactions-store.ts`)**:
+     - Se adaptó `getCurrentMonthExpense()` para que las compras directas en cuotas con tarjeta de crédito (`paymentMethod: 'credit_card'` y `installmentsCount > 1`) no imputen el monto total en el mes de la compra.
+     - Se calcula `monthsDiff` contra el ciclo consultado y se suma exclusivamente la cuota mensual calculada (`amount / installmentsCount`) si `0 <= monthsDiff < installmentsCount`.
+  3. **Pruebas Unitarias Integrales con Fake Timers (`src/__tests__/billing-cycle.test.ts`)**:
+     - Se desarrollaron casos de prueba unitaria exhaustivos utilizando simulación temporal mandatoria (`jest.useFakeTimers()` y `jest.setSystemTime()`).
+     - Se validaron compras pre-corte (ej. día 5 con corte 20), compras post-corte con salto de año (ej. 25 de diciembre con corte 20 que liquida en enero), evolución y extinción de cuotas en ciclos sucesivos, y el remanente diferido en `computeCardBillingStatement`.
+     - Suite global de pruebas unitarias elevada a 139/139 tests aprobados al 100% (7/7 suites en verde).
+- **Decisiones Permanentes**:
+  - Las compras en cuotas con tarjeta de crédito deben imputarse en el extracto mensual y en el gasto corriente mes a mes según `monthsDiff` y no de forma monolítica al momento de la compra.
+  - El día de corte de tarjeta debe siempre calibrarse con clamping contra la cantidad de días del mes de compra para determinar con exactitud si la cuota inicial entra en el ciclo corriente o en el subsiguiente.
+  - Toda prueba de ciclos contables, extractos y fechas límite debe fijar deterministamente el reloj con `jest.useFakeTimers()` y `jest.setSystemTime()`.
+- **Verificación de Calidad**:
+  - Compilación TypeScript limpia (`node ./node_modules/typescript/bin/tsc --noEmit` con 0 errores).
+  - Suite completa de pruebas unitarias en verde (`node ./node_modules/jest/bin/jest.js` con 139/139 tests aprobados, 7/7 suites en verde, 100% pass).
+
+
+### [TASK-CARD-INSTALLMENTS-UI-AND-PROJECTION] - 2026-11-05
+- **Archivos Intervenidos**:
+  - `app/(app)/cards/[id].tsx`
+- **Resumen Técnico**:
+  1. **Centralización con Single Source of Truth (`computeCardBillingStatement`)**:
+     - Se eliminaron más de 120 líneas de cálculos manuales inline duplicados de extractos y cuotas en `app/(app)/cards/[id].tsx`, centralizando la lógica contable con `computeCardBillingStatement`.
+  2. **Visualización Dinámica de Cuotas Directas en Consumos del Ciclo**:
+     - En las pestañas "Consumos del Ciclo" (`cycle` y `all`), se incorporó la detección de consumos directos a cuotas (`installmentsCount > 1`).
+     - Renderizado de badge dinámico `"Cuota X de Y"` (donde `X = monthsDiff + 1` e `Y = installmentsCount`).
+     - Monto del ítem formateado con la cuota mensual prorrateada del período activo, y subtítulo descriptivo con la fecha de compra y el monto total original financiado.
+  3. **Proyección Multi-período (+1 y +2 Meses)**:
+     - Incorporación automática y transparente de cuotas directas vigentes en la proyección de los siguientes 2 ciclos llamando a `computeCardBillingStatement` para los períodos futuros objetivo.
+  4. **Higiene de Código (Zero Dead Code) y Congelamiento Visual (Visual Freeze)**:
+     - Purga de import en desuso `isOneTimeExpenseInPeriod`.
+     - Preservación íntegra de la estética, layout, paleta de colores y componentes visuales preexistentes (`Visual Freeze` 100% respetado).
+- **Decisiones Permanentes**:
+  - Toda pantalla o componente que requiera calcular liquidaciones, extractos o cuotas de tarjetas de crédito debe consumir `computeCardBillingStatement` como única fuente de verdad contable.
+  - La visualización de compras en cuotas debe explicitar tanto el avance de la cuota (`Cuota X de Y`) como el compromiso mensual real del ciclo, manteniendo trazabilidad del total financiado.
+- **Verificación de Calidad**:
+  - Compilación TypeScript limpia (`node ./node_modules/typescript/bin/tsc --noEmit` con 0 errores).
+  - Suite completa de pruebas unitarias en verde (`node ./node_modules/jest/bin/jest.js` con 139/139 tests aprobados, 7/7 suites en verde, 100% pass).
+
+
+

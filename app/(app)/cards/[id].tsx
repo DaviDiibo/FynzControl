@@ -23,13 +23,13 @@ import {
 } from '../../../src/store/debts-store';
 import { useSettingsStore } from '../../../src/store/settings-store';
 import { CardPaymentModal } from '../../../src/components/cards/card-payment-modal';
+import { computeCardBillingStatement } from '../../../src/utils/card-accounting';
 import {
   calculateRecurringDueDate,
   getUrgencyStatus,
   getCardBillingCycleDates,
   getInstallmentProgressInfo,
   getProjectedCardBillingPeriod,
-  isOneTimeExpenseInPeriod,
   getProjectedInstallmentInfo,
   getDebtDueStatus,
   getEffectivePaidInstallments,
@@ -240,158 +240,47 @@ const CardDetailScreen = (): JSX.Element => {
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
 
-    // 1. Compras directas del período de facturación actual
-    const cycleTx = transactions.filter((t) => {
-      if (t.type !== 'expense') return false;
-      if (t.paymentMethod !== 'credit_card') return false;
-      const isMatchingCard =
-        t.cardId === card.id ||
-        (t.cardName && card.name && t.cardName.toLowerCase() === card.name.toLowerCase());
-      if (!isMatchingCard) return false;
-      if (t.relatedDebtId || t.relatedChargeId || t.relatedLoanId) return false;
-
-      const txDate = new Date(t.date);
-      if (isNaN(txDate.getTime())) return false;
-      const d = txDate.getDate();
-      const m = txDate.getMonth();
-      const y = txDate.getFullYear();
-
-      let billMonth = m;
-      let billYear = y;
-      if (d >= closingDay) {
-        billMonth = m + 1;
-        if (billMonth > 11) {
-          billMonth = 0;
-          billYear = y + 1;
-        }
-      }
-
-      return billMonth === currentMonth && billYear === currentYear;
+    // 1. Estado de cuenta actual (Single Source of Truth)
+    const billingStatement = computeCardBillingStatement({
+      card,
+      transactions,
+      personalDebts,
+      thirdPartyCharges,
+      referenceDate: now,
     });
 
-    const cycleTotal = cycleTx.reduce((acc, t) => acc + (t.amount ?? 0), 0);
+    // 2. Proyecciones para períodos futuros o actual según selectedPeriodOffset
+    let projectedCycleTransactions: Transaction[] = [];
+    let projectedCycleTotal = 0;
 
-    // 2. Compras en cuotas propias (personalDebts vinculadas a la tarjeta)
-    const personal = personalDebts.filter(
-      (d) =>
-        (d.cardId === card.id ||
-          d.creditCardId === card.id ||
-          (d.title && card.name && d.title.toLowerCase().includes(card.name.toLowerCase()))) &&
-        !d.settled
-    );
-
-    const pMonthDue = personal.reduce((acc, d) => {
-      const rem = d.remainingAmount ?? 0;
-      if (d.cardPaymentType === 'full_statement') return acc + rem;
-      if (d.monthlyPayment && d.monthlyPayment > 0) return acc + Math.min(rem, d.monthlyPayment);
-      return acc + rem;
-    }, 0);
-
-    // 3. Consumos de terceros asociados a esta tarjeta
-    const isDateInCurrentBillingCycle = (dateVal?: string | number | Date): boolean => {
-      if (!dateVal) return false;
-      const dt = new Date(dateVal);
-      if (isNaN(dt.getTime())) return false;
-      const d = dt.getDate();
-      const m = dt.getMonth();
-      const y = dt.getFullYear();
-      let billMonth = m;
-      let billYear = y;
-      if (d >= closingDay) {
-        billMonth = m + 1;
-        if (billMonth > 11) {
-          billMonth = 0;
-          billYear = y + 1;
-        }
+    if (selectedPeriodOffset > 0) {
+      let targetMonth = currentMonth + selectedPeriodOffset;
+      let targetYear = currentYear;
+      while (targetMonth > 11) {
+        targetMonth -= 12;
+        targetYear += 1;
       }
-      return (
-        (billMonth === currentMonth && billYear === currentYear) ||
-        (m === currentMonth && y === currentYear)
-      );
-    };
+      const projectedRefDate = new Date(targetYear, targetMonth, 15);
+      const projectedStatement = computeCardBillingStatement({
+        card,
+        transactions,
+        personalDebts,
+        thirdPartyCharges,
+        referenceDate: projectedRefDate,
+      });
+      projectedCycleTransactions = projectedStatement.cycleTransactions;
+      projectedCycleTotal = projectedStatement.cycleTransactionsTotal;
+    }
 
-    const thirdParty = thirdPartyCharges.filter((c) => {
-      const isMatchingCard =
-        c.cardId === card.id ||
-        (c.cardName && card.name && c.cardName.toLowerCase() === card.name.toLowerCase());
-      if (!isMatchingCard) return false;
-
-      const isUnsettledWithRemaining = !c.settled && (c.remainingAmount ?? 0) > 0;
-      const isSettledInCurrentCycle =
-        (c.settled || (c.remainingAmount ?? 0) <= 0) &&
-        (isDateInCurrentBillingCycle(c.settledAt) ||
-          isDateInCurrentBillingCycle(c.lastPaymentDate) ||
-          (c.currentPeriodPaidAmount ?? 0) > 0);
-
-      return isUnsettledWithRemaining || isSettledInCurrentCycle;
-    });
-
-    const tpMonthDue = thirdParty.reduce((acc, c) => {
-      if (!c.settled && (c.remainingAmount ?? 0) > 0) {
-        const rem = c.remainingAmount ?? 0;
-        const count = c.installmentsCount ?? 1;
-        const normalQuota =
-          count <= 1
-            ? (c.totalAmount || c.amount || rem)
-            : (c.monthlyInstallmentAmount && c.monthlyInstallmentAmount > 0
-                ? c.monthlyInstallmentAmount
-                : (c.totalAmount || c.amount || rem) / count);
-        return acc + normalQuota;
-      } else {
-        const retainedQuota =
-          c.currentPeriodPaidAmount && c.currentPeriodPaidAmount > 0
-            ? c.currentPeriodPaidAmount
-            : (c.installmentsCount ?? 1) <= 1
-            ? (c.totalAmount || c.amount || 0)
-            : (c.monthlyInstallmentAmount || c.totalAmount || c.amount || 0);
-        return acc + retainedQuota;
-      }
-    }, 0);
-
-    // 4. Pagos de tarjeta aplicados
-    const payments = transactions
-      .filter(
-        (t) =>
-          t.type === 'card_payment' &&
-          (t.cardId === card.id ||
-            (t.cardName && card.name && t.cardName.toLowerCase() === card.name.toLowerCase())) &&
-          isDateInCurrentBillingCycle(t.date)
-      )
-      .reduce((sum, t) => sum + (t.amount ?? 0), 0);
-
-    // 5. Consolidación contable
-    const rawMonthDue = pMonthDue + tpMonthDue + cycleTotal;
-    const personalRemainingTotal = personal.reduce((acc, d) => acc + (d.remainingAmount ?? 0), 0);
-    const thirdPartyRemainingTotal = thirdParty.reduce((acc, c) => acc + (c.remainingAmount ?? 0), 0);
-    const rawTotalDebt = personalRemainingTotal + thirdPartyRemainingTotal + cycleTotal;
-
-    const currentMonthDebt = Math.max(0, rawMonthDue - payments);
-    const totalDebt = Math.max(0, rawTotalDebt - payments);
-
-    // 6. Proyecciones para períodos futuros o actual según selectedPeriodOffset
-    const projOneTime = transactions.filter((t) => {
-      if (t.type !== 'expense') return false;
-      if (t.paymentMethod !== 'credit_card') return false;
-      const isMatchingCard =
-        t.cardId === card.id ||
-        (t.cardName && card.name && t.cardName.toLowerCase() === card.name.toLowerCase());
-      if (!isMatchingCard) return false;
-      if (t.relatedDebtId || t.relatedChargeId || t.relatedLoanId) return false;
-
-      return isOneTimeExpenseInPeriod(t.date, closingDay, selectedPeriodOffset);
-    });
-
-    const projOneTimeTotal = projOneTime.reduce((acc, t) => acc + (t.amount ?? 0), 0);
-
-    const projPersonal = personal
-      .map((d) => {
+    const projPersonal = billingStatement.linkedPersonalDebts
+      .map((d: PersonalDebt): { debt: PersonalDebt; proj: ProjectedInstallmentInfo } => {
         const quota =
           d.monthlyPayment && d.monthlyPayment > 0
             ? Math.min(d.remainingAmount ?? 0, d.monthlyPayment)
             : (d.remainingAmount ?? 0);
         const isCurrentPeriodPaid = computeCardPersonalDebtPeriodPaid(
           d,
-          currentMonthDebt,
+          billingStatement.cardCurrentMonthDebt,
           closingDay
         );
         const effectivePaid = getEffectivePersonalPaidInstallments(d, isCurrentPeriodPaid);
@@ -405,16 +294,17 @@ const CardDetailScreen = (): JSX.Element => {
         );
         return { debt: d, proj };
       })
-      .filter((item) => item.proj.isActiveInPeriod);
+      .filter((item: { debt: PersonalDebt; proj: ProjectedInstallmentInfo }): boolean => item.proj.isActiveInPeriod);
 
     const projPersonalDue = projPersonal.reduce(
-      (acc, item) => acc + item.proj.projectedAmount,
+      (acc: number, item: { debt: PersonalDebt; proj: ProjectedInstallmentInfo }): number =>
+        acc + item.proj.projectedAmount,
       0
     );
 
-    const projThirdParty = thirdParty
-      .filter((c) => !c.settled && (c.remainingAmount ?? 0) > 0)
-      .map((c) => {
+    const projThirdParty = billingStatement.linkedThirdPartyCharges
+      .filter((c: ThirdPartyCardCharge): boolean => !c.settled && (c.remainingAmount ?? 0) > 0)
+      .map((c: ThirdPartyCardCharge): { charge: ThirdPartyCardCharge; proj: ProjectedInstallmentInfo } => {
         const quota =
           c.monthlyInstallmentAmount && c.monthlyInstallmentAmount > 0
             ? c.monthlyInstallmentAmount
@@ -442,21 +332,22 @@ const CardDetailScreen = (): JSX.Element => {
         );
         return { charge: c, proj };
       })
-      .filter((item) => item.proj.isActiveInPeriod);
+      .filter((item: { charge: ThirdPartyCardCharge; proj: ProjectedInstallmentInfo }): boolean => item.proj.isActiveInPeriod);
 
     const projThirdPartyDue = projThirdParty.reduce(
-      (acc, item) => acc + item.proj.projectedAmount,
+      (acc: number, item: { charge: ThirdPartyCardCharge; proj: ProjectedInstallmentInfo }): number =>
+        acc + item.proj.projectedAmount,
       0
     );
 
     const projPeriodTotalDue =
       selectedPeriodOffset === 0
-        ? currentMonthDebt
-        : projOneTimeTotal + projPersonalDue + projThirdPartyDue;
+        ? billingStatement.cardCurrentMonthDebt
+        : projectedCycleTotal + projPersonalDue + projThirdPartyDue;
 
-    // 7. Métricas de límite de crédito
+    // Métricas de límite de crédito
     const limit = card.creditLimit ?? 0;
-    const used = totalDebt;
+    const used = billingStatement.cardTotalDebt;
     const available = limit > 0 ? Math.max(0, limit - used) : 0;
     const usedPercent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
 
@@ -464,21 +355,21 @@ const CardDetailScreen = (): JSX.Element => {
       cardClosingDay: closingDay,
       cardPaymentDay: paymentDay,
       urgencyStatus: urgency,
-      currentCycleTransactions: cycleTx,
-      currentCycleTotal: cycleTotal,
-      linkedPersonalDebts: personal,
-      personalMonthDue: pMonthDue,
-      linkedThirdPartyCharges: thirdParty,
-      thirdPartyMonthDue: tpMonthDue,
-      cardPayments: payments,
-      cardCurrentMonthDebt: currentMonthDebt,
-      cardTotalDebt: totalDebt,
+      currentCycleTransactions: billingStatement.cycleTransactions,
+      currentCycleTotal: billingStatement.cycleTransactionsTotal,
+      linkedPersonalDebts: billingStatement.linkedPersonalDebts,
+      personalMonthDue: billingStatement.personalMonthDue,
+      linkedThirdPartyCharges: billingStatement.linkedThirdPartyCharges,
+      thirdPartyMonthDue: billingStatement.thirdPartyMonthDue,
+      cardPayments: billingStatement.cardPayments,
+      cardCurrentMonthDebt: billingStatement.cardCurrentMonthDebt,
+      cardTotalDebt: billingStatement.cardTotalDebt,
       creditLimit: limit,
       usedCredit: used,
       availableCredit: available,
       creditUsedPercent: usedPercent,
-      projectedOneTimeTx: projOneTime,
-      projectedOneTimeTotal: projOneTimeTotal,
+      projectedOneTimeTx: projectedCycleTransactions,
+      projectedOneTimeTotal: projectedCycleTotal,
       projectedPersonalDebts: projPersonal,
       projectedPersonalDue: projPersonalDue,
       projectedThirdPartyCharges: projThirdParty,
@@ -950,37 +841,72 @@ const CardDetailScreen = (): JSX.Element => {
 
   const renderConsumptionList = (): JSX.Element => (
     <View style={styles.consumptionList}>
-      {/* 1. Compras Directas (1 Cuota) */}
-      {(activeTab === 'all' || activeTab === 'cycle') && (
-        selectedPeriodOffset === 0
-          ? currentCycleTransactions.map((tx: Transaction) => (
-              <View key={`cycle-${tx.id}`} style={styles.consumptionItem}>
+      {/* 1. Compras Directas y Cuotas de Tarjeta */}
+      {(activeTab === 'all' || activeTab === 'cycle') &&
+        (selectedPeriodOffset === 0 ? currentCycleTransactions : projectedOneTimeTx).map(
+          (tx: Transaction): JSX.Element => {
+            const hasInstallments = Boolean(tx.installmentsCount && tx.installmentsCount > 1);
+            const count = tx.installmentsCount ?? 1;
+            const txDate = new Date(tx.date);
+            const txD = txDate.getDate();
+            const txM = txDate.getMonth();
+            const txY = txDate.getFullYear();
+            const txMaxDays = new Date(txY, txM + 1, 0).getDate();
+            const txEffectiveClosing = Math.min(cardClosingDay, txMaxDays);
+            let firstBillMonth = txM;
+            let firstBillYear = txY;
+            if (txD >= txEffectiveClosing) {
+              firstBillMonth = txM + 1;
+              if (firstBillMonth > 11) {
+                firstBillMonth = 0;
+                firstBillYear = txY + 1;
+              }
+            }
+            const monthsDiff =
+              (activeProjectedPeriod.statementYear - firstBillYear) * 12 +
+              (activeProjectedPeriod.statementMonth - firstBillMonth);
+            const currentQuotaNumber = monthsDiff + 1;
+            const amount = tx.amount ?? 0;
+            const itemAmount = hasInstallments
+              ? Math.round((amount / count) * 100) / 100
+              : amount;
+
+            const badgeText = hasInstallments
+              ? `Cuota ${currentQuotaNumber} de ${count}`
+              : selectedPeriodOffset === 0
+              ? 'Compra 1 Cuota'
+              : `Post-corte • ${activeProjectedPeriod.statementMonthName}`;
+
+            const itemKey = selectedPeriodOffset === 0 ? `cycle-${tx.id}` : `cycle-proj-${tx.id}`;
+
+            return (
+              <View key={itemKey} style={styles.consumptionItem}>
                 <View style={styles.consumptionIconWrapper}>
                   <Ionicons name="cart-outline" size={18} color="#0A84FF" />
                 </View>
                 <View style={styles.consumptionContent}>
                   <View style={styles.consumptionTitleRow}>
                     <Text style={styles.consumptionTitle} numberOfLines={1}>
-                      {tx.title || 'Gasto corriente'}
+                      {tx.title || (hasInstallments ? 'Compra en cuotas' : selectedPeriodOffset === 0 ? 'Gasto corriente' : 'Compra diferida')}
                     </Text>
                     <View style={styles.consumptionAmountRow}>
                       <Text style={styles.consumptionAmount}>
-                        {formatCurrency(tx.amount)}
+                        {formatCurrency(itemAmount)}
                       </Text>
                       <TouchableOpacity
                         style={styles.deleteIconButton}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         activeOpacity={0.7}
-                        onPress={() =>
+                        onPress={(): void =>
                           setDeletionTarget({
                             type: 'cycle_expense',
                             id: tx.id,
-                            title: tx.title || 'Gasto corriente',
-                            amount: tx.amount,
+                            title: tx.title || (hasInstallments ? 'Compra en cuotas' : selectedPeriodOffset === 0 ? 'Gasto corriente' : 'Compra diferida'),
+                            amount: amount,
                           })
                         }
                         accessibilityRole="button"
-                        accessibilityLabel={`Eliminar compra ${tx.title || 'Gasto corriente'}`}
+                        accessibilityLabel={`Eliminar compra ${tx.title || 'Compra'}`}
                       >
                         <Ionicons name="trash-outline" size={18} color="#FF453A" />
                       </TouchableOpacity>
@@ -989,61 +915,17 @@ const CardDetailScreen = (): JSX.Element => {
                   <View style={styles.consumptionMetaRow}>
                     <Text style={styles.consumptionMetaText}>
                       📅 {formatDateDisplay(tx.date)}
+                      {hasInstallments ? ` · Total: ${formatCurrency(amount)}` : ''}
                     </Text>
                     <View style={styles.cycleBadge}>
-                      <Text style={styles.cycleBadgeText}>Compra 1 Cuota</Text>
+                      <Text style={styles.cycleBadgeText}>{badgeText}</Text>
                     </View>
                   </View>
                 </View>
               </View>
-            ))
-          : projectedOneTimeTx.map((tx: Transaction) => (
-              <View key={`cycle-proj-${tx.id}`} style={styles.consumptionItem}>
-                <View style={styles.consumptionIconWrapper}>
-                  <Ionicons name="cart-outline" size={18} color="#0A84FF" />
-                </View>
-                <View style={styles.consumptionContent}>
-                  <View style={styles.consumptionTitleRow}>
-                    <Text style={styles.consumptionTitle} numberOfLines={1}>
-                      {tx.title || 'Compra diferida'}
-                    </Text>
-                    <View style={styles.consumptionAmountRow}>
-                      <Text style={styles.consumptionAmount}>
-                        {formatCurrency(tx.amount)}
-                      </Text>
-                      <TouchableOpacity
-                        style={styles.deleteIconButton}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        activeOpacity={0.7}
-                        onPress={() =>
-                          setDeletionTarget({
-                            type: 'cycle_expense',
-                            id: tx.id,
-                            title: tx.title || 'Compra diferida',
-                            amount: tx.amount,
-                          })
-                        }
-                        accessibilityRole="button"
-                        accessibilityLabel={`Eliminar compra ${tx.title || 'Compra diferida'}`}
-                      >
-                        <Ionicons name="trash-outline" size={18} color="#FF453A" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                  <View style={styles.consumptionMetaRow}>
-                    <Text style={styles.consumptionMetaText}>
-                      📅 {formatDateDisplay(tx.date)}
-                    </Text>
-                    <View style={styles.cycleBadge}>
-                      <Text style={styles.cycleBadgeText}>
-                        Post-corte • {activeProjectedPeriod.statementMonthName}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            ))
-      )}
+            );
+          }
+        )}
 
       {/* 2. Cuotas Propias */}
       {(activeTab === 'all' || activeTab === 'installments') && (

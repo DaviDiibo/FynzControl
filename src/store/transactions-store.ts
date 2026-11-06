@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { StateStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../constants/categories';
 import { useDebtsStore, type ThirdPartyChargeAllocation } from './debts-store';
 import { useCardsStore } from './cards-store';
+import { safeStorage } from './safe-storage';
+import { toDeterministicUuid } from '../lib/sync-adapters';
 
 export type TransactionSyncHandlers = {
   onTransactionAdded?: () => void;
@@ -18,34 +18,10 @@ export const setTransactionSyncHandlers = (handlers: TransactionSyncHandlers): v
   syncHandlers = handlers;
 };
 
-// Memoria fallback en caso de retraso o indisponibilidad en enlace nativo
-const memoryStorage = new Map<string, string>();
-
-const safeStorage: StateStorage = {
-  getItem: async (name: string): Promise<string | null> => {
-    try {
-      const value = await AsyncStorage.getItem(name);
-      return value;
-    } catch {
-      return memoryStorage.get(name) ?? null;
-    }
-  },
-  setItem: async (name: string, value: string): Promise<void> => {
-    try {
-      memoryStorage.set(name, value);
-      await AsyncStorage.setItem(name, value);
-    } catch {
-      // Silently fallback to memory storage
-    }
-  },
-  removeItem: async (name: string): Promise<void> => {
-    try {
-      memoryStorage.delete(name);
-      await AsyncStorage.removeItem(name);
-    } catch {
-      // Silently fallback to memory storage
-    }
-  },
+const isSameBankId = (a?: string | null, b?: string | null): boolean => {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return toDeterministicUuid(a) === toDeterministicUuid(b);
 };
 
 export type TransactionType = 'income' | 'expense' | 'reimbursement' | 'card_payment';
@@ -419,39 +395,67 @@ export const useTransactionsStore = create<TransactionsState>()(
         const currentYear = now.getFullYear();
         const cards = useCardsStore.getState().cards;
 
-        return get()
-          .transactions.filter((t) => {
-            if (t.type !== 'expense') {
-              return false;
-            }
-            const txDate = new Date(t.date);
+        const total = get().transactions.reduce((sum, t): number => {
+          if (t.type !== 'expense') {
+            return sum;
+          }
+          const txDate = new Date(t.date);
+          if (isNaN(txDate.getTime())) {
+            return sum;
+          }
 
-            if (t.paymentMethod === 'credit_card') {
-              const card = cards.find((c) => c.id === t.cardId);
-              const closingDay = card?.closingDay ?? 20;
-              const d = txDate.getDate();
-              const m = txDate.getMonth();
-              const y = txDate.getFullYear();
-
-              let billMonth = m;
-              let billYear = y;
-              if (d >= closingDay) {
-                billMonth = m + 1;
-                if (billMonth > 11) {
-                  billMonth = 0;
-                  billYear = y + 1;
-                }
-              }
-
-              return billMonth === currentMonth && billYear === currentYear;
-            }
-
-            return (
-              txDate.getMonth() === currentMonth &&
-              txDate.getFullYear() === currentYear
+          if (t.paymentMethod === 'credit_card') {
+            const card = cards.find(
+              (c) =>
+                c.id === t.cardId ||
+                (t.cardName && c.name?.toLowerCase().trim() === t.cardName.toLowerCase().trim())
             );
-          })
-          .reduce((sum, t) => sum + t.amount, 0);
+            const closingDay = card?.closingDay ?? card?.cutOffDay ?? 20;
+            const d = txDate.getDate();
+            const m = txDate.getMonth();
+            const y = txDate.getFullYear();
+
+            const maxDaysInMonth = new Date(y, m + 1, 0).getDate();
+            const effectiveClosingDay = Math.min(Math.max(1, closingDay), maxDaysInMonth);
+
+            let firstBillMonth = m;
+            let firstBillYear = y;
+            if (d >= effectiveClosingDay) {
+              firstBillMonth = m + 1;
+              if (firstBillMonth > 11) {
+                firstBillMonth = 0;
+                firstBillYear = y + 1;
+              }
+            }
+
+            const monthsDiff = (currentYear - firstBillYear) * 12 + (currentMonth - firstBillMonth);
+
+            if (t.installmentsCount && t.installmentsCount > 1) {
+              if (monthsDiff >= 0 && monthsDiff < t.installmentsCount) {
+                const monthlyQuota = Math.round(((t.amount ?? 0) / t.installmentsCount) * 100) / 100;
+                return sum + monthlyQuota;
+              }
+              return sum;
+            }
+
+            if (monthsDiff === 0) {
+              return sum + (t.amount ?? 0);
+            }
+
+            return sum;
+          }
+
+          if (
+            txDate.getMonth() === currentMonth &&
+            txDate.getFullYear() === currentYear
+          ) {
+            return sum + (t.amount ?? 0);
+          }
+
+          return sum;
+        }, 0);
+
+        return Math.round(total * 100) / 100;
       },
 
       getCurrentMonthNetBalance: (): number => {
@@ -484,7 +488,7 @@ export const getBankComputedBalance = (
 ): number => {
   const base = baseBalance ?? 0;
   return transactions.reduce((acc, tx) => {
-    if (tx.bankId !== bankId) {
+    if (!isSameBankId(tx.bankId, bankId)) {
       return acc;
     }
     if (tx.type === 'income' || tx.type === 'reimbursement') {
@@ -545,7 +549,7 @@ export const getBankCustodyAmount = (
   const cardMap = new Map<string, CardCustodyEntry>();
 
   for (const tx of transactions) {
-    if (tx.bankId !== bankId) {
+    if (!isSameBankId(tx.bankId, bankId)) {
       continue;
     }
 

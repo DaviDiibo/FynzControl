@@ -165,10 +165,8 @@ export type TransactionRow = {
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export const isValidUuid = (value: string): boolean => UUID_REGEX.test(value);
-
 export const toDeterministicUuid = (input: string): string => {
-  if (isValidUuid(input)) {
+  if (UUID_REGEX.test(input)) {
     return input;
   }
   let h1 = 0xdeadbeef;
@@ -206,32 +204,6 @@ const SPANISH_MONTHS: readonly string[] = [
   'Noviembre',
   'Diciembre',
 ];
-
-export const formatIsoToSpanishDate = (
-  isoString: string
-): { dateFormatted: string; dateGroup: string } => {
-  const date = new Date(isoString);
-  if (isNaN(date.getTime())) {
-    return { dateFormatted: 'Hoy, 00:00', dateGroup: 'Hoy' };
-  }
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  const monthName = SPANISH_MONTHS[date.getMonth()] ?? '';
-
-  const now = new Date();
-  const isToday =
-    date.getDate() === now.getDate() &&
-    date.getMonth() === now.getMonth() &&
-    date.getFullYear() === now.getFullYear();
-
-  const dateFormatted = isToday
-    ? `Hoy, ${hours}:${minutes}`
-    : `${day} ${monthName.slice(0, 3)}, ${hours}:${minutes}`;
-  const dateGroup = isToday ? `Hoy, ${day} de ${monthName}` : `${day} de ${monthName}`;
-
-  return { dateFormatted, dateGroup };
-};
 
 export const bankToRow = (bank: Bank, userId: string): BankRow => ({
   id: toDeterministicUuid(bank.id),
@@ -589,7 +561,27 @@ export const transactionToRow = (
 };
 
 export const rowToTransaction = (row: TransactionRow): Transaction => {
-  const { dateFormatted, dateGroup } = formatIsoToSpanishDate(row.date);
+  const date = new Date(row.date);
+  let dateFormatted = 'Hoy, 00:00';
+  let dateGroup = 'Hoy';
+
+  if (!isNaN(date.getTime())) {
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    const monthName = SPANISH_MONTHS[date.getMonth()] ?? '';
+
+    const now = new Date();
+    const isToday =
+      date.getDate() === now.getDate() &&
+      date.getMonth() === now.getMonth() &&
+      date.getFullYear() === now.getFullYear();
+
+    dateFormatted = isToday
+      ? `Hoy, ${hours}:${minutes}`
+      : `${day} ${monthName.slice(0, 3)}, ${hours}:${minutes}`;
+    dateGroup = isToday ? `Hoy, ${day} de ${monthName}` : `${day} de ${monthName}`;
+  }
 
   return {
     id: row.id,

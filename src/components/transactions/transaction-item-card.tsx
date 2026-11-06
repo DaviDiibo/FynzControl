@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import type { JSX } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -36,7 +36,7 @@ const formatAmount = (val: number): string => {
   });
 };
 
-const TransactionItemCard = ({
+const TransactionItemCardBase = ({
   item,
   onPress,
   onLongPress,
@@ -55,12 +55,24 @@ const TransactionItemCard = ({
   const prefix = isPositive ? '+' : '-';
   const iconName: keyof typeof Ionicons.glyphMap = isCardPayment ? 'card-outline' : item.icon;
 
+  const handlePress = useCallback((): void => {
+    onPress?.(item);
+  }, [onPress, item]);
+
+  const handleLongPress = useCallback((): void => {
+    onLongPress?.(item);
+  }, [onLongPress, item]);
+
+  const handleDelete = useCallback((): void => {
+    onDelete?.(item);
+  }, [onDelete, item]);
+
   return (
     <TouchableOpacity
       style={styles.card}
       activeOpacity={0.7}
-      onPress={() => onPress?.(item)}
-      onLongPress={() => onLongPress?.(item)}
+      onPress={handlePress}
+      onLongPress={handleLongPress}
     >
       {/* Icono Circular */}
       <View style={[styles.iconContainer, { backgroundColor: iconBg }]}>
@@ -110,7 +122,7 @@ const TransactionItemCard = ({
       {onDelete && (
         <TouchableOpacity
           style={styles.deleteButton}
-          onPress={() => onDelete(item)}
+          onPress={handleDelete}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           activeOpacity={0.6}
           accessibilityRole="button"
@@ -258,5 +270,7 @@ const arePropsEqual = (
   );
 };
 
+const TransactionItemCard = React.memo(TransactionItemCardBase, arePropsEqual);
+
 export { TransactionItemCard };
-export default React.memo(TransactionItemCard, arePropsEqual);
+export default TransactionItemCard;

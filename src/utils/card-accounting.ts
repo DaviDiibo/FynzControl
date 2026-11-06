@@ -42,6 +42,12 @@ export const computeCardBillingStatement = ({
   const currentYear = referenceDate.getFullYear();
   const cardNameLower = card.name?.toLowerCase().trim();
 
+  const getDaysInMonth = (year: number, month: number): number =>
+    new Date(year, month + 1, 0).getDate();
+
+  const maxDays = getDaysInMonth(currentYear, currentMonth);
+  const effectiveClosing = Math.min(Math.max(1, cardClosingDay), maxDays);
+
   const isMatchingCardName = (nameToCheck?: string): boolean => {
     if (!nameToCheck || !cardNameLower) return false;
     return nameToCheck.toLowerCase() === cardNameLower;
@@ -80,9 +86,11 @@ export const computeCardBillingStatement = ({
     const d = dt.getDate();
     const m = dt.getMonth();
     const y = dt.getFullYear();
+    const txMaxDays = getDaysInMonth(y, m);
+    const txEffectiveClosing = Math.min(Math.max(1, cardClosingDay), txMaxDays);
     let billMonth = m;
     let billYear = y;
-    if (d >= cardClosingDay) {
+    if (d >= txEffectiveClosing) {
       billMonth = m + 1;
       if (billMonth > 11) {
         billMonth = 0;
@@ -131,34 +139,73 @@ export const computeCardBillingStatement = ({
     }
   }, 0);
 
-  // 3. Compras directas del mes en ciclo de facturación
-  const cycleTransactions = transactions.filter((t) => {
-    if (t.type !== 'expense') return false;
-    if (t.paymentMethod !== 'credit_card') return false;
+  // 3. Compras directas de la tarjeta y cómputo de cuotas/deuda diferida
+  const cycleTransactions: Transaction[] = [];
+  let cycleTransactionsTotal = 0;
+  let directInstallmentsRemainingTotal = 0;
+
+  for (const t of transactions) {
+    if (t.type !== 'expense') continue;
+    if (t.paymentMethod !== 'credit_card') continue;
     const isMatchingCard = t.cardId === card.id || isMatchingCardName(t.cardName);
-    if (!isMatchingCard) return false;
-    if (t.relatedDebtId || t.relatedChargeId || t.relatedLoanId) return false;
+    if (!isMatchingCard) continue;
+    if (t.relatedDebtId || t.relatedChargeId || t.relatedLoanId) continue;
 
     const txDate = new Date(t.date);
-    if (isNaN(txDate.getTime())) return false;
+    if (isNaN(txDate.getTime())) continue;
     const d = txDate.getDate();
     const m = txDate.getMonth();
     const y = txDate.getFullYear();
 
-    let billMonth = m;
-    let billYear = y;
-    if (d >= cardClosingDay) {
-      billMonth = m + 1;
-      if (billMonth > 11) {
-        billMonth = 0;
-        billYear = y + 1;
+    const txMaxDays = getDaysInMonth(y, m);
+    const txEffectiveClosing = Math.min(effectiveClosing, txMaxDays);
+
+    let firstBillMonth = m;
+    let firstBillYear = y;
+    if (d >= txEffectiveClosing) {
+      firstBillMonth = m + 1;
+      if (firstBillMonth > 11) {
+        firstBillMonth = 0;
+        firstBillYear = y + 1;
       }
     }
 
-    return billMonth === currentMonth && billYear === currentYear;
-  });
+    const monthsDiff = (currentYear - firstBillYear) * 12 + (currentMonth - firstBillMonth);
+    const amount = t.amount ?? 0;
 
-  const cycleTransactionsTotal = cycleTransactions.reduce((acc, t) => acc + (t.amount ?? 0), 0);
+    if (t.installmentsCount && t.installmentsCount > 1) {
+      const quota = Math.round((amount / t.installmentsCount) * 100) / 100;
+
+      // Cuota activa exigible
+      if (monthsDiff >= 0 && monthsDiff < t.installmentsCount) {
+        cycleTransactions.push(t);
+        cycleTransactionsTotal += quota;
+      }
+
+      // Deuda diferida remanente de la transacción
+      if (monthsDiff < 0) {
+        directInstallmentsRemainingTotal += amount;
+      } else if (monthsDiff < t.installmentsCount) {
+        const remaining = (t.installmentsCount - monthsDiff) * quota;
+        directInstallmentsRemainingTotal += remaining;
+      }
+      // Si monthsDiff >= t.installmentsCount: $0 (extinguida)
+    } else {
+      // Sin cuotas (!t.installmentsCount || t.installmentsCount <= 1)
+      if (monthsDiff === 0) {
+        cycleTransactions.push(t);
+        cycleTransactionsTotal += amount;
+        directInstallmentsRemainingTotal += amount;
+      } else if (monthsDiff < 0) {
+        // Compra post-corte diferida al mes siguiente o futuro
+        directInstallmentsRemainingTotal += amount;
+      }
+      // Si monthsDiff > 0: $0
+    }
+  }
+
+  cycleTransactionsTotal = Math.round(cycleTransactionsTotal * 100) / 100;
+  directInstallmentsRemainingTotal = Math.round(directInstallmentsRemainingTotal * 100) / 100;
 
   // 4. Pagos registrados a la tarjeta
   const cardPayments = transactions
@@ -171,8 +218,8 @@ export const computeCardBillingStatement = ({
     .reduce((sum, t) => sum + (t.amount ?? 0), 0);
 
   // 5. Consolidación contable bruta y neta
-  const rawMonthDue = personalMonthDue + thirdPartyMonthDue + cycleTransactionsTotal;
-  const cardCurrentMonthDebt = Math.max(0, rawMonthDue - cardPayments);
+  const rawMonthDue = Math.round((personalMonthDue + thirdPartyMonthDue + cycleTransactionsTotal) * 100) / 100;
+  const cardCurrentMonthDebt = Math.max(0, Math.round((rawMonthDue - cardPayments) * 100) / 100);
 
   const personalTotalRemaining = linkedPersonalDebts.reduce(
     (sum, d) => sum + (d.remainingAmount ?? 0),
@@ -182,8 +229,8 @@ export const computeCardBillingStatement = ({
     (sum, c) => sum + (c.remainingAmount ?? 0),
     0
   );
-  const rawTotalDebt = personalTotalRemaining + thirdPartyTotalRemaining + cycleTransactionsTotal;
-  const cardTotalDebt = Math.max(0, rawTotalDebt - cardPayments);
+  const rawTotalDebt = Math.round((personalTotalRemaining + thirdPartyTotalRemaining + directInstallmentsRemainingTotal) * 100) / 100;
+  const cardTotalDebt = Math.max(0, Math.round((rawTotalDebt - cardPayments) * 100) / 100);
   const isStatementPaid = cardCurrentMonthDebt === 0;
 
   return {
