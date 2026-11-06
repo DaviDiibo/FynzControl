@@ -243,6 +243,8 @@ const mergeById = <T extends { id: string }>(local: T[], remote: T[]): T[] => {
 let isSyncInProgress = false;
 let isPullInProgress = false;
 let isPushInProgress = false;
+let hasPendingPushRequest = false;
+let pushDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSyncTimestamp: string | null = null;
 
 export const getLastSyncTime = (): string | null => lastSyncTimestamp;
@@ -297,6 +299,7 @@ export const subscribeToSyncStatus = (listener: SyncStatusListener): (() => void
 
 export const syncPush = async (userId?: string): Promise<SyncResult> => {
   if (isPushInProgress) {
+    hasPendingPushRequest = true;
     return { success: false, offline: true, error: 'Sincronización push ya en curso' };
   }
   isPushInProgress = true;
@@ -426,6 +429,12 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
   } finally {
     isPushInProgress = false;
     notifySyncStatusListeners();
+    if (hasPendingPushRequest) {
+      hasPendingPushRequest = false;
+      setTimeout(() => {
+        syncPush(userId).catch(() => {});
+      }, 100);
+    }
   }
 };
 
@@ -679,7 +688,11 @@ export const deleteRemoteRecord = async (
 };
 
 export const triggerBackgroundPush = (): void => {
-  setTimeout(() => {
+  if (pushDebounceTimer) {
+    clearTimeout(pushDebounceTimer);
+  }
+  pushDebounceTimer = setTimeout(() => {
+    pushDebounceTimer = null;
     syncPush().catch(() => {});
   }, 300);
 };
@@ -1020,6 +1033,11 @@ export const stopRealtimeSubscription = (): void => {
 
 export const purgeLocalSyncState = (): void => {
   stopRealtimeSubscription();
+  if (pushDebounceTimer) {
+    clearTimeout(pushDebounceTimer);
+    pushDebounceTimer = null;
+  }
+  hasPendingPushRequest = false;
   isSyncInProgress = false;
   isPullInProgress = false;
   isPushInProgress = false;

@@ -7,6 +7,9 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
+  FlatList,
+  Platform,
+  type ListRenderItemInfo,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +24,20 @@ import { useSettingsStore } from '../../../src/store/settings-store';
 import { useIsWide } from '../../../src/hooks/use-responsive';
 
 type FilterType = 'all' | 'income' | 'expense';
+
+type TransactionListItem =
+  | {
+      kind: 'header';
+      id: string;
+      dateGroup: string;
+      count: number;
+      isFirst: boolean;
+    }
+  | {
+      kind: 'item';
+      id: string;
+      item: TransactionRecord;
+    };
 
 const isSameMonthAndYear = (dateStr: string, targetDate: Date): boolean => {
   if (!dateStr) {
@@ -89,6 +106,7 @@ const TransactionsScreen = (): JSX.Element => {
   const [isAllTime, setIsAllTime] = useState<boolean>(false);
   const [transactionToDelete, setTransactionToDelete] = useState<TransactionRecord | null>(null);
 
+  // Selectores atómicos para las tiendas de Zustand
   const transactions = useTransactionsStore((state) => state.transactions);
   const deleteTransaction = useTransactionsStore((state) => state.deleteTransaction);
   const currencyCode = useSettingsStore((state) => state.currency);
@@ -238,6 +256,28 @@ const TransactionsScreen = (): JSX.Element => {
     return groups;
   }, [filteredTransactions]);
 
+  // Lista aplanada virtualizada para FlatList (mobile)
+  const flatListData: TransactionListItem[] = useMemo(() => {
+    const list: TransactionListItem[] = [];
+    groupedTransactions.forEach((group, index) => {
+      list.push({
+        kind: 'header',
+        id: `header_${group.dateGroup}`,
+        dateGroup: group.dateGroup,
+        count: group.items.length,
+        isFirst: index === 0,
+      });
+      for (const item of group.items) {
+        list.push({
+          kind: 'item',
+          id: item.id,
+          item,
+        });
+      }
+    });
+    return list;
+  }, [groupedTransactions]);
+
   // Contadores para las píldoras calculados sobre el período activo
   const counts = useMemo(() => {
     const incomeCount = monthTransactions.filter(
@@ -261,7 +301,7 @@ const TransactionsScreen = (): JSX.Element => {
     }
   }, [isAllTime, monthTransactions.length, transactions.length]);
 
-  const renderSummaryHeader = (): JSX.Element => (
+  const renderSummaryHeader = useCallback((): JSX.Element => (
     <TransactionsSummaryHeader
       currentMonth={formattedMonth}
       onPrevMonth={handlePrevMonth}
@@ -273,9 +313,19 @@ const TransactionsScreen = (): JSX.Element => {
       isAllTime={isAllTime}
       onToggleAllTime={handleToggleAllTime}
     />
-  );
+  ), [
+    formattedMonth,
+    handlePrevMonth,
+    handleNextMonth,
+    monthlyIncome,
+    monthlyExpense,
+    monthlyNet,
+    currencySymbol,
+    isAllTime,
+    handleToggleAllTime,
+  ]);
 
-  const renderSearchBar = (): JSX.Element => (
+  const renderSearchBar = useCallback((): JSX.Element => (
     <View style={[styles.searchBar, isWide && styles.searchBarWide]}>
       <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
       <TextInput
@@ -298,9 +348,9 @@ const TransactionsScreen = (): JSX.Element => {
         </TouchableOpacity>
       )}
     </View>
-  );
+  ), [isWide, searchQuery, handleClearSearch]);
 
-  const renderFilterSection = (): JSX.Element => (
+  const renderFilterSection = useCallback((): JSX.Element => (
     <View style={[styles.filterSection, isWide && styles.filterSectionWide]}>
       <View style={styles.pillsContainer}>
         {/* Todos */}
@@ -416,32 +466,16 @@ const TransactionsScreen = (): JSX.Element => {
         </TouchableOpacity>
       </View>
     </View>
-  );
+  ), [
+    isWide,
+    activeFilter,
+    handleSelectFilterAll,
+    handleSelectFilterIncome,
+    handleSelectFilterExpense,
+    counts,
+  ]);
 
-  const renderTransactionsList = (): JSX.Element => (
-    <View style={[styles.listContainer, isWide && styles.listContainerWide]}>
-      {groupedTransactions.map((group) => (
-        <View key={group.dateGroup} style={styles.dateGroupContainer}>
-          <View style={styles.dateGroupHeader}>
-            <Text style={styles.dateGroupTitle}>{group.dateGroup}</Text>
-            <Text style={styles.dateGroupCount}>
-              {group.items.length} {group.items.length === 1 ? 'movimiento' : 'movimientos'}
-            </Text>
-          </View>
-          {group.items.map((item) => (
-            <TransactionItemCard
-              key={item.id}
-              item={item}
-              onPress={handleDeleteTransaction}
-              onDelete={handleDeleteTransaction}
-            />
-          ))}
-        </View>
-      ))}
-    </View>
-  );
-
-  const renderEmptyState = (): JSX.Element => (
+  const renderEmptyState = useCallback((): JSX.Element => (
     <View style={[styles.emptyStateContainer, isWide && styles.emptyStateContainerWide]}>
       <View style={styles.emptyIconCircle}>
         <Ionicons
@@ -489,18 +523,75 @@ const TransactionsScreen = (): JSX.Element => {
         </TouchableOpacity>
       )}
     </View>
+  ), [
+    isWide,
+    transactions.length,
+    monthTransactions.length,
+    searchQuery.length,
+    activeFilter,
+    isAllTime,
+    handleResetFilters,
+  ]);
+
+  const renderTransactionsList = useCallback((): JSX.Element => (
+    <View style={[styles.listContainer, isWide && styles.listContainerWide]}>
+      {groupedTransactions.map((group) => (
+        <View key={group.dateGroup} style={styles.dateGroupContainer}>
+          <View style={styles.dateGroupHeader}>
+            <Text style={styles.dateGroupTitle}>{group.dateGroup}</Text>
+            <Text style={styles.dateGroupCount}>
+              {group.items.length} {group.items.length === 1 ? 'movimiento' : 'movimientos'}
+            </Text>
+          </View>
+          {group.items.map((item) => (
+            <TransactionItemCard
+              key={item.id}
+              item={item}
+              onPress={handleDeleteTransaction}
+              onDelete={handleDeleteTransaction}
+            />
+          ))}
+        </View>
+      ))}
+    </View>
+  ), [groupedTransactions, isWide, handleDeleteTransaction]);
+
+  const keyExtractor = useCallback((item: TransactionListItem): string => {
+    return item.id;
+  }, []);
+
+  const renderListItem = useCallback(
+    ({ item }: ListRenderItemInfo<TransactionListItem>): JSX.Element => {
+      if (item.kind === 'header') {
+        return (
+          <View
+            style={[
+              styles.dateGroupHeader,
+              item.isFirst ? styles.dateGroupHeaderFirst : styles.dateGroupHeaderSubsequent,
+            ]}
+          >
+            <Text style={styles.dateGroupTitle}>{item.dateGroup}</Text>
+            <Text style={styles.dateGroupCount}>
+              {item.count} {item.count === 1 ? 'movimiento' : 'movimientos'}
+            </Text>
+          </View>
+        );
+      }
+
+      return (
+        <TransactionItemCard
+          item={item.item}
+          onPress={handleDeleteTransaction}
+          onDelete={handleDeleteTransaction}
+        />
+      );
+    },
+    [handleDeleteTransaction]
   );
 
-  return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={[
-          styles.contentContainer,
-          isWide && styles.contentContainerWide,
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
+  const listHeaderElement = useMemo(
+    (): JSX.Element => (
+      <View>
         {/* Cabecera */}
         <View style={styles.header}>
           <View style={styles.badgeContainer}>
@@ -510,7 +601,40 @@ const TransactionsScreen = (): JSX.Element => {
           <Text style={styles.headerTitle}>HISTORIAL DE MOVIMIENTOS</Text>
         </View>
 
-        {isWide ? (
+        {renderSummaryHeader()}
+        {renderSearchBar()}
+        {renderFilterSection()}
+      </View>
+    ),
+    [renderSummaryHeader, renderSearchBar, renderFilterSection]
+  );
+
+  const listEmptyElement = useMemo(
+    (): JSX.Element => renderEmptyState(),
+    [renderEmptyState]
+  );
+
+  if (isWide) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={[
+            styles.contentContainer,
+            styles.contentContainerWide,
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Cabecera */}
+          <View style={styles.header}>
+            <View style={styles.badgeContainer}>
+              <View style={styles.badgeDot} />
+              <Text style={styles.badgeText}>FLUJO FINANCIERO</Text>
+            </View>
+            <Text style={styles.headerTitle}>HISTORIAL DE MOVIMIENTOS</Text>
+          </View>
+
           <View style={styles.wideGridContainer}>
             <View style={styles.leftColumn}>
               {renderSummaryHeader()}
@@ -522,15 +646,38 @@ const TransactionsScreen = (): JSX.Element => {
               {groupedTransactions.length > 0 ? renderTransactionsList() : renderEmptyState()}
             </View>
           </View>
-        ) : (
-          <>
-            {renderSummaryHeader()}
-            {renderSearchBar()}
-            {renderFilterSection()}
-            {groupedTransactions.length > 0 ? renderTransactionsList() : renderEmptyState()}
-          </>
-        )}
-      </ScrollView>
+        </ScrollView>
+
+        {/* Modal Confirmación de Eliminación */}
+        <DeleteTransactionModal
+          visible={!!transactionToDelete}
+          transaction={transactionToDelete}
+          currencySymbol={currencySymbol}
+          onCancel={handleCancelDelete}
+          onConfirm={handleConfirmDelete}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <FlatList
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        data={flatListData}
+        keyExtractor={keyExtractor}
+        renderItem={renderListItem}
+        ListHeaderComponent={listHeaderElement}
+        ListEmptyComponent={listEmptyElement}
+        initialNumToRender={15}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS === 'android'}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      />
 
       {/* Modal Confirmación de Eliminación */}
       <DeleteTransactionModal
@@ -715,6 +862,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
     paddingHorizontal: 2,
+  },
+  dateGroupHeaderFirst: {
+    marginTop: 4,
+  },
+  dateGroupHeaderSubsequent: {
+    marginTop: 14,
   },
   dateGroupTitle: {
     fontSize: 12,
