@@ -15,6 +15,7 @@ import { isTauri } from '../../utils/tauri-helpers';
 import {
   checkForAppUpdates,
   downloadAndInstallUpdate,
+  formatUpdaterErrorMessage,
   UpdateCheckResult,
   UpdateProgress,
 } from '../../services/updater-service';
@@ -50,14 +51,14 @@ export const UpdateCheckerCard = (): JSX.Element | null => {
           setStatusMessage(null);
         }, 3500);
       } else if (result.status === 'ERROR') {
-        setStatusMessage(result.error || 'Error al comprobar actualizaciones');
+        setStatusMessage(result.error || 'No se pudo verificar la actualización en este momento.');
         setTimeout(() => {
           setStatusMessage(null);
         }, 5000);
       }
     } catch (err) {
-      const msg: string = err instanceof Error ? err.message : String(err);
-      setStatusMessage(msg);
+      const rawMsg: string = err instanceof Error ? err.message : String(err);
+      setStatusMessage(formatUpdaterErrorMessage(rawMsg));
       setTimeout(() => {
         setStatusMessage(null);
       }, 5000);
@@ -89,8 +90,8 @@ export const UpdateCheckerCard = (): JSX.Element | null => {
         setDownloading(false);
       }
     } catch (err) {
-      const msg: string = err instanceof Error ? err.message : String(err);
-      setStatusMessage(msg);
+      const rawMsg: string = err instanceof Error ? err.message : String(err);
+      setStatusMessage(formatUpdaterErrorMessage(rawMsg));
       setDownloading(false);
     }
   };

@@ -1,6 +1,7 @@
 import {
   checkForAppUpdates,
   downloadAndInstallUpdate,
+  formatUpdaterErrorMessage,
   UpdateCheckResult,
   UpdateProgress,
 } from '../services/updater-service';
@@ -42,6 +43,77 @@ describe('updater-service', () => {
     jest.clearAllMocks();
   });
 
+  describe('formatUpdaterErrorMessage', () => {
+    it('traduce errores de release inexistente o 404 a mensaje localizado', () => {
+      const error1 = 'Could not fetch a valid release JSON from the remote';
+      const error2 = 'Release not found on endpoint';
+      const error3 = 'Server responded with 404 Not Found';
+      const error4 = new Error('HTTP 404 status code');
+
+      expect(formatUpdaterErrorMessage(error1)).toBe(
+        'No hay versiones publicadas en el servidor de actualizaciones.'
+      );
+      expect(formatUpdaterErrorMessage(error2)).toBe(
+        'No hay versiones publicadas en el servidor de actualizaciones.'
+      );
+      expect(formatUpdaterErrorMessage(error3)).toBe(
+        'No hay versiones publicadas en el servidor de actualizaciones.'
+      );
+      expect(formatUpdaterErrorMessage(error4)).toBe(
+        'No hay versiones publicadas en el servidor de actualizaciones.'
+      );
+    });
+
+    it('traduce errores de red y conectividad a mensaje localizado', () => {
+      const networkErrors = [
+        'Network request failed',
+        'Failed to send request',
+        'fetch failed',
+        'connection refused by server',
+        'request timeout',
+        'dns lookup failure',
+        'client is offline',
+        new Error('Network disconnected'),
+      ];
+
+      networkErrors.forEach((err) => {
+        expect(formatUpdaterErrorMessage(err)).toBe(
+          'Sin conexión con el servidor de actualizaciones.'
+        );
+      });
+    });
+
+    it('traduce errores de firma y llaves públicas a mensaje localizado', () => {
+      const signatureErrors = [
+        'Invalid signature',
+        'pubkey mismatch during update',
+        'failed to verify package',
+        'minisign verify error',
+        new Error('Signature verification failed'),
+      ];
+
+      signatureErrors.forEach((err) => {
+        expect(formatUpdaterErrorMessage(err)).toBe(
+          'Error de validación de firma en la actualización.'
+        );
+      });
+    });
+
+    it('retorna mensaje amigable por defecto ante errores inesperados o genéricos', () => {
+      const unknownErrors = [
+        'Unexpected syntax at position 0',
+        'Failed to read buffer',
+        new Error('Something unexpected happened'),
+      ];
+
+      unknownErrors.forEach((err) => {
+        expect(formatUpdaterErrorMessage(err)).toBe(
+          'No se pudo verificar la actualización en este momento.'
+        );
+      });
+    });
+  });
+
   describe('checkForAppUpdates', () => {
     it('1. Retorna UNSUPPORTED cuando isTauri() es false (Web / Móvil)', async () => {
       mockIsTauri.mockReturnValue(false);
@@ -79,7 +151,21 @@ describe('updater-service', () => {
       expect(mockCheck).toHaveBeenCalledTimes(1);
     });
 
-    it('4. Retorna ERROR cuando check() arroja una excepción de red o parseo', async () => {
+    it('4. Retorna ERROR con mensaje localizado cuando check() arroja una excepción de release no publicado', async () => {
+      mockIsTauri.mockReturnValue(true);
+      mockCheck.mockRejectedValue(
+        new Error('Could not fetch a valid release JSON from the remote')
+      );
+
+      const result: UpdateCheckResult = await checkForAppUpdates();
+
+      expect(result).toEqual({
+        status: 'ERROR',
+        error: 'No hay versiones publicadas en el servidor de actualizaciones.',
+      });
+    });
+
+    it('5. Retorna ERROR con mensaje localizado cuando check() arroja una excepción de red', async () => {
       mockIsTauri.mockReturnValue(true);
       mockCheck.mockRejectedValue(new Error('Network request failed'));
 
@@ -87,25 +173,37 @@ describe('updater-service', () => {
 
       expect(result).toEqual({
         status: 'ERROR',
-        error: 'Network request failed',
+        error: 'Sin conexión con el servidor de actualizaciones.',
       });
     });
 
-    it('Retorna ERROR con mensaje string cuando check() arroja un error no-Error', async () => {
+    it('6. Retorna ERROR con mensaje localizado cuando check() arroja una excepción de firma', async () => {
       mockIsTauri.mockReturnValue(true);
-      mockCheck.mockRejectedValue('Error desconocido');
+      mockCheck.mockRejectedValue(new Error('Signature verification failed'));
 
       const result: UpdateCheckResult = await checkForAppUpdates();
 
       expect(result).toEqual({
         status: 'ERROR',
-        error: 'Error desconocido',
+        error: 'Error de validación de firma en la actualización.',
+      });
+    });
+
+    it('7. Retorna ERROR con mensaje amigable por defecto cuando check() arroja un error no-Error genérico', async () => {
+      mockIsTauri.mockReturnValue(true);
+      mockCheck.mockRejectedValue('Error desconocido e inesperado');
+
+      const result: UpdateCheckResult = await checkForAppUpdates();
+
+      expect(result).toEqual({
+        status: 'ERROR',
+        error: 'No se pudo verificar la actualización en este momento.',
       });
     });
   });
 
   describe('downloadAndInstallUpdate', () => {
-    it('5. Llama a downloadAndInstall y despacha eventos de progreso correctamente', async () => {
+    it('8. Llama a downloadAndInstall y despacha eventos de progreso correctamente', async () => {
       const fakeUpdate = createMockUpdate();
       const progressEvents: UpdateProgress[] = [];
 
@@ -179,7 +277,7 @@ describe('updater-service', () => {
       expect(fakeUpdate.downloadAndInstall).toHaveBeenCalledTimes(1);
     });
 
-    it('6. Retorna error o false cuando downloadAndInstall falla', async () => {
+    it('9. Retorna error o false cuando downloadAndInstall falla', async () => {
       const fakeUpdate = createMockUpdate();
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 

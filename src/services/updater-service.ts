@@ -16,6 +16,43 @@ export type UpdateProgress = {
   percent: number;
 };
 
+export const formatUpdaterErrorMessage = (error: Error | string): string => {
+  const rawMessage: string = error instanceof Error ? error.message : error;
+  const lower: string = rawMessage.toLowerCase();
+
+  if (
+    lower.includes('could not fetch a valid release json') ||
+    lower.includes('release not found') ||
+    lower.includes('not found') ||
+    lower.includes('404')
+  ) {
+    return 'No hay versiones publicadas en el servidor de actualizaciones.';
+  }
+
+  if (
+    lower.includes('network') ||
+    lower.includes('fetch') ||
+    lower.includes('failed to send request') ||
+    lower.includes('connection refused') ||
+    lower.includes('timeout') ||
+    lower.includes('dns') ||
+    lower.includes('offline')
+  ) {
+    return 'Sin conexión con el servidor de actualizaciones.';
+  }
+
+  if (
+    lower.includes('signature') ||
+    lower.includes('pubkey') ||
+    lower.includes('verify') ||
+    lower.includes('minisign')
+  ) {
+    return 'Error de validación de firma en la actualización.';
+  }
+
+  return 'No se pudo verificar la actualización en este momento.';
+};
+
 export const checkForAppUpdates = async (): Promise<UpdateCheckResult> => {
   if (!isTauri()) {
     return { status: 'UNSUPPORTED' };
@@ -36,10 +73,11 @@ export const checkForAppUpdates = async (): Promise<UpdateCheckResult> => {
 
     return { status: 'UP_TO_DATE' };
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
+    const rawErrorMessage: string = err instanceof Error ? err.message : String(err);
+    const localizedErrorMessage: string = formatUpdaterErrorMessage(rawErrorMessage);
     return {
       status: 'ERROR',
-      error: errorMessage,
+      error: localizedErrorMessage,
     };
   }
 };
