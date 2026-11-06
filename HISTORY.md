@@ -2279,3 +2279,22 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
   - Compilación TypeScript limpia (`node ./node_modules/typescript/bin/tsc --noEmit` con 0 errores).
   - Suite completa de pruebas unitarias en verde (`node ./node_modules/jest/bin/jest.js` con 139/139 tests aprobados, 7/7 suites en verde, 100% pass).
 
+
+
+### [TASK-DEFENSIVE-NULL-SAFETY-STRINGS] - 2026-11-06
+- **Archivos Intervenidos**:
+  - `src/store/transactions-store.ts`
+  - `src/utils/card-accounting.ts`
+- **Resumen Técnico**:
+  1. **Blindaje Defensivo en `src/store/transactions-store.ts`**:
+     - En `getBankCustodyAmount` / `resolveKey` (línea 521): sustitución de `c.name.toLowerCase().trim()` por `(c.name ?? '').toLowerCase().trim()` previniendo `TypeError: Cannot read properties of undefined (reading 'toLowerCase')` cuando existen tarjetas en caché con atributos incompletos.
+     - En `getCurrentMonthExpense` (línea 411): corrección de encadenamiento opcional incompleto `c.name?.toLowerCase().trim()` mediante `Boolean(t.cardName) && (c.name ?? '').toLowerCase().trim() === (t.cardName ?? '').toLowerCase().trim()`.
+     - En `deleteTransaction`: protección de todas las comparaciones de `p.name`, `c.personName`, `l.friendName`, `tx.title` y `d.title` con fallback seguro a cadena vacía y comprobaciones booleanas de existencia.
+  2. **Blindaje Defensivo en `src/utils/card-accounting.ts`**:
+     - En `computeCardBillingStatement` (línea 43): cambio a `(card.name ?? '').toLowerCase().trim()` asegurando tolerancia ante tarjetas sin `name`.
+  3. **Congelamiento Visual y Calidad**:
+     - Cero alteraciones en estilos ni layouts (`Visual Freeze`).
+     - `npx tsc --noEmit`: 0 errores.
+     - `npm test`: 139/139 pruebas en verde (100% pass).
+- **Decisiones Permanentes**:
+  - Toda normalización de cadenas con `.toLowerCase()` y `.trim()` sobre entidades que provengan de `safeStorage` o red debe envolverse obligatoriamente con `(valor ?? '').toLowerCase().trim()`.
