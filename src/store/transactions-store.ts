@@ -238,15 +238,15 @@ export const useTransactionsStore = create<TransactionsState>()(
             if (!targetPerson && (tx.title || tx.notes)) {
               const debtsState = useDebtsStore.getState();
               const peopleMatch = debtsState.people.find((p) =>
-                (tx.title && tx.title.toLowerCase().includes(p.name.toLowerCase().trim())) ||
-                (tx.notes && tx.notes.toLowerCase().includes(p.name.toLowerCase().trim()))
+                (Boolean(tx.title) && Boolean(p.name) && (tx.title ?? '').toLowerCase().includes((p.name ?? '').toLowerCase().trim())) ||
+                (Boolean(tx.notes) && Boolean(p.name) && (tx.notes ?? '').toLowerCase().includes((p.name ?? '').toLowerCase().trim()))
               );
               if (peopleMatch) {
                 targetPerson = peopleMatch.name;
               } else {
                 const chargeMatch = debtsState.thirdPartyCharges.find((c) =>
-                  (tx.title && tx.title.toLowerCase().includes(c.personName.toLowerCase().trim())) ||
-                  (tx.notes && tx.notes.toLowerCase().includes(c.personName.toLowerCase().trim()))
+                  (Boolean(tx.title) && Boolean(c.personName) && (tx.title ?? '').toLowerCase().includes((c.personName ?? '').toLowerCase().trim())) ||
+                  (Boolean(tx.notes) && Boolean(c.personName) && (tx.notes ?? '').toLowerCase().includes((c.personName ?? '').toLowerCase().trim()))
                 );
                 if (chargeMatch) {
                   targetPerson = chargeMatch.personName;
@@ -294,8 +294,8 @@ export const useTransactionsStore = create<TransactionsState>()(
             const match =
               loans.find(
                 (l) =>
-                  (tx.personName && l.friendName.toLowerCase().trim() === tx.personName.toLowerCase().trim()) ||
-                  tx.title.toLowerCase().includes(l.friendName.toLowerCase().trim())
+                  (Boolean(tx.personName) && (l.friendName ?? '').toLowerCase().trim() === (tx.personName ?? '').toLowerCase().trim()) ||
+                  (Boolean(l.friendName) && (tx.title ?? '').toLowerCase().includes((l.friendName ?? '').toLowerCase().trim()))
               ) || (loans.length === 1 ? loans[0] : undefined);
             if (match) {
               useDebtsStore.getState().revertFriendLoanCollection(match.id, tx.amount);
@@ -316,8 +316,8 @@ export const useTransactionsStore = create<TransactionsState>()(
             const match =
               debts.find(
                 (d) =>
-                  tx.title.toLowerCase().includes(d.title.toLowerCase().trim()) ||
-                  d.title.toLowerCase().includes(tx.title.toLowerCase().trim())
+                  (Boolean(d.title) && (tx.title ?? '').toLowerCase().includes((d.title ?? '').toLowerCase().trim())) ||
+                  (Boolean(tx.title) && (d.title ?? '').toLowerCase().includes((tx.title ?? '').toLowerCase().trim()))
               ) || (debts.length === 1 ? debts[0] : undefined);
             if (match) {
               useDebtsStore.getState().revertPersonalDebtPayment(match.id, tx.amount, revertOptions);
@@ -408,7 +408,7 @@ export const useTransactionsStore = create<TransactionsState>()(
             const card = cards.find(
               (c) =>
                 c.id === t.cardId ||
-                (t.cardName && c.name?.toLowerCase().trim() === t.cardName.toLowerCase().trim())
+                (Boolean(t.cardName) && (c.name ?? '').toLowerCase().trim() === (t.cardName ?? '').toLowerCase().trim())
             );
             const closingDay = card?.closingDay ?? card?.cutOffDay ?? 20;
             const d = txDate.getDate();
@@ -518,7 +518,7 @@ export const getBankCustodyAmount = (
 
     if (!id && name) {
       const found = cards.find(
-        (c) => c.name.toLowerCase().trim() === name?.toLowerCase().trim()
+        (c) => (c.name ?? '').toLowerCase().trim() === (name ?? '').toLowerCase().trim()
       );
       if (found) {
         id = found.id;
@@ -582,7 +582,7 @@ export const getBankCustodyAmount = (
   for (const entry of cardMap.values()) {
     if (unpaidCardIds) {
       const isUnpaid = unpaidCardIds.some((uid) => {
-        const norm = uid.toLowerCase().trim();
+        const norm = (uid ?? '').toLowerCase().trim();
         const matchesId = entry.id ? entry.id.toLowerCase().trim() === norm : false;
         const matchesName = entry.name ? entry.name.toLowerCase().trim() === norm : false;
         return matchesId || matchesName;

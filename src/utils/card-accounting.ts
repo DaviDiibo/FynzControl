@@ -40,7 +40,7 @@ export const computeCardBillingStatement = ({
   const cardClosingDay = card.closingDay ?? card.cutOffDay ?? 20;
   const currentMonth = referenceDate.getMonth();
   const currentYear = referenceDate.getFullYear();
-  const cardNameLower = card.name?.toLowerCase().trim();
+  const cardNameLower = (card.name ?? '').toLowerCase().trim();
 
   const getDaysInMonth = (year: number, month: number): number =>
     new Date(year, month + 1, 0).getDate();
