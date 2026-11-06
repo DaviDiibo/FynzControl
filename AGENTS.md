@@ -81,6 +81,13 @@ This is an Expo/React Native mobile application. Prioritize mobile-first pattern
 - **Tolerancia Cero a Código Basura**: Todo código inalcanzable, sustituido o ineficiente debe removerse o refactorizarse inmediatamente en el mismo ciclo de trabajo, manteniendo la base de código compacta, limpia y ágil.
 - **Integridad y Verificación**: La purga de código obsoleto no debe romper referencias cruzadas ni contratos preexistentes, debiendo confirmarse siempre con `npx tsc --noEmit` y `npm test`.
 
+### 10. Evaluación Mandatoria de Releases de Escritorio (Tauri Auto-Updater)
+- **Evaluación Proactiva al Cierre**: Al concluir tareas relevantes (cambios en lógica contable, correcciones críticas, sincronización o nuevas funcionalidades), el agente debe evaluar y consultar proactivamente si corresponde generar un nuevo Release de escritorio (`vX.Y.Z`).
+- **Protocolo Estricto de Release y Firma**:
+  1. **Incremento Coordinado de Versión**: Actualizar la versión semver de forma sincronizada en `package.json`, `app.json` y `src-tauri/tauri.conf.json`.
+  2. **Firma Asimétrica Minisign**: La compilación de Tauri (`npm run desktop:build`) debe ejecutarse con la clave privada de producción (`controlfynz.key`) generando el instalador `.exe`, el paquete comprimido `.nsis.zip` y su respectiva firma digital `.nsis.zip.sig`.
+  3. **Publicación y Manifiesto sin BOM**: El archivo `latest.json` en GitHub Releases debe subirse obligatoriamente en **UTF-8 puro sin BOM** (Byte Order Mark) con las notas de versión y los targets de plataforma correspondientes (`windows-x86_64` y `x86_64-pc-windows-msvc`), garantizando que `@tauri-apps/plugin-updater` descargue e instale la versión en caliente sin intervención manual.
+
 ## Expo has changed — do not trust your training data
 
 Expo ships breaking changes every SDK release. APIs you remember are likely renamed, moved, or removed. Before writing any code that touches an Expo, EAS, or React Native API:
