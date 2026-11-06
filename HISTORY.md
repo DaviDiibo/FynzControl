@@ -2298,3 +2298,23 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
      - `npm test`: 139/139 pruebas en verde (100% pass).
 - **Decisiones Permanentes**:
   - Toda normalización de cadenas con `.toLowerCase()` y `.trim()` sobre entidades que provengan de `safeStorage` o red debe envolverse obligatoriamente con `(valor ?? '').toLowerCase().trim()`.
+
+
+
+### [RELEASE-V1.0.1-DESKTOP-AND-WEB] - 2026-11-06
+- **Archivos Intervenidos**:
+  - `package.json`
+  - `app.json`
+  - `src-tauri/tauri.conf.json`
+- **Resumen Técnico**:
+  1. **Bump de Versión Oficial a 1.0.1**:
+     - Sincronización de versión a `"1.0.1"` en los manifiestos de Node/Web (`package.json`), Expo Móvil (`app.json`) y Tauri Desktop (`src-tauri/tauri.conf.json`).
+     - Configuración de compatibilidad de empaquetado para auto-actualizaciones con `createUpdaterArtifacts: "v1Compatible"`.
+  2. **Compilación Criptográfica de Tauri para Windows (x64)**:
+     - Firma digital con Minisign utilizando la clave privada `controlfynz.key`.
+     - Generación del instalador completo `ControlFynz_1.0.1_x64-setup.exe` (~7.96 MiB) y del paquete comprimido de actualización del updater `ControlFynz_1.0.1_x64-setup.nsis.zip` con su firma asimétrica `.nsis.zip.sig`.
+  3. **Calidad y Verificación**:
+     - Compilación limpia con 0 errores TypeScript (`npx tsc --noEmit`).
+     - 139/139 pruebas unitarias aprobadas al 100% en `npm test` (7 suites en verde).
+- **Decisiones Permanentes**:
+  - Toda versión de escritorio para el canal de actualización debe generarse firmada con la clave Minisign de producción para ser aceptada por `@tauri-apps/plugin-updater`.
