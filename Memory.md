@@ -12,8 +12,8 @@
 - **Testing & QA**: Jest 30 + `jest-expo` (139/139 tests aprobados, 100% pass). Verificación doble obligatoria (`npm test` + `npx tsc --noEmit` 0 errores) previo a cerrar cualquier tarea.
 
 ## 2. Estado Activo del Sprint y Foco Inmediato
-- **Sprint Activo**: Lanzamiento de versión oficial v1.0.2 completado para Windows Desktop (firmado con Minisign), Web y Móvil.
-- **Hitos Recientes Concluidos**: `[TASK-AUTH-TOKEN-AWAIT-SYNC-PULL]`, `[RELEASE-V1.0.2-DESKTOP-AND-WEB]`, `[TASK-WEB-VISIBILITY-REALTIME-RECONNECT]`, `[TASK-DEFENSIVE-NULL-SAFETY-STRINGS]`.
+- **Sprint Activo**: Preparación y despliegue inicial de compilación Android en Google Play Console (EAS Build AAB v1.0.2, versionCode 1).
+- **Hitos Recientes Concluidos**: `[CONFIG-EAS-ANDROID-PLAY-STORE]`, `[TASK-AUTH-TOKEN-AWAIT-SYNC-PULL]`, `[RELEASE-V1.0.2-DESKTOP-AND-WEB]`, `[TASK-WEB-VISIBILITY-REALTIME-RECONNECT]`.
 - **Propuestas Técnicas Pendientes**: Cola de propuestas técnicas pendientes 100% limpia y completada.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)

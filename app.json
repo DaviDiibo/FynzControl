@@ -16,6 +16,7 @@
     },
     "android": {
       "package": "com.controlfynz.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#121212",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
