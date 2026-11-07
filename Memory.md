@@ -12,8 +12,8 @@
 - **Testing & QA**: Jest 30 + `jest-expo` (139/139 tests aprobados, 100% pass). Verificación doble obligatoria (`npm test` + `npx tsc --noEmit` 0 errores) previo a cerrar cualquier tarea.
 
 ## 2. Estado Activo del Sprint y Foco Inmediato
-- **Sprint Activo**: Lanzamiento de versión oficial v1.0.1 completado para Windows Desktop (firmado con Minisign), Web y Móvil.
-- **Hitos Recientes Concluidos**: `[TASK-WEB-VISIBILITY-REALTIME-RECONNECT]`, `[RELEASE-V1.0.1-DESKTOP-AND-WEB]`, `[TASK-DEFENSIVE-NULL-SAFETY-STRINGS]`, `[TASK-FIX-EXIGIBLE-DROP-AND-REALTIME-DELETION]`.
+- **Sprint Activo**: Lanzamiento de versión oficial v1.0.2 completado para Windows Desktop (firmado con Minisign), Web y Móvil.
+- **Hitos Recientes Concluidos**: `[RELEASE-V1.0.2-DESKTOP-AND-WEB]`, `[TASK-WEB-VISIBILITY-REALTIME-RECONNECT]`, `[TASK-DEFENSIVE-NULL-SAFETY-STRINGS]`, `[TASK-FIX-EXIGIBLE-DROP-AND-REALTIME-DELETION]`.
 - **Propuestas Técnicas Pendientes**: Cola de propuestas técnicas pendientes 100% limpia y completada.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
