@@ -2427,3 +2427,19 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
      - `npm test`: 139/139 pruebas aprobadas (100% pass).
 - **Decisiones Permanentes**:
   - El monitoreo de compilaciones EAS en terminales con límites de espera debe ejecutarse con `--no-wait`, entregando al usuario el enlace oficial del dashboard para seguimiento y descarga directa del archivo `.aab`.
+
+### [BUILD-EAS-ANDROID-IN-PROGRESS] - 2026-11-07
+- **Archivos Intervenidos**:
+  - `package-lock.json`
+- **Resumen Técnico**:
+  1. **Sincronización Determinista de Dependencias**:
+     - Ejecución de `npm install --package-lock-only` para incorporar 10 paquetes transitivos faltantes (`@react-native/metro-config@0.88.1`, `flow-estree@0.327.0`, `flow-parser@0.327.0`, etc.) sin mutar dependencias primarias.
+     - Verificación determinista con `npm ci --dry-run` (código de salida 0).
+  2. **Relanzamiento de Compilación en EAS Cloud**:
+     - Superadas con éxito las fases de `INSTALL_DEPENDENCIES`, `PREBUILD`, `RESTORE_CACHE`, `PREPARE_CREDENTIALS` y `CONFIGURE_EXPO_UPDATES`.
+     - Compilación activa en la nube generando el bundle de producción (`.aab`): `https://expo.dev/accounts/david.iibop/projects/controlfynz/builds/9550a871-ae9e-425d-833c-c5792f289fc1`.
+  3. **Calidad y Verificación**:
+     - `npx tsc --noEmit`: 0 errores.
+     - `npm test`: 139/139 pruebas aprobadas (100% pass).
+- **Decisiones Permanentes**:
+  - Todo build en EAS Build depende de que `package-lock.json` esté en sincronía perfecta con `package.json` para soportar `npm ci`. Ante discrepancias, usar siempre `npm install --package-lock-only`.
