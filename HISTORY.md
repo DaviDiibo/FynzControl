@@ -2377,3 +2377,20 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
      - `npm test`: 139/139 pruebas en verde (100% pass).
 - **Decisiones Permanentes**:
   - Ninguna consulta a tablas de Supabase protegidas por RLS debe emitirse antes de validar la existencia de `session.access_token` en `supabase.auth.getSession()`.
+
+
+### [CONFIG-EAS-ANDROID-PLAY-STORE] - 2026-11-07
+- **Archivos Intervenidos**:
+  - `app.json`
+  - `eas.json`
+- **Resumen Técnico**:
+  1. **Identificador de Versión Android (`app.json`)**:
+     - Adición de `"versionCode": 1` bajo la sección `"android"` garantizando el identificador entero estricto requerido por Google Play Console para paquetes de producción.
+  2. **Configuración de Expo Application Services (`eas.json`)**:
+     - Creación de `eas.json` con perfiles `development`, `preview` y `production`.
+     - Perfil de producción configurado con `"buildType": "app-bundle"` para la generación de binarios `.aab` optimizados y firmados en la nube de EAS.
+  3. **Calidad y Verificación**:
+     - `npx tsc --noEmit`: 0 errores.
+     - `npm test`: 139/139 pruebas en verde (100% pass, 7 suites).
+- **Decisiones Permanentes**:
+  - Las compilaciones de Android destinadas a la tienda Google Play deben generarse invariablemente como AAB (`buildType: "app-bundle"`) incrementando secuencialmente el `versionCode`.
