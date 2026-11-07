@@ -2408,3 +2408,22 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
      - Jest: 139/139 pruebas en verde (100% pass).
 - **Decisiones Permanentes**:
   - Todo proyecto híbrido (Expo + Tauri) debe contar con un `.easignore` para impedir que los binarios nativos de escritorio se incluyan en los archivos de subida móvil.
+
+
+### [BUILD-EAS-ANDROID-PRODUCTION-QUEUED] - 2026-11-07
+- **Archivos Intervenidos**:
+  - `.easignore`
+  - `eas.json`
+  - `app.json`
+- **Resumen Técnico**:
+  1. **Subida y Encolamiento en la Nube de Expo (EAS Build)**:
+     - Con la exclusión de `.easignore`, el paquete de proyecto se comprimió y subió a EAS en 2 segundos (11.0 MB frente a los 2.5 GB iniciales que excedían el límite de 2.0 GB).
+     - La nube de EAS reconoció las credenciales remotas y el Keystore de producción generado (`Build Credentials -0ejqE-WFx`).
+     - Se inició el trabajo de compilación en los servidores de Expo para generar el Android App Bundle (`.aab`) de producción.
+  2. **Enlace de Seguimiento en Vivo**:
+     - `https://expo.dev/accounts/david.iibop/projects/controlfynz/builds/cf458d3e-86f5-4623-b240-2aa08dc7389d`
+  3. **Calidad y Verificación**:
+     - `npx tsc --noEmit`: 0 errores.
+     - `npm test`: 139/139 pruebas aprobadas (100% pass).
+- **Decisiones Permanentes**:
+  - El monitoreo de compilaciones EAS en terminales con límites de espera debe ejecutarse con `--no-wait`, entregando al usuario el enlace oficial del dashboard para seguimiento y descarga directa del archivo `.aab`.
