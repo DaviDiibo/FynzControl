@@ -2443,3 +2443,19 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
      - `npm test`: 139/139 pruebas aprobadas (100% pass).
 - **Decisiones Permanentes**:
   - Todo build en EAS Build depende de que `package-lock.json` esté en sincronía perfecta con `package.json` para soportar `npm ci`. Ante discrepancias, usar siempre `npm install --package-lock-only`.
+
+### [BUILD-EAS-ANDROID-AAB-SUCCESS] - 2026-11-07
+- **Archivos Intervenidos**:
+  - `package-lock.json`
+  - `eas.json`
+  - `app.json`
+- **Resumen Técnico**:
+  1. **Compilación de Producción Completada con Éxito (`FINISHED`)**:
+     - Generación del paquete nativo Android App Bundle (`.aab`) firmado con Keystore de producción en EAS Build.
+     - Build ID: `9550a871-ae9e-425d-833c-c5792f289fc1` (SDK 58.0.0, Version 1.0.2, VersionCode 1).
+     - Artefacto descargado listo para su despliegue en Google Play Console.
+  2. **Calidad y Verificación**:
+     - `npx tsc --noEmit`: 0 errores.
+     - `npm test`: 139/139 pruebas aprobadas (100% pass).
+- **Decisiones Permanentes**:
+  - El artefacto `.aab` generado por EAS Build con `buildType: "app-bundle"` es el único estándar aceptado por Google Play para distribución en tienda.
