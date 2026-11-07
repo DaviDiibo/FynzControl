@@ -1,0 +1,17 @@
+# Rust & Desktop (Tauri)
+src-tauri/
+
+# Web & Build artifacts
+dist/
+web-build/
+
+# Package manager cache
+node_modules/
+
+# Dotfiles & IDEs
+.git/
+.expo/
+.agents/
+.vscode/
+.claude/
+Microsoft/

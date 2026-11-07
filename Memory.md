@@ -13,7 +13,7 @@
 
 ## 2. Estado Activo del Sprint y Foco Inmediato
 - **Sprint Activo**: Preparación y despliegue inicial de compilación Android en Google Play Console (EAS Build AAB v1.0.2, versionCode 1).
-- **Hitos Recientes Concluidos**: `[CONFIG-EAS-ANDROID-PLAY-STORE]`, `[TASK-AUTH-TOKEN-AWAIT-SYNC-PULL]`, `[RELEASE-V1.0.2-DESKTOP-AND-WEB]`, `[TASK-WEB-VISIBILITY-REALTIME-RECONNECT]`.
+- **Hitos Recientes Concluidos**: `[CONFIG-EASIGNORE-OPTIMIZATION]`, `[CONFIG-EAS-ANDROID-PLAY-STORE]`, `[TASK-AUTH-TOKEN-AWAIT-SYNC-PULL]`, `[RELEASE-V1.0.2-DESKTOP-AND-WEB]`.
 - **Propuestas Técnicas Pendientes**: Cola de propuestas técnicas pendientes 100% limpia y completada.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)

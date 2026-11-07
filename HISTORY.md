@@ -2394,3 +2394,17 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
      - `npm test`: 139/139 pruebas en verde (100% pass, 7 suites).
 - **Decisiones Permanentes**:
   - Las compilaciones de Android destinadas a la tienda Google Play deben generarse invariablemente como AAB (`buildType: "app-bundle"`) incrementando secuencialmente el `versionCode`.
+
+
+### [CONFIG-EASIGNORE-OPTIMIZATION] - 2026-11-07
+- **Archivos Intervenidos**:
+  - `.easignore`
+- **Resumen Técnico**:
+  1. **Optimización de Empaquetado para EAS Build (`.easignore`)**:
+     - Creación de `.easignore` excluyendo los artefactos nativos de escritorio Rust/Tauri (`src-tauri/`, 10.5 GB), builds web (`dist/`), `node_modules/`, repositorios y dotfiles.
+     - Reducción del paquete de compilación móvil de 2.5 GB a menos de 15 MB, respetando el límite estricto de 2.0 GB de EAS Build.
+  2. **Calidad y Verificación**:
+     - TypeScript: 0 errores (`tsc --noEmit`).
+     - Jest: 139/139 pruebas en verde (100% pass).
+- **Decisiones Permanentes**:
+  - Todo proyecto híbrido (Expo + Tauri) debe contar con un `.easignore` para impedir que los binarios nativos de escritorio se incluyan en los archivos de subida móvil.
