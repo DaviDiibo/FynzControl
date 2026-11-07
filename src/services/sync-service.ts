@@ -472,13 +472,29 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
   isPullInProgress = true;
   notifySyncStatusListeners();
   try {
-    let targetUserId = userId;
-    if (!targetUserId) {
-      const { data, error } = await supabase.auth.getSession();
-      if (error || !data.session?.user?.id) {
-        return { success: false, offline: true, error: 'Usuario no autenticado' };
-      }
-      targetUserId = data.session.user.id;
+    // Verificar que la sesión de Supabase Auth esté activa y con su token JWT antes de consultar tablas con RLS
+    let {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      // Reintentar brevemente por si el cliente de Supabase aún está inicializando la sesión desde el storage
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const retryResult = await supabase.auth.getSession();
+      session = retryResult.data.session;
+    }
+
+    if (!session || !session.user?.id) {
+      return { success: false, offline: true, error: 'Sesión no activa en Supabase Auth' };
+    }
+
+    const targetUserId = userId || session.user.id;
+    if (userId && userId !== session.user.id) {
+      return {
+        success: false,
+        offline: true,
+        error: 'Sesión no coincide con el usuario solicitado',
+      };
     }
 
     // Cargar cola de borrados pendientes para el escudo anti-zombis de entrada
