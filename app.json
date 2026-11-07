@@ -51,6 +51,17 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "d7b0c723-69ed-45ca-8519-898f0e4b3891"
+      }
+    },
+    "owner": "david.iibop"
   }
 }
