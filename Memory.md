@@ -13,7 +13,7 @@
 
 ## 2. Estado Activo del Sprint y Foco Inmediato
 - **Sprint Activo**: Lanzamiento de versión oficial v1.0.2 completado para Windows Desktop (firmado con Minisign), Web y Móvil.
-- **Hitos Recientes Concluidos**: `[RELEASE-V1.0.2-DESKTOP-AND-WEB]`, `[TASK-WEB-VISIBILITY-REALTIME-RECONNECT]`, `[TASK-DEFENSIVE-NULL-SAFETY-STRINGS]`, `[TASK-FIX-EXIGIBLE-DROP-AND-REALTIME-DELETION]`.
+- **Hitos Recientes Concluidos**: `[TASK-AUTH-TOKEN-AWAIT-SYNC-PULL]`, `[RELEASE-V1.0.2-DESKTOP-AND-WEB]`, `[TASK-WEB-VISIBILITY-REALTIME-RECONNECT]`, `[TASK-DEFENSIVE-NULL-SAFETY-STRINGS]`.
 - **Propuestas Técnicas Pendientes**: Cola de propuestas técnicas pendientes 100% limpia y completada.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
@@ -87,6 +87,7 @@
 - **Invarianza de Exigible y Sincronización Inmediata de Bajas**: Eliminado redondeo al alza de cuotas en debts-store.ts (isFullySettled = newRemaining <= 0.05 con Math.floor), baja inmediata a Supabase en deleteRemoteRecord, escudo anti-resurrección en syncPush y purga de bajas remotas en syncPull.
 - **Blindaje Defensivo Null-Safety en Cadenas**: Normalización defensiva obligatoria con `(c.name ?? '').toLowerCase().trim()` en `transactions-store.ts` y `card-accounting.ts` ante entidades en caché o red con campos de nombre nulos o incompletos.
 - **Reconexión Realtime y Sync Web por Visibilidad**: Sincronización al recuperar visibilidad de pestaña (`visibilitychange`), blindaje contra `NaN` en `sync-adapters.ts` y captura de excepciones en callbacks de socket con reseteo de canal en `sync-service.ts`.
+- **Carrera de Token JWT en Hidratación y Sync Pull**: Espera asíncrona de `supabase.auth.getSession()` en `use-app-hydration.ts` y reintento con guarda estricta RLS en `sync-service.ts` para asegurar que PostgREST no reciba consultas anónimas.
 
 ## 5. Referencia Histórica
 - Para la bitácora histórica completa de tareas concluidas, archivos modificados y trazabilidad técnica, consultar bajo demanda: `HISTORY.md`.

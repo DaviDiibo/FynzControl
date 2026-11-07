@@ -2359,3 +2359,21 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
      - `npm test`: 139/139 pruebas en verde (100% pass, 7 suites).
 - **Decisiones Permanentes**:
   - Todo artefacto de release de escritorio debe estar firmado con `controlfynz.key` y acompañado de su manifiesto `latest.json` en UTF-8 puro sin BOM.
+
+
+### [TASK-AUTH-TOKEN-AWAIT-SYNC-PULL] - 2026-11-07
+- **Archivos Intervenidos**:
+  - `src/hooks/use-app-hydration.ts`
+  - `src/services/sync-service.ts`
+- **Resumen Técnico**:
+  1. **Eliminación de Carrera en Hidratación (`src/hooks/use-app-hydration.ts`)**:
+     - En el `useEffect` post-hidratación, se espera asíncronamente a `supabase.auth.getSession()` antes de invocar `flushPendingDeletions`, `syncPull` y `startRealtimeSubscription`, garantizando que PostgREST reciba el Bearer token JWT y no viaje anónimo.
+     - En `triggerFocusSync`: se valida la existencia de sesión activa de Supabase antes de disparar el pull.
+  2. **Guarda de Autenticación RLS en `syncPull` (`src/services/sync-service.ts`)**:
+     - Al inicio de `syncPull`: verificación obligatoria de sesión activa con reintento tras 300ms para dar tiempo a la restauración de tokens en navegadores.
+     - Rechazo temprano si no hay sesión autenticada o si el `userId` no coincide con `session.user.id`, previniendo que RLS retorne conjuntos vacíos que dejen datos locales obsoletos.
+  3. **Calidad y Verificación**:
+     - `npx tsc --noEmit`: 0 errores.
+     - `npm test`: 139/139 pruebas en verde (100% pass).
+- **Decisiones Permanentes**:
+  - Ninguna consulta a tablas de Supabase protegidas por RLS debe emitirse antes de validar la existencia de `session.access_token` en `supabase.auth.getSession()`.

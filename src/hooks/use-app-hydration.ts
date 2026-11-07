@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AppState, Platform, type AppStateStatus } from 'react-native';
+import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/auth-store';
 import { useTransactionsStore } from '../store/transactions-store';
 import { useDebtsStore } from '../store/debts-store';
@@ -60,22 +61,41 @@ export const useAppHydration = (): boolean => {
   useEffect(() => {
     if (!isHydrated) return;
 
-    const currentUser = useAuthStore.getState().user;
-    if (currentUser?.id) {
-      syncService.flushPendingDeletions(currentUser.id).catch(() => {});
-      syncService.syncPull(currentUser.id).catch(() => {});
-      syncService.startRealtimeSubscription(currentUser.id);
-    }
+    let isCancelled = false;
+
+    const runInitialSync = async (): Promise<void> => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (isCancelled) return;
+
+      const activeUserId = session?.user?.id || useAuthStore.getState().user?.id;
+      if (activeUserId) {
+        await syncService.flushPendingDeletions(activeUserId).catch(() => {});
+        if (isCancelled) return;
+        await syncService.syncPull(activeUserId).catch(() => {});
+        if (isCancelled) return;
+        syncService.startRealtimeSubscription(activeUserId);
+      }
+    };
+
+    void runInitialSync();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [isHydrated]);
 
   // Sincronización al Enfocar la Ventana (Focus Sync) en Web y Móvil
   useEffect(() => {
     if (!isHydrated) return;
 
+    let isCancelled = false;
     let lastFocusSyncTimestamp = 0;
     const FOCUS_SYNC_COOLDOWN_MS = 6000;
 
-    const triggerFocusSync = (): void => {
+    const triggerFocusSync = async (): Promise<void> => {
       const now = Date.now();
       if (now - lastFocusSyncTimestamp < FOCUS_SYNC_COOLDOWN_MS) {
         return;
@@ -84,20 +104,29 @@ export const useAppHydration = (): boolean => {
         return;
       }
 
-      const currentUser = useAuthStore.getState().user;
-      if (!currentUser?.id) {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (isCancelled || !session) {
+        return;
+      }
+
+      const activeUserId = session.user?.id || useAuthStore.getState().user?.id;
+      if (!activeUserId) {
         return;
       }
 
       lastFocusSyncTimestamp = now;
-      syncService.flushPendingDeletions(currentUser.id).catch(() => {});
-      syncService.syncPull(currentUser.id).catch(() => {});
-      syncService.startRealtimeSubscription(currentUser.id);
+      await syncService.flushPendingDeletions(activeUserId).catch(() => {});
+      if (isCancelled) return;
+      await syncService.syncPull(activeUserId).catch(() => {});
+      if (isCancelled) return;
+      syncService.startRealtimeSubscription(activeUserId);
     };
 
     const handleAppStateChange = (nextAppState: AppStateStatus): void => {
       if (nextAppState === 'active') {
-        triggerFocusSync();
+        void triggerFocusSync();
       }
     };
 
@@ -106,12 +135,12 @@ export const useAppHydration = (): boolean => {
     let removeWebListener: (() => void) | null = null;
     if (Platform.OS === 'web') {
       const onWindowFocus = (): void => {
-        triggerFocusSync();
+        void triggerFocusSync();
       };
 
       const onVisibilityChange = (): void => {
         if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-          triggerFocusSync();
+          void triggerFocusSync();
           const currentUser = useAuthStore.getState().user;
           if (currentUser?.id) {
             syncService.startRealtimeSubscription(currentUser.id);
@@ -137,6 +166,7 @@ export const useAppHydration = (): boolean => {
     }
 
     return () => {
+      isCancelled = true;
       appStateSubscription.remove();
       if (removeWebListener) {
         removeWebListener();
