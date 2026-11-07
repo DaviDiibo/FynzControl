@@ -2342,3 +2342,20 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 - **Decisiones Permanentes**:
   - En entornos web, la detección de actividad debe contemplar siempre `visibilitychange` además de `focus`.
   - Todo callback de suscripción a sockets debe estar protegido por `try/catch` para evitar caídas silenciosas del canal.
+
+
+### [RELEASE-V1.0.2-DESKTOP-AND-WEB] - 2026-11-06
+- **Archivos Intervenidos**:
+  - `package.json`
+  - `app.json`
+  - `src-tauri/tauri.conf.json`
+- **Resumen Técnico**:
+  1. **Bump Oficial de Versión a 1.0.2**:
+     - Sincronización coordinada en manifiestos web (`package.json`), Expo (`app.json`) y Tauri (`src-tauri/tauri.conf.json`).
+  2. **Compilación Criptográfica de Tauri para Windows (x64)**:
+     - Firma digital con Minisign (`controlfynz.key`) generando el instalador `ControlFynz_1.0.2_x64-setup.exe` (~7.97 MiB) y el bundle para updater `ControlFynz_1.0.2_x64-setup.nsis.zip` con su firma asimétrica `.nsis.zip.sig`.
+  3. **Calidad y Verificación**:
+     - `npx tsc --noEmit`: 0 errores.
+     - `npm test`: 139/139 pruebas en verde (100% pass, 7 suites).
+- **Decisiones Permanentes**:
+  - Todo artefacto de release de escritorio debe estar firmado con `controlfynz.key` y acompañado de su manifiesto `latest.json` en UTF-8 puro sin BOM.
