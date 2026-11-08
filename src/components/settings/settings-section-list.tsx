@@ -21,6 +21,7 @@ import { useDebtsStore } from '../../store/debts-store';
 import { supabase } from '../../lib/supabase';
 import { authenticateWithBiometrics } from '../../utils/biometrics';
 import { UpdateCheckerCard } from './update-checker-card';
+import { AppDownloadsCard } from './app-downloads-card';
 import {
   syncService,
   subscribeToSyncStatus,
@@ -589,6 +590,7 @@ export const SettingsSectionList = ({
           <View style={styles.column}>
             {dataCard}
             <UpdateCheckerCard />
+            <AppDownloadsCard />
             {logoutButton}
           </View>
         </View>
@@ -598,6 +600,7 @@ export const SettingsSectionList = ({
           {securityCard}
           {dataCard}
           <UpdateCheckerCard />
+          <AppDownloadsCard />
           {logoutButton}
         </>
       )}
