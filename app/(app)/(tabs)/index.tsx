@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import { colors } from '../../../src/theme/colors';
 import { useIsWide } from '../../../src/hooks/use-responsive';
 import DashboardHeader from '../../../src/components/dashboard/dashboard-header';
+import { BetaBanner } from '../../../src/components/dashboard/beta-banner';
 import BalanceHeroCard, {
   type BankAccountSummary,
 } from '../../../src/components/dashboard/balance-hero-card';
@@ -175,6 +176,7 @@ const DashboardScreen = (): JSX.Element => {
         showsVerticalScrollIndicator={false}
       >
         <DashboardHeader />
+        <BetaBanner />
 
         {isWide ? (
           <View style={styles.wideGridContainer}>

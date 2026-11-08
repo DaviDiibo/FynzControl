@@ -12,8 +12,8 @@
 - **Testing & QA**: Jest 30 + `jest-expo` (139/139 tests aprobados, 100% pass). Verificación doble obligatoria (`npm test` + `npx tsc --noEmit` 0 errores) previo a cerrar cualquier tarea.
 
 ## 2. Estado Activo del Sprint y Foco Inmediato
-- **Sprint Activo**: Preparación y despliegue inicial de compilación Android en Google Play Console (EAS Build AAB v1.0.2, versionCode 1).
-- **Hitos Recientes Concluidos**: `[BUILD-EAS-ANDROID-AAB-SUCCESS]`, `[CONFIG-EASIGNORE-OPTIMIZATION]`, `[CONFIG-EAS-ANDROID-PLAY-STORE]`, `[RELEASE-V1.0.2-DESKTOP-AND-WEB]`.
+- **Sprint Activo**: Release v1.0.3 de escritorio y web completado (instalador firmado y manifiesto sin BOM); siguiente foco: investigación y corrección en local del bug de selección/persistencia de tipo de moneda.
+- **Hitos Recientes Concluidos**: `[RELEASE-V1.0.3-DESKTOP-AND-WEB]`, `[TASK-DASHBOARD-BETA-BANNER]`, `[TASK-SETTINGS-DOWNLOADS]`.
 - **Propuestas Técnicas Pendientes**: Cola de propuestas técnicas pendientes 100% limpia y completada.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
@@ -55,9 +55,12 @@
 - ❌ **NO omitir `presentation: 'transparentModal'` en Stacks anidados de modales en Web**.
 - ❌ **NO usar `AsyncStorage.clear()` para reseteos**: Usar purga granular selectiva por store.
 - ❌ **NO modificar estilos ni layouts visuales preexistentes** sin solicitud explícita (`Visual Freeze`).
+- ❌ **NO renderizar opciones o enlaces de descarga en Android/iOS nativo**: Mantener `AppDownloadsCard` exclusivamente visible en Web y Tauri (`Platform.OS !== 'web' && !isTauri()` retorna `null`) para respetar el Visual Freeze móvil.
+- ❌ **NO mostrar banners informativos descartables sin persistencia versionada**: Usar siempre `safeStorage` con clave versionada (ej. `'controlfynz_beta_banner_dismissed_v1'`) para evitar que reaparezcan tras ser cerrados.
 - ❌ **NO dar por concluida una tarea sin verificación doble**: Mandatorio `npm test` (100% pass) y `npx tsc --noEmit` (0 errores).
 
 ## 4. Bugs Críticos Resueltos & Blindajes
+- **Banner Beta y Canal de Feedback en Dashboard**: Componente `BetaBanner` descartable con clave versionada en `safeStorage`, botón mailto a `fynzcontrol0627@gmail.com` e inserción con gap nativo.
 - **Rendimiento de Listas en Móvil (`transactions.tsx`)**: Reemplazo de `ScrollView` con mapeo lineal por `FlatList` virtualizado con modelo heterogéneo aplanado (`header` e `item`), `keyExtractor` determinista y `ListHeaderComponent` memoizado para prevenir pérdida de foco en `<TextInput>`.
 - **Memoización con Comparador Fino (`transaction-item-card.tsx`)**: Blindaje con `React.memo` y comparador personalizado `arePropsEqual` para evitar re-renderizados masivos ante cambios en filtros y búsqueda.
 - **Poda de Dependencias Huérfanas y Cero Código Muerto**: Remoción de 5 paquetes no importados (`@tauri-apps/api`, `expo-constants`, `expo-device`, `expo-font`, `expo-linking`) y purga de exports no consumidos (`isValidUuid`, `formatIsoToSpanishDate`).
@@ -88,6 +91,7 @@
 - **Blindaje Defensivo Null-Safety en Cadenas**: Normalización defensiva obligatoria con `(c.name ?? '').toLowerCase().trim()` en `transactions-store.ts` y `card-accounting.ts` ante entidades en caché o red con campos de nombre nulos o incompletos.
 - **Reconexión Realtime y Sync Web por Visibilidad**: Sincronización al recuperar visibilidad de pestaña (`visibilitychange`), blindaje contra `NaN` en `sync-adapters.ts` y captura de excepciones en callbacks de socket con reseteo de canal en `sync-service.ts`.
 - **Carrera de Token JWT en Hidratación y Sync Pull**: Espera asíncrona de `supabase.auth.getSession()` en `use-app-hydration.ts` y reintento con guarda estricta RLS en `sync-service.ts` para asegurar que PostgREST no reciba consultas anónimas.
+- **Sección de Descargas y Beta Testers Web/Desktop**: Centralización de enlaces y solicitud mailto en `links.ts`, con guarda estricta en `AppDownloadsCard` para renderizarse únicamente en Web y Tauri sin alterar las pantallas móviles nativas.
 
 ## 5. Referencia Histórica
 - Para la bitácora histórica completa de tareas concluidas, archivos modificados y trazabilidad técnica, consultar bajo demanda: `HISTORY.md`.

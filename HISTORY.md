@@ -2459,3 +2459,63 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
      - `npm test`: 139/139 pruebas aprobadas (100% pass).
 - **Decisiones Permanentes**:
   - El artefacto `.aab` generado por EAS Build con `buildType: "app-bundle"` es el único estándar aceptado por Google Play para distribución en tienda.
+
+
+### [TASK-SETTINGS-DOWNLOADS] - 2026-11-08
+- **Archivos Intervenidos**:
+  - `src/constants/links.ts`
+  - `src/components/settings/app-downloads-card.tsx`
+  - `src/components/settings/settings-section-list.tsx`
+- **Resumen Técnico**:
+  1. **Centralización de URLs y Helper Mailto (`src/constants/links.ts`)**:
+     - Creación de constantes de URLs oficiales (`GOOGLE_PLAY_STORE_URL`, `WINDOWS_EXE_DOWNLOAD_URL`, `BETA_TESTER_EMAIL`, `EMAIL_BETA_TESTER_MAILTO`) y función de apertura segura `openExternalUrl(url)` con captura defensiva de errores.
+     - Helper mailto formateado hacia `fynzcontrol0627@gmail.com` con asunto `Solicitud de Acceso Beta Tester - ControlFynz` y plantilla de cuerpo descriptiva para invitar al usuario a indicar su correo de Google Play.
+  2. **Componente Exclusivo para Web y Tauri (`src/components/settings/app-downloads-card.tsx`)**:
+     - Implementación de `AppDownloadsCard` con estética cyberpunk (`#121212`, tarjeta `#1E1E1E`, neón `#00FFA3`), badges de plataforma para Windows (.EXE directo desde GitHub Releases) y Google Play Store.
+     - Aviso contextual de fase de testeo cerrado en Google Play Console con botón interactivo de postulación inmediata vía correo electrónico (`mailto:`).
+     - Cláusula de exclusión de plataforma estricta: `if (Platform.OS !== 'web' && !isTauri()) return null;`, asegurando el cumplimiento absoluto de la regla de Visual Freeze en dispositivos móviles nativos (Android e iOS).
+  3. **Integración en la Vista de Ajustes (`src/components/settings/settings-section-list.tsx`)**:
+     - Montaje de `<AppDownloadsCard />` en el encabezado de las opciones de configuración, visible exclusivamente en clientes de escritorio y navegadores.
+  4. **Calidad y Verificación**:
+     - `npx tsc --noEmit`: 0 errores.
+     - `npm test`: 139/139 pruebas en verde (100% pass, 7 suites).
+- **Decisiones Permanentes**:
+  - Toda sección orientada a descargas o instaladores multiplataforma dentro de Ajustes debe estar estrictamente condicionada a Web y Tauri (`Platform.OS === 'web' || isTauri()`), previniendo cualquier alteración visual innecesaria en aplicaciones móviles ya instaladas.
+
+
+### [TASK-DASHBOARD-BETA-BANNER] - 2026-11-08
+- **Archivos Intervenidos**:
+  - `src/constants/links.ts`
+  - `src/components/dashboard/beta-banner.tsx`
+  - `app/(app)/(tabs)/index.tsx`
+- **Resumen Técnico**:
+  1. **Helper de Feedback y Enlace Mailto (`src/constants/links.ts`)**:
+     - Implementación de `getFeedbackMailtoUrl` con destino oficial `fynzcontrol0627@gmail.com` y plantilla preconfigurada para reporte de fallos, sugerencias o mejoras.
+  2. **Componente Descartable y Persistente (`src/components/dashboard/beta-banner.tsx`)**:
+     - Implementación de `BetaBanner` con estética Cyberpunk (`#121212`, tarjeta `#1E1E1E`, neón `#00FFA3`), badge indicador "VERSIÓN BETA", botón de acción para envío de comentarios/errores vía correo electrónico y botón de descarte (`✕`).
+     - Persistencia de descarte gestionada mediante `safeStorage` con la clave `'controlfynz_beta_banner_dismissed_v1'`, asegurando que una vez cerrado no vuelva a mostrarse en futuros inicios.
+  3. **Integración en Pantalla de Dashboard (`app/(app)/(tabs)/index.tsx`)**:
+     - Inserción limpia de `<BetaBanner />` entre el bloque de bienvenida y el carrusel de liquidez / Micro-Hero, respetando el espaciado y gap nativo sin alterar layouts preexistentes.
+  4. **Calidad y Verificación**:
+     - TypeScript: 0 errores (`npx tsc --noEmit`).
+     - Jest: 139/139 pruebas aprobadas (100% pass, 7 suites).
+- **Decisiones Permanentes**:
+  - Los banners informativos descartables de versión o fase de pruebas deben persistir su estado de descarte de manera desacoplada en `safeStorage` bajo una clave versionada (`_v1`), garantizando que no se reabran en montajes posteriores y respetando la experiencia de usuario.
+
+
+### [RELEASE-V1.0.3-DESKTOP-AND-WEB] - 2026-11-08
+- **Archivos Intervenidos**:
+  - `package.json`
+  - `app.json`
+  - `src-tauri/tauri.conf.json`
+- **Resumen Técnico**:
+  1. **Bump Oficial de Versión a 1.0.3 Sincronizado**:
+     - Incremento coordinado de versión semver a 1.0.3 en `package.json`, `app.json` y `src-tauri/tauri.conf.json`.
+  2. **Compilación y Firma Digital Asimétrica (Minisign)**:
+     - Compilación de escritorio nativo con Tauri (`npm run desktop:build`) y firma asimétrica de producción con `controlfynz.key`.
+     - Generación de artefactos distribuidos: instalador ejecutable `ControlFynz_1.0.3_x64-setup.exe` (~12.22 MiB), paquete comprimido `ControlFynz_1.0.3_x64-setup.nsis.zip` y su respectiva firma digital `ControlFynz_1.0.3_x64-setup.nsis.zip.sig`.
+  3. **Calidad y Verificación**:
+     - TypeScript: 0 errores (`npx tsc --noEmit`).
+     - Jest: 139/139 pruebas unitarias aprobadas (100% pass, 7 suites).
+- **Decisiones Permanentes**:
+  - Todo artefacto de release de escritorio debe estar firmado con `controlfynz.key` y acompañado de su manifiesto `latest.json` en UTF-8 puro sin BOM.
