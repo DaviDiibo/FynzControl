@@ -55,7 +55,14 @@ export interface CardsState {
   deleteCard: (id: string) => void;
   getCardById: (id: string) => CreditCard | undefined;
   resetCardsStore: () => void;
+  purgeInvalidBanks: () => void;
 }
+
+export const filterValidBanks = (banks: Bank[], cards: CreditCard[]): Bank[] => {
+  if (!Array.isArray(banks)) return [];
+  const cardIds = new Set((cards || []).map((c) => c.id));
+  return banks.filter((b) => !cardIds.has(b.id));
+};
 
 const INITIAL_BANKS: Bank[] = [];
 
@@ -75,8 +82,9 @@ export const useCardsStore = create<CardsState>()(
           initialBalance !== undefined && !isNaN(Number(initialBalance))
             ? Number(initialBalance)
             : undefined;
+        const cardIds = new Set((get().cards || []).map((c) => c.id));
         const existing = (get().banks || []).find(
-          (b) => b.name.toLowerCase() === trimmed.toLowerCase()
+          (b) => b.name.toLowerCase() === trimmed.toLowerCase() && !cardIds.has(b.id)
         );
         if (existing) {
           if (sanitizedBalance !== undefined) {
@@ -91,7 +99,7 @@ export const useCardsStore = create<CardsState>()(
           createdAt: new Date().toISOString(),
         };
         set((state) => ({
-          banks: [...(state.banks || []), newBank],
+          banks: [...(state.banks || []).filter((b) => !cardIds.has(b.id)), newBank],
         }));
         syncHandlers.onBankAdded?.(newBank);
         return newBank;
@@ -168,6 +176,7 @@ export const useCardsStore = create<CardsState>()(
 
           return {
             cards: [newCard, ...existingCards],
+            banks: (state.banks || []).filter((b) => b.id !== newCard.id),
           };
         });
         if (addedCard) {
@@ -233,6 +242,13 @@ export const useCardsStore = create<CardsState>()(
         return get().cards.find((c) => c.id === id);
       },
 
+      purgeInvalidBanks: (): void => {
+        const cardIds = new Set((get().cards || []).map((c) => c.id));
+        set((state) => ({
+          banks: (state.banks || []).filter((b) => !cardIds.has(b.id)),
+        }));
+      },
+
       resetCardsStore: (): void => {
         set({ cards: [], banks: [], isLoading: false, error: null });
       },
@@ -262,13 +278,17 @@ export const useCardsStore = create<CardsState>()(
           }
         }
 
+        const rawBanks = Array.isArray(state.banks)
+          ? state.banks
+          : currentState.banks;
+        const cardIds = new Set((mergedCards || []).map((c) => c.id));
+        const filteredBanks = (rawBanks || []).filter((b) => !cardIds.has(b.id));
+
         return {
           ...currentState,
           ...state,
           cards: mergedCards,
-          banks: Array.isArray(state.banks)
-            ? state.banks
-            : currentState.banks,
+          banks: filteredBanks,
         };
       },
     }

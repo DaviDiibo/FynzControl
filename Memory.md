@@ -12,11 +12,12 @@
 - **Testing & QA**: Jest 30 + `jest-expo` (142/142 tests aprobados, 100% pass). Verificación doble obligatoria (`npm test` + `npx tsc --noEmit` 0 errores) previo a cerrar cualquier tarea.
 
 ## 2. Estado Activo del Sprint y Foco Inmediato
-- **Sprint Activo**: Sistema de Moneda concluido de punta a punta: Fase 1 (Frontend local, micro-badge en balance y erradicación de fallbacks hardcodeados a `$`) y Fase 2 (Sincronización Cloud bidireccional en Supabase `user_settings` con adaptadores resilientes y upsert en segundo plano).
-- **Hitos Recientes Concluidos**: `[TASK-CURRENCY-PHASE2-CLOUD-SYNC]`, `[TASK-CURRENCY-PHASE1-SUBTASK2]`, `[TASK-CURRENCY-PHASE1-SUBTASK1]`, `[RELEASE-V1.0.3-DESKTOP-AND-WEB]`.
-- **Foco Inmediato / Próximos Pasos**: Monitoreo de sincronización remota multi-dispositivo y evaluación del siguiente ciclo funcional.
+- **Sprint Activo**: Aislamiento estricto de cuentas bancarias y tarjetas concluido: Saneamiento de base de datos en Supabase (soft-delete de tarjetas duplicadas en `banks`), blindaje en frontend (`Dashboard` con derivación `realBanks`) y blindaje en tienda `cards-store.ts` (`filterValidBanks`, `purgeInvalidBanks`, e inmunidad en `merge`).
+- **Hitos Recientes Concluidos**: `[TASK-DASHBOARD-BANK-CARDS-ISOLATION]`, `[TASK-CURRENCY-PHASE2-CLOUD-SYNC]`, `[TASK-CURRENCY-PHASE1-SUBTASK2]`, `[TASK-CURRENCY-PHASE1-SUBTASK1]`, `[RELEASE-V1.0.3-DESKTOP-AND-WEB]`.
+- **Foco Inmediato / Próximos Pasos**: Monitoreo de consistencia entre cuentas bancarias y tarjetas en sincronización multi-dispositivo y evaluación del siguiente ciclo funcional.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
+- ❌ **NO mezclar ni renderizar tarjetas de crédito en la entidad `banks`**: La tabla y store `banks` están estrictamente reservados para cuentas de ahorro/corriente. `banks` nunca debe contener ni renderizar entidades que sean tarjetas de crédito (`cards`). El frontend y store deben filtrar (`filterValidBanks`, `realBanks`) descartando coincidencias de ID o nombre con tarjetas para prevenir duplicidades en balances.
 - ❌ **NO omitir la sincronización bidireccional de `user_settings` en `sync-service.ts`**: Descargar siempre `user_settings` en `syncPull` para hidratar `useSettingsStore` y sincronizar cambios inmediatamente con `syncPushUserSettings` (upsert por `user_id`) en segundo plano sin bloquear la UI.
 - ❌ **NO hardcodear el símbolo `$` ni dejar fallbacks huérfanos en listas o modales de tarjetas**: Usar siempre `getCurrencySymbol(currency)` de `src/utils/currency.ts`, micro-badge `[ COP ]` / `[ USD ]` (`getCurrencyBadgeLabel`) en Dashboard, y propagar `currencySymbol` a componentes memoizados (`TransactionItemCard` con `arePropsEqual`).
 - ❌ **NO purgar tiendas de dominio si `currentUser` es `null` o durante la hidratación**: Solo purgar si `currentUser` existe y su ID difiere de la nueva sesión, o en `SIGNED_OUT` explícito.
@@ -54,6 +55,7 @@
 - ❌ **NO dar por concluida una tarea sin verificación doble**: Mandatorio `npm test` (100% pass) y `npx tsc --noEmit` (0 errores).
 
 ## 4. Bugs Críticos Resueltos & Blindajes
+- **Aislamiento Estricto y Saneamiento Bancos vs Tarjetas (`cards-store.ts` / `index.tsx` / Supabase)**: Soft-delete de 4 tarjetas duplicadas en tabla remota `banks`. Blindaje reactivo en `Dashboard` con `realBanks` (exclusión por ID y nombre) y blindaje en `cards-store.ts` con purga preventiva (`filterValidBanks`, `purgeInvalidBanks`) e inmunidad en rehidratación `safeStorage`. 142/142 tests en verde.
 - **Estandarización de Divisas y Sincronización Cloud (`currency.ts` / `user_settings`)**: Sistema de moneda completado de punta a punta (Fase 1 Frontend local con micro-badge y erradicación de `$` hardcodeado; Fase 2 sincronización bidireccional resiliente en Supabase `user_settings`). 142 tests unitarios en verde.
 - **Banner Beta y Canal de Feedback en Dashboard**: Componente `BetaBanner` descartable con clave versionada en `safeStorage`, botón mailto a `fynzcontrol0627@gmail.com` e inserción con gap nativo.
 - **Rendimiento de Listas en Móvil y Memoización Fina**: `FlatList` virtualizado en `transactions.tsx` con modelo aplanado y memoización de `TransactionItemCard` con `arePropsEqual`.

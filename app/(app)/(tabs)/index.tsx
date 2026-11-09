@@ -57,7 +57,24 @@ const DashboardScreen = (): JSX.Element => {
   );
 
   const banks = useCardsStore((state) => state.banks);
+  const cards = useCardsStore((state) => state.cards);
   const currencyCode = useSettingsStore((state) => state.currency);
+
+  const cardIdSet = useMemo(() => new Set(cards.map((c) => c.id)), [cards]);
+  const cardNameSet = useMemo(
+    () => new Set(cards.map((c) => c.name.trim().toLowerCase())),
+    [cards]
+  );
+
+  const realBanks = useMemo(
+    () =>
+      (banks || []).filter(
+        (b) =>
+          !cardIdSet.has(b.id) &&
+          !cardNameSet.has(b.name.trim().toLowerCase())
+      ),
+    [banks, cardIdSet, cardNameSet]
+  );
 
   const currencySymbol =
     currencyCode === 'EUR' ? '€' : currencyCode === 'BRL' ? 'R$' : '$';
@@ -65,7 +82,7 @@ const DashboardScreen = (): JSX.Element => {
   // Resumen computado de cuentas bancarias y liquidez disponible
   const bankSummaries = useMemo<BankAccountSummary[]>(() => {
     // 1. Cómputo de saldos por banco registrado
-    const computedList: BankAccountSummary[] = (banks || []).map((b) => {
+    const computedList: BankAccountSummary[] = (realBanks || []).map((b) => {
       const bal = getBankComputedBalance(b.id, b.initialBalance);
       const custody = getBankCustodyAmount(b.id);
       return {
@@ -121,7 +138,13 @@ const DashboardScreen = (): JSX.Element => {
           ? Number(((item.balance / totalPositive) * 100).toFixed(1))
           : 0,
     }));
-  }, [banks, transactions, getBankComputedBalance, getBankCustodyAmount, netBalance]);
+  }, [
+    realBanks,
+    transactions,
+    getBankComputedBalance,
+    getBankCustodyAmount,
+    netBalance,
+  ]);
 
   // Liquidez total real sumando cuentas y saldos disponibles
   const totalLiquidBalance = useMemo<number>(() => {
