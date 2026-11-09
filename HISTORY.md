@@ -2591,3 +2591,25 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 - **Decisiones Permanentes**:
   - Toda preferencia o configuración de usuario que deba persistir entre dispositivos debe mapearse en `src/lib/sync-adapters.ts` e integrarse en `syncPull` y `syncPushUserSettings` de `sync-service.ts`.
   - Los cambios en la configuración deben reflejarse de inmediato en el store local y despachar su sincronización en segundo plano sin bloquear la experiencia de usuario.
+
+
+### [TASK-DASHBOARD-BANK-CARDS-ISOLATION] - 2026-11-09
+- **Archivos Intervenidos**:
+  - `app/(app)/(tabs)/index.tsx`
+  - `src/store/cards-store.ts`
+  - *(Más saneamiento remoto en tabla `banks` de Supabase)*
+- **Resumen Técnico**:
+  1. **Saneamiento en Supabase**:
+     - Soft-delete (`deleted_at = now()`) de las 4 tarjetas de crédito duplicadas el 16-10-2026 en la tabla `banks` (`Mastercard Gold`, `visa Platinum`, `Mastercard`, `Visa`), erradicando registros contaminados en la base de datos remota.
+  2. **Blindaje Frontend en Dashboard (`app/(app)/(tabs)/index.tsx`)**:
+     - Derivación defensiva de `realBanks` excluyendo por ID y nombre normalizado cualquier entidad que coincida con una tarjeta de crédito registrada en `cards`, antes de calcular `bankSummaries` y totalizar saldos bancarios.
+     - Garantía de que la sección de Cuentas Bancarias del Dashboard muestre de forma pura y exclusiva cuentas de ahorros/corrientes legítimas.
+  3. **Blindaje y Purga en Tienda (`src/store/cards-store.ts`)**:
+     - Funciones utilitarias `filterValidBanks` y `purgeInvalidBanks` para depurar cualquier tarjeta remanente en la lista `banks`.
+     - Inmunidad en el reconciliador `merge` de Zustand `safeStorage`: asegura que cualquier hidratación o lectura de almacenamiento local filtre automáticamente entidades no válidas sin propagar inconsistencias.
+  4. **Calidad y Verificación**:
+     - TypeScript: 0 errores (`npx tsc --noEmit`).
+     - Jest: 142/142 pruebas aprobadas (100% pass, 7 suites).
+- **Decisiones Permanentes**:
+  - `banks` nunca debe contener ni renderizar entidades que sean tarjetas de crédito (`cards`).
+  - Tanto la capa de presentación (Dashboard) como la capa de persistencia (`cards-store.ts`) deben aplicar defensas activas (`filterValidBanks`, `realBanks`) para evitar duplicidad de tarjetas como cuentas bancarias ante cualquier desfase de datos históricos o remotos.
