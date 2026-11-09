@@ -137,6 +137,12 @@ export const SettingsSectionList = ({
   const handleCurrencySelect = (selectedCurrency: CurrencyCode): void => {
     setCurrency(selectedCurrency);
     onCurrencyChange?.(selectedCurrency);
+    supabase.auth.getSession().then(({ data }) => {
+      const uid = data.session?.user?.id;
+      if (uid) {
+        syncService.syncPushUserSettings(uid, selectedCurrency).catch(() => {});
+      }
+    }).catch(() => {});
   };
 
   const handleBiometricToggle = async (nextValue: boolean): Promise<void> => {

@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useCardsStore, setCardSyncHandlers } from '../store/cards-store';
 import { useDebtsStore, setDebtSyncHandlers } from '../store/debts-store';
 import { useTransactionsStore, setTransactionSyncHandlers } from '../store/transactions-store';
+import { useSettingsStore, type CurrencyCode } from '../store/settings-store';
 import { safeStorage } from '../store/safe-storage';
 import {
   bankToRow,
@@ -22,6 +23,8 @@ import {
   rowToLoan as rowToFriendLoan,
   transactionToRow,
   rowToTransaction,
+  settingsToRow,
+  rowToSettings,
   toDeterministicUuid,
   type BankRow,
   type CreditCardRow,
@@ -30,6 +33,7 @@ import {
   type ThirdPartyCardChargeRow,
   type FriendLoanRow,
   type TransactionRow,
+  type UserSettingsRow,
 } from '../lib/sync-adapters';
 
 export type SyncTable =
@@ -606,6 +610,25 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
       .eq('user_id', targetUserId)
       .not('deleted_at', 'is', null);
 
+    // 8. Pull configuración de usuario (user_settings)
+    try {
+      const { data: settingsData, error: settingsError } = await supabase
+        .from('user_settings')
+        .select('*')
+        .eq('user_id', targetUserId)
+        .is('deleted_at', null)
+        .maybeSingle();
+
+      if (!settingsError && settingsData && settingsData.currency) {
+        useSettingsStore.getState().setCurrency(settingsData.currency);
+        if (settingsData.privacy_mode !== undefined) {
+          useSettingsStore.getState().setPrivacyMode(Boolean(settingsData.privacy_mode));
+        }
+      }
+    } catch (err) {
+      console.warn('[SyncService] Error fetching user_settings in syncPull:', err);
+    }
+
     // Aplicar actualizaciones a Zustand con Escudo Anti-Zombis (filtrar bajas pendientes)
     if (banksData && banksData.length > 0) {
       const pendingBankIds = getPendingDeletionIdSet('banks');
@@ -848,6 +871,25 @@ export const syncAll = async (userId?: string): Promise<SyncResult> => {
     notifySyncListeners(false);
     isSyncInProgress = false;
     notifySyncStatusListeners();
+  }
+};
+
+export const syncPushUserSettings = async (
+  userId: string,
+  currency: CurrencyCode
+): Promise<void> => {
+  try {
+    const privacyMode = useSettingsStore.getState().privacyMode;
+    const biometricsEnabled = useSettingsStore.getState().biometricsEnabled;
+    const row = settingsToRow(userId, currency, privacyMode, biometricsEnabled);
+    const { error } = await supabase
+      .from('user_settings')
+      .upsert(row, { onConflict: 'user_id' });
+    if (error) {
+      console.warn('[SyncService] Failed to upsert user_settings:', error.message);
+    }
+  } catch (err) {
+    console.warn('[SyncService] Error in syncPushUserSettings:', err);
   }
 };
 
@@ -1270,6 +1312,7 @@ export const syncService = {
   syncPush,
   syncPull,
   syncAll,
+  syncPushUserSettings,
   flushPendingDeletions,
   getPendingDeletions,
   enqueuePendingDeletion,

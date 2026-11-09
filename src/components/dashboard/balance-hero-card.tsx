@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { useSettingsStore } from '../../store/settings-store';
 import { getBankIdentity } from '../../utils/bank-identity';
+import { getCurrencySymbol, getCurrencyBadgeLabel } from '@/utils/currency';
 import { BankDeckCard, AddBankDeckCard } from './bank-deck-card';
 
 export type BankAccountSummary = {
@@ -36,15 +37,6 @@ export type BalanceHeroCardProps = {
   income?: number;
   /** @deprecated compatibilidad con llamadas anteriores */
   expenses?: number;
-};
-
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  USD: '$',
-  EUR: '€',
-  BRL: 'R$',
-  ARS: '$',
-  COP: '$',
-  MXN: '$',
 };
 
 const formatAmount = (val: number): string => {
@@ -81,7 +73,7 @@ const BalanceHeroCard = ({
   const handleTogglePrivacy = onTogglePrivacy ?? storeTogglePrivacyMode;
 
   const activeCurrency =
-    currencyProp ?? CURRENCY_SYMBOLS[storeCurrency] ?? storeCurrency;
+    currencyProp ?? getCurrencySymbol(storeCurrency);
 
   const net = monthlyIncome - monthlyExpense;
   const savingsRate =
@@ -112,6 +104,9 @@ const BalanceHeroCard = ({
         <View style={styles.topRow}>
           <View style={styles.labelGroup}>
             <Text style={styles.label}>LIQUIDEZ TOTAL DISPONIBLE</Text>
+            <View style={styles.currencyBadge}>
+              <Text style={styles.currencyBadgeText}>{getCurrencyBadgeLabel(storeCurrency)}</Text>
+            </View>
             <View
               style={[
                 styles.healthChip,
@@ -279,6 +274,22 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 10,
     fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  currencyBadge: {
+    backgroundColor: 'rgba(0, 255, 163, 0.08)',
+    borderColor: 'rgba(0, 255, 163, 0.25)',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    marginLeft: 6,
+    alignSelf: 'center',
+  },
+  currencyBadgeText: {
+    color: colors.primary, // '#00FFA3'
+    fontSize: 9,
+    fontWeight: '800',
     letterSpacing: 0.8,
   },
   healthChip: {

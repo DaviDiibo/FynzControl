@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { useTransactionsStore, type TransactionType } from '../../store/transactions-store';
 import DeleteTransactionModal from '../transactions/delete-transaction-modal';
+import { useSettingsStore } from '@/store/settings-store';
+import { getCurrencySymbol } from '@/utils/currency';
 
 export type { TransactionType };
 
@@ -37,7 +39,7 @@ const defaultTransactions: RecentTransaction[] = [
     type: 'income',
     amount: 2450.0,
     dateFormatted: 'Hoy, 09:15',
-    currency: '$',
+
   },
   {
     id: 'tx-2',
@@ -47,7 +49,7 @@ const defaultTransactions: RecentTransaction[] = [
     type: 'expense',
     amount: 84.5,
     dateFormatted: 'Hoy, 14:30',
-    currency: '$',
+
   },
   {
     id: 'tx-3',
@@ -57,7 +59,7 @@ const defaultTransactions: RecentTransaction[] = [
     type: 'expense',
     amount: 35.0,
     dateFormatted: 'Ayer, 19:40',
-    currency: '$',
+
   },
   {
     id: 'tx-4',
@@ -67,7 +69,7 @@ const defaultTransactions: RecentTransaction[] = [
     type: 'income',
     amount: 320.0,
     dateFormatted: '08 Oct 2026',
-    currency: '$',
+
   },
   {
     id: 'tx-5',
@@ -77,7 +79,7 @@ const defaultTransactions: RecentTransaction[] = [
     type: 'expense',
     amount: 62.0,
     dateFormatted: '07 Oct 2026',
-    currency: '$',
+
   },
 ];
 
@@ -101,6 +103,8 @@ const RecentTransactionsList = ({
   const [activeFilter, setActiveFilter] = useState<TransactionFilter>('all');
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
   const deleteTransaction = useTransactionsStore((state) => state.deleteTransaction);
+  const currency = useSettingsStore((state) => state.currency);
+  const currencySymbol = getCurrencySymbol(currency);
 
   const handleConfirmDelete = (): void => {
     if (transactionToDelete) {
@@ -188,7 +192,7 @@ const RecentTransactionsList = ({
           {filteredList.map((item) => {
             const isPositive = item.type === 'income' || item.type === 'reimbursement';
             const isCardPayment = item.type === 'card_payment';
-            const currencySymbol = item.currency ?? '$';
+            const itemCurrency = item.currency ?? currencySymbol;
             const amountColor = isPositive
               ? colors.primary
               : isCardPayment
@@ -249,7 +253,7 @@ const RecentTransactionsList = ({
                 {/* Lado derecho: Monto con signo explícito */}
                 <View style={styles.amountContainer}>
                   <Text style={[styles.amountText, { color: amountColor }]}>
-                    {amountPrefix}{currencySymbol} {formatAmount(item.amount)}
+                    {amountPrefix}{itemCurrency} {formatAmount(item.amount)}
                   </Text>
                 </View>
 
@@ -287,10 +291,11 @@ const RecentTransactionsList = ({
                   transactionToDelete.type === 'card_payment'
                     ? 'expense'
                     : transactionToDelete.type,
-                currency: transactionToDelete.currency,
+                currency: transactionToDelete.currency ?? currencySymbol,
               }
             : null
         }
+        currencySymbol={transactionToDelete?.currency ?? currencySymbol}
         onCancel={() => setTransactionToDelete(null)}
         onConfirm={handleConfirmDelete}
       />

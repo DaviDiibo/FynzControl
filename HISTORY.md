@@ -2519,3 +2519,75 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
      - Jest: 139/139 pruebas unitarias aprobadas (100% pass, 7 suites).
 - **Decisiones Permanentes**:
   - Todo artefacto de release de escritorio debe estar firmado con `controlfynz.key` y acompañado de su manifiesto `latest.json` en UTF-8 puro sin BOM.
+
+
+### [TASK-CURRENCY-PHASE1-SUBTASK1] - 2026-11-08
+- **Archivos Intervenidos**:
+  - `src/utils/currency.ts`
+  - `app/(app)/(modal)/new-transaction.tsx`
+  - `src/components/dashboard/balance-hero-card.tsx`
+  - `src/__tests__/currency.test.ts`
+- **Resumen Técnico**:
+  1. **Helper `getCurrencyBadgeLabel` y Estandarización (`src/utils/currency.ts`)**:
+     - Creación de la función `getCurrencyBadgeLabel(currency)` para devolver la etiqueta limpia del código de divisa (`'COP'`, `'USD'`, etc.) o fallback seguro a `'COP'`.
+     - Exportación de la lista canónica de símbolos y divisas soportadas para evitar mapas inline duplicados en componentes de interfaz.
+  2. **Eliminación de Símbolos Hardcodeados en Formulario de Transacción (`app/(app)/(modal)/new-transaction.tsx`)**:
+     - Sustitución de `$` hardcodeado en el prefijo del input de monto por el símbolo dinámico canónico `getCurrencySymbol(currency)`.
+     - Corrección en la selección y renderizado de deudas vinculadas, resolviendo el símbolo según la divisa configurada en el perfil/cuenta.
+  3. **Micro-badge Cyberpunk en Balance General (`src/components/dashboard/balance-hero-card.tsx`)**:
+     - Incorporación de un micro-badge no intrusivo (`[ COP ]` / `[ USD ]`) junto al título "Patrimonio Neto", disipando ambigüedades visuales cuando el símbolo común `$` se utiliza en diferentes monedas.
+     - Eliminación del mapa estático local `CURRENCY_SYMBOLS`, reemplazándolo por el helper centralizado `getCurrencySymbol(currency)`.
+  4. **Pruebas Unitarias Exhaustivas (`src/__tests__/currency.test.ts`)**:
+     - Cobertura completa para `getCurrencyBadgeLabel`, `getCurrencySymbol`, `formatCurrency` y formateo con valores límite, nulos o no reconocidos.
+  5. **Calidad y Verificación**:
+     - `npx tsc --noEmit`: 0 errores.
+     - `npm test`: 142/142 pruebas aprobadas (100% pass, 7 suites).
+- **Decisiones Permanentes**:
+  - Toda representación de moneda en la interfaz debe resolver su símbolo exclusivamente mediante `getCurrencySymbol(currency)` de `src/utils/currency.ts`. Queda prohibido hardcodear `$` o definir mapas de divisas locales.
+  - Para disipar ambigüedades entre monedas que comparten el símbolo `$`, las tarjetas principales de balance deben mostrar el micro-badge `[ <CODIGO> ]` obtenido con `getCurrencyBadgeLabel`.
+
+
+### [TASK-CURRENCY-PHASE1-SUBTASK2] - 2026-11-08
+- **Archivos Intervenidos**:
+  - `src/components/dashboard/recent-transactions-list.tsx`
+  - `src/components/transactions/transaction-item-card.tsx`
+  - `src/components/cards/card-payment-modal.tsx`
+- **Resumen Técnico**:
+  1. **Conexión de `useSettingsStore` en Lista de Transacciones Recientes (`recent-transactions-list.tsx`)**:
+     - Conexión con `useSettingsStore((s) => s.currency)` y propagación reactiva de `currencySymbol={getCurrencySymbol(currency)}` hacia cada elemento `TransactionItemCard`.
+  2. **Soporte Dinámico y Memoización Fina en Tarjeta de Transacción (`transaction-item-card.tsx`)**:
+     - Inclusión de la prop opcional `currencySymbol?: string` en la interfaz `TransactionItemCardProps`.
+     - Reemplazo del prefijo fijo `$` por `currencySymbol || '$'` en el renderizado de montos de transacciones.
+     - Calibración de la función comparadora `arePropsEqual` en `React.memo` evaluando `prevProps.currencySymbol === nextProps.currencySymbol`, garantizando re-renderizado instantáneo ante cambios de configuración de divisa y evitando ciclos innecesarios.
+  3. **Erradicación de Fallbacks Huérfanos a `$` en Modal de Pago de Tarjeta (`card-payment-modal.tsx`)**:
+     - Lectura centralizada de `currency` vía `useSettingsStore` y resolución canónica del símbolo mediante `getCurrencySymbol(currency)`.
+     - Eliminación de fallbacks hardcodeados a `$` tanto en los inputs de pago como en el desglose de deuda actual y cuota mínima a liquidar.
+  4. **Calidad y Verificación**:
+     - TypeScript: 0 errores (`npx tsc --noEmit`).
+     - Jest: 142/142 pruebas unitarias aprobadas (100% pass, 7 suites).
+- **Decisiones Permanentes**:
+  - Todos los componentes de listado transaccional y modales de pago deben consumir la divisa del usuario a través de `useSettingsStore` y resolver su símbolo con `getCurrencySymbol(currency)`.
+  - Queda prohibido hardcodear fallbacks estáticos a `$` en inputs o cards.
+  - Toda optimización con `React.memo` en componentes que muestren montos debe incluir explícitamente `currencySymbol` en su función `arePropsEqual`.
+
+
+### [TASK-CURRENCY-PHASE2-CLOUD-SYNC] - 2026-11-08
+- **Archivos Intervenidos**:
+  - `src/lib/sync-adapters.ts`
+  - `src/services/sync-service.ts`
+  - `src/components/settings/settings-section-list.tsx`
+- **Resumen Técnico**:
+  1. **Adaptadores Bidireccionales para Ajustes (`src/lib/sync-adapters.ts`)**:
+     - Definición de la interfaz `UserSettingsRow` y funciones de conversión `settingsToRow` y `rowToSettings`.
+     - Mapeo estricto y seguro de la divisa (`currency`) de `useSettingsStore` hacia las columnas de Supabase `user_settings`.
+  2. **Integración en Servicio de Sincronización (`src/services/sync-service.ts`)**:
+     - Descarga resiliente de `user_settings` durante `syncPull`, actualizando reactivamente el store local con `useSettingsStore.getState().setCurrency(remoteSettings.currency)` si existe registro remoto.
+     - Implementación del método público `syncPushUserSettings(userId?: string)`, ejecutando un `upsert` seguro en la tabla `user_settings` con `onConflict: 'user_id'`.
+  3. **Persistencia Remota Asíncrona en Ajustes (`src/components/settings/settings-section-list.tsx`)**:
+     - Guardado asíncrono en segundo plano mediante `syncPushUserSettings()` al pulsar cualquier chip de divisa en `SettingsSectionList`, asegurando retroalimentación táctil inmediata (0ms) en la interfaz mientras se sincroniza en Supabase.
+  4. **Calidad y Verificación**:
+     - `npx tsc --noEmit`: 0 errores.
+     - `npm test`: 142/142 pruebas aprobadas (100% pass, 7 suites).
+- **Decisiones Permanentes**:
+  - Toda preferencia o configuración de usuario que deba persistir entre dispositivos debe mapearse en `src/lib/sync-adapters.ts` e integrarse en `syncPull` y `syncPushUserSettings` de `sync-service.ts`.
+  - Los cambios en la configuración deben reflejarse de inmediato en el store local y despachar su sincronización en segundo plano sin bloquear la experiencia de usuario.
