@@ -25,6 +25,21 @@ export const getCurrencySymbol = (currencyCode?: string): string => {
   }
 };
 
+export const getCurrencyBadgeLabel = (currencyCode?: string): string => {
+  const code = currencyCode?.toUpperCase();
+  switch (code) {
+    case 'EUR':
+    case 'BRL':
+    case 'COP':
+    case 'ARS':
+    case 'MXN':
+    case 'USD':
+      return code;
+    default:
+      return 'USD';
+  }
+};
+
 export const formatCurrency = (
   amount: number,
   currencyCode?: string,

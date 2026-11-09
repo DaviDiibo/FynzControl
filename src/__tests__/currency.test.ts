@@ -5,6 +5,7 @@ jest.mock('expo-router', () => ({
 
 import {
   getCurrencySymbol,
+  getCurrencyBadgeLabel,
   formatCurrency,
   sanitizeDecimalInput,
 } from '../utils/currency';
@@ -35,6 +36,28 @@ describe('Currency Utils y Corrección de Fechas en Estadísticas', () => {
       expect(getCurrencySymbol('brl')).toBe('R$');
       expect(getCurrencySymbol('unknown')).toBe('$');
       expect(getCurrencySymbol(undefined)).toBe('$');
+    });
+  });
+
+  describe('getCurrencyBadgeLabel', () => {
+    it('retorna el código en mayúsculas para divisas soportadas', () => {
+      expect(getCurrencyBadgeLabel('USD')).toBe('USD');
+      expect(getCurrencyBadgeLabel('EUR')).toBe('EUR');
+      expect(getCurrencyBadgeLabel('BRL')).toBe('BRL');
+      expect(getCurrencyBadgeLabel('COP')).toBe('COP');
+      expect(getCurrencyBadgeLabel('ARS')).toBe('ARS');
+      expect(getCurrencyBadgeLabel('MXN')).toBe('MXN');
+    });
+
+    it('maneja minúsculas y retorna código en mayúsculas', () => {
+      expect(getCurrencyBadgeLabel('usd')).toBe('USD');
+      expect(getCurrencyBadgeLabel('eur')).toBe('EUR');
+      expect(getCurrencyBadgeLabel('brl')).toBe('BRL');
+    });
+
+    it('retorna USD por defecto para divisas no soportadas o undefined', () => {
+      expect(getCurrencyBadgeLabel('unknown')).toBe('USD');
+      expect(getCurrencyBadgeLabel(undefined)).toBe('USD');
     });
   });
 

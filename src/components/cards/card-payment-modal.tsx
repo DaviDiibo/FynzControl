@@ -15,6 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { useCardsStore, type CreditCard } from '../../store/cards-store';
 import { useTransactionsStore } from '../../store/transactions-store';
+import { useSettingsStore } from '@/store/settings-store';
+import { getCurrencySymbol } from '@/utils/currency';
 
 type CardPaymentModalProps = {
   visible: boolean;
@@ -49,6 +51,8 @@ export const CardPaymentModal = ({
     (state) => state.getBankComputedBalance
   );
   const addTransaction = useTransactionsStore((state) => state.addTransaction);
+  const currency = useSettingsStore((state) => state.currency);
+  const currencySymbol = getCurrencySymbol(currency);
 
   // Auto-seleccionar banco por defecto o por coincidencia con la tarjeta
   useEffect(() => {
@@ -99,7 +103,7 @@ export const CardPaymentModal = ({
 
     if (parsedAmount > selectedBankBalance) {
       setValidationError(
-        `Saldo insuficiente en ${selectedBank.name} ($${formatCurrency(selectedBankBalance)}).`
+        `Saldo insuficiente en ${selectedBank.name} (${currencySymbol}${formatCurrency(selectedBankBalance)}).`
       );
       return;
     }
@@ -195,7 +199,7 @@ export const CardPaymentModal = ({
                   <Text style={styles.hudLabel}>A PAGAR ESTE MES</Text>
                 </View>
                 <Text style={styles.hudAmount}>
-                  ${formatCurrency(monthDue)}
+                  {currencySymbol}{formatCurrency(monthDue)}
                 </Text>
                 <Text style={styles.hudSubtitle}>
                   Vence: {paymentDayDisplay}
@@ -208,7 +212,7 @@ export const CardPaymentModal = ({
                   <Text style={styles.hudLabel}>DEUDA DIFERIDA</Text>
                 </View>
                 <Text style={[styles.hudAmount, { color: colors.primary }]}>
-                  ${formatCurrency(totalDue)}
+                  {currencySymbol}{formatCurrency(totalDue)}
                 </Text>
                 <Text style={styles.hudSubtitle}>Total acumulado</Text>
               </View>
@@ -295,7 +299,7 @@ export const CardPaymentModal = ({
                   isOverBalance ? styles.inputContainerError : null,
                 ]}
               >
-                <Text style={styles.currencyPrefix}>$</Text>
+                <Text style={styles.currencyPrefix}>{currencySymbol}</Text>
                 <TextInput
                   style={styles.input}
                   value={amount}
@@ -392,7 +396,7 @@ export const CardPaymentModal = ({
                             insufficient ? { color: colors.error } : null,
                           ]}
                         >
-                          ${formatCurrency(balance)}
+                          {currencySymbol}{formatCurrency(balance)}
                         </Text>
                       </TouchableOpacity>
                     );
@@ -411,7 +415,7 @@ export const CardPaymentModal = ({
               <View style={styles.errorContainer}>
                 <Ionicons name="warning-outline" size={16} color={colors.error} />
                 <Text style={styles.errorText}>
-                  Saldo insuficiente en {selectedBank?.name} ($
+                  Saldo insuficiente en {selectedBank?.name} ({currencySymbol}
                   {formatCurrency(selectedBankBalance)}).
                 </Text>
               </View>
@@ -444,7 +448,7 @@ export const CardPaymentModal = ({
                     : styles.confirmButtonTextActive,
                 ]}
               >
-                Confirmar Pago • ${formatCurrency(parsedAmount)}
+                Confirmar Pago • {currencySymbol}{formatCurrency(parsedAmount)}
               </Text>
             </TouchableOpacity>
           </ScrollView>

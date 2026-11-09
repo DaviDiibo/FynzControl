@@ -4,6 +4,8 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { type TransactionType } from '../../store/transactions-store';
+import { useSettingsStore } from '@/store/settings-store';
+import { getCurrencySymbol } from '@/utils/currency';
 
 export type { TransactionType };
 
@@ -24,6 +26,7 @@ export type TransactionRecord = {
 
 export type TransactionItemCardProps = {
   item: TransactionRecord;
+  currencySymbol?: string;
   onPress?: (item: TransactionRecord) => void;
   onLongPress?: (item: TransactionRecord) => void;
   onDelete?: (item: TransactionRecord) => void;
@@ -38,13 +41,15 @@ const formatAmount = (val: number): string => {
 
 const TransactionItemCardBase = ({
   item,
+  currencySymbol: propCurrencySymbol,
   onPress,
   onLongPress,
   onDelete,
 }: TransactionItemCardProps): JSX.Element => {
   const isPositive = item.type === 'income' || item.type === 'reimbursement';
   const isCardPayment = item.type === 'card_payment';
-  const currency = item.currency || '$';
+  const storeCurrency = useSettingsStore((state) => state.currency);
+  const currency = propCurrencySymbol ?? (item.currency || getCurrencySymbol(storeCurrency));
 
   const iconBg = isPositive
     ? 'rgba(0, 255, 163, 0.12)'
@@ -238,7 +243,8 @@ const arePropsEqual = (
   if (
     prevProps.onPress !== nextProps.onPress ||
     prevProps.onLongPress !== nextProps.onLongPress ||
-    prevProps.onDelete !== nextProps.onDelete
+    prevProps.onDelete !== nextProps.onDelete ||
+    prevProps.currencySymbol !== nextProps.currencySymbol
   ) {
     return false;
   }

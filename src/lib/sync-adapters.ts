@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import type { CurrencyCode } from '../store/settings-store';
 import type { Transaction, TransactionType } from '../store/transactions-store';
 import type { Bank, CreditCard } from '../store/cards-store';
 import type {
@@ -162,6 +163,16 @@ export type TransactionRow = {
   updated_at: string;
   deleted_at: string | null;
 };
+
+export interface UserSettingsRow {
+  user_id: string;
+  currency: CurrencyCode;
+  privacy_mode?: boolean;
+  biometrics_enabled?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  deleted_at?: string | null;
+}
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -620,3 +631,24 @@ export const rowToTransaction = (row: TransactionRow): Transaction => {
     thirdPartyAllocations: row.third_party_allocations ?? [],
   };
 };
+
+export const settingsToRow = (
+  userId: string,
+  currency: CurrencyCode,
+  privacyMode?: boolean,
+  biometricsEnabled?: boolean
+): UserSettingsRow => ({
+  user_id: userId,
+  currency,
+  privacy_mode: privacyMode ?? false,
+  biometrics_enabled: biometricsEnabled ?? false,
+  updated_at: new Date().toISOString(),
+});
+
+export const rowToSettings = (
+  row: UserSettingsRow
+): { currency: CurrencyCode; privacyMode: boolean; biometricsEnabled: boolean } => ({
+  currency: row.currency || 'USD',
+  privacyMode: Boolean(row.privacy_mode),
+  biometricsEnabled: Boolean(row.biometrics_enabled),
+});

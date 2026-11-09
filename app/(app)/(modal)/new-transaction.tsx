@@ -25,6 +25,7 @@ import { useDebtsStore } from '../../../src/store/debts-store';
 import { useCardsStore } from '../../../src/store/cards-store';
 import { useSettingsStore } from '../../../src/store/settings-store';
 import { useIsWide } from '../../../src/hooks/use-responsive';
+import { getCurrencySymbol } from '@/utils/currency';
 
 type OperationType = 'expense' | 'income';
 
@@ -82,7 +83,7 @@ const NewTransactionModal = (): JSX.Element => {
 
   const { cards, addCard, banks, addBank } = useCardsStore();
   const currency = useSettingsStore((state) => state.currency);
-  const currencySymbol = currency === 'EUR' ? '€' : currency === 'BRL' ? 'R$' : '$';
+  const currencySymbol = getCurrencySymbol(currency);
 
   const [selectedBankId, setSelectedBankId] = useState<string | null>(() => (banks.length > 0 ? banks[0].id : null));
   const [paymentMethod, setPaymentMethod] = useState<'cash_debit' | 'credit_card'>('cash_debit');
@@ -385,7 +386,7 @@ const NewTransactionModal = (): JSX.Element => {
 
           {/* Amount Input */}
           <View style={[styles.amountCard, { borderColor: `${activeColor}40` }]}>
-            <Text style={[styles.currencySymbol, { color: activeColor }]}>$</Text>
+            <Text style={[styles.currencySymbol, { color: activeColor }]}>{currencySymbol}</Text>
             <TextInput
               style={styles.amountInput}
               value={amount}
@@ -1053,7 +1054,7 @@ const NewTransactionModal = (): JSX.Element => {
                               isSelected && styles.linkedDebtTextSelected,
                             ]}
                           >
-                            {debt.title} (Resta: ${formattedRemaining})
+                            {debt.title} (Resta: {currencySymbol}{formattedRemaining})
                           </Text>
                         </TouchableOpacity>
                       );
@@ -1100,7 +1101,7 @@ const NewTransactionModal = (): JSX.Element => {
                               isSelected && styles.linkedLoanTextSelected,
                             ]}
                           >
-                            {loan.friendName} (Por cobrar: ${formattedRemaining})
+                            {loan.friendName} (Por cobrar: {currencySymbol}{formattedRemaining})
                           </Text>
                         </TouchableOpacity>
                       );
