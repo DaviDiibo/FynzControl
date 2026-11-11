@@ -64,19 +64,48 @@ export const useAppHydration = (): boolean => {
     let isCancelled = false;
 
     const runInitialSync = async (): Promise<void> => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
 
-      if (isCancelled) return;
+        if (isCancelled) return;
 
-      const activeUserId = session?.user?.id || useAuthStore.getState().user?.id;
-      if (activeUserId) {
-        await syncService.flushPendingDeletions(activeUserId).catch(() => {});
-        if (isCancelled) return;
-        await syncService.syncPull(activeUserId).catch(() => {});
-        if (isCancelled) return;
-        syncService.startRealtimeSubscription(activeUserId);
+        const activeUserId = session?.user?.id || useAuthStore.getState().user?.id;
+        if (activeUserId) {
+          const [pendingDeletions, pendingChargeMutations] = await Promise.all([
+            syncService.getPendingDeletions(),
+            syncService.getPendingChargeMutations(),
+          ]);
+          if (isCancelled) return;
+
+          const hasPendingLocalMutations =
+            pendingDeletions.length > 0 ||
+            Object.keys(pendingChargeMutations).length > 0 ||
+            syncService.hasPendingBackgroundPush();
+
+          if (hasPendingLocalMutations) {
+            await syncService.syncAll(activeUserId, { silent: true }).catch(() => {});
+          } else {
+            await syncService.flushPendingDeletions(activeUserId).catch(() => {});
+            if (isCancelled) return;
+            await syncService.syncPull(activeUserId).catch(() => {});
+          }
+
+          if (isCancelled) return;
+          syncService.startRealtimeSubscription(activeUserId);
+        }
+      } catch {
+        // Silencioso en modo offline o ante fallas transitorias de sesión
+      } finally {
+        if (!isCancelled) {
+          useDebtsStore
+            .getState()
+            .reconcileThirdPartyCurrentPeriod(
+              useTransactionsStore.getState().transactions,
+              new Date()
+            );
+        }
       }
     };
 
@@ -104,24 +133,35 @@ export const useAppHydration = (): boolean => {
         return;
       }
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (isCancelled || !session) {
-        return;
-      }
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (isCancelled || !session) {
+          return;
+        }
 
-      const activeUserId = session.user?.id || useAuthStore.getState().user?.id;
-      if (!activeUserId) {
-        return;
-      }
+        const activeUserId = session.user?.id || useAuthStore.getState().user?.id;
+        if (!activeUserId) {
+          return;
+        }
 
-      lastFocusSyncTimestamp = now;
-      await syncService.flushPendingDeletions(activeUserId).catch(() => {});
-      if (isCancelled) return;
-      await syncService.syncPull(activeUserId).catch(() => {});
-      if (isCancelled) return;
-      syncService.startRealtimeSubscription(activeUserId);
+        lastFocusSyncTimestamp = now;
+        await syncService.syncAll(activeUserId, { silent: true }).catch(() => {});
+        if (isCancelled) return;
+        syncService.startRealtimeSubscription(activeUserId);
+      } catch {
+        // Silencioso en modo offline o ante fallas transitorias de sesión
+      } finally {
+        if (!isCancelled) {
+          useDebtsStore
+            .getState()
+            .reconcileThirdPartyCurrentPeriod(
+              useTransactionsStore.getState().transactions,
+              new Date()
+            );
+        }
+      }
     };
 
     const handleAppStateChange = (nextAppState: AppStateStatus): void => {

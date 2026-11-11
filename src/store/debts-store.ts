@@ -93,6 +93,24 @@ export interface ThirdPartyChargeAllocation {
   previousSettledAt?: string;
 }
 
+export interface ReconcileTransactionRef {
+  id: string;
+  type: 'income' | 'expense' | 'reimbursement' | 'card_payment';
+  amount: number;
+  date: string;
+  createdAt?: string;
+  title?: string;
+  notes?: string;
+  category?: string;
+  personName?: string;
+  relatedPersonName?: string;
+  relatedPersonId?: string;
+  relatedChargeId?: string;
+  cardId?: string;
+  cardName?: string;
+  thirdPartyAllocations?: ThirdPartyChargeAllocation[];
+}
+
 export interface FriendLoan {
   id: string;
   friendName: string; // ej: 'Andrés Gómez'
@@ -181,10 +199,33 @@ export interface DebtsState {
     cardId?: string,
     personId?: string
   ) => { updatedCharges: { id: string; appliedAmount: number }[]; allocations: ThirdPartyChargeAllocation[] };
-  revertThirdPartyAllocations: (allocations: ThirdPartyChargeAllocation[]) => boolean;
-  revertThirdPartyChargeCollection: (chargeId: string, amount: number) => void;
-  revertThirdPartyChargeAbono: (chargeId: string, amount: number) => void;
-  revertThirdPartyPersonAbono: (personName: string, amount: number) => boolean;
+  revertThirdPartyAllocations: (
+    allocations: ThirdPartyChargeAllocation[],
+    remainingTransactions?: ReconcileTransactionRef[],
+    revertedTxDate?: string
+  ) => boolean;
+  revertThirdPartyChargeCollection: (
+    chargeId: string,
+    amount: number,
+    remainingTransactions?: ReconcileTransactionRef[],
+    revertedTxDate?: string
+  ) => void;
+  revertThirdPartyChargeAbono: (
+    chargeId: string,
+    amount: number,
+    remainingTransactions?: ReconcileTransactionRef[],
+    revertedTxDate?: string
+  ) => void;
+  revertThirdPartyPersonAbono: (
+    personName: string,
+    amount: number,
+    remainingTransactions?: ReconcileTransactionRef[],
+    revertedTxDate?: string
+  ) => boolean;
+  reconcileThirdPartyCurrentPeriod: (
+    activeTransactions: ReconcileTransactionRef[],
+    referenceDate?: Date
+  ) => void;
   settleThirdPartyCharge: (id: string) => void;
   settleThirdPartyChargeByPerson: (personName: string, cardName?: string) => void;
   getThirdPartyMonthlyBillingSummary: (referenceDate?: Date) => ThirdPartyPersonMonthlySummary[];
@@ -214,6 +255,325 @@ const normalizeStr = (str: string): string =>
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim();
+
+const safeToDeterministicUuid = (id: string): string => {
+  try {
+    return toDeterministicUuid(id);
+  } catch {
+    return id;
+  }
+};
+
+const isSameEntityId = (a?: string | null, b?: string | null): boolean => {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return safeToDeterministicUuid(a) === safeToDeterministicUuid(b);
+};
+
+const getYearMonth = (
+  dateValue?: string | Date | null
+): { year: number; month: number } | null => {
+  if (!dateValue) return null;
+  const dt = dateValue instanceof Date ? dateValue : new Date(dateValue);
+  if (isNaN(dt.getTime())) return null;
+  return { year: dt.getFullYear(), month: dt.getMonth() };
+};
+
+const isSameYearAndMonth = (
+  a?: string | Date | null,
+  b?: string | Date | null
+): boolean => {
+  const ymA = getYearMonth(a);
+  const ymB = getYearMonth(b);
+  if (!ymA || !ymB) return false;
+  return ymA.year === ymB.year && ymA.month === ymB.month;
+};
+
+const getThirdPartyChargeBounds = (
+  charge: ThirdPartyCardCharge
+): {
+  chargeTotal: number;
+  installmentsCount: number;
+  monthlyAmount: number;
+  initialPaid: number;
+  maxInitialRemaining: number;
+} => {
+  const chargeTotal = Number((charge.totalAmount ?? charge.amount ?? 0).toFixed(2));
+  const installmentsCount =
+    charge.installmentsCount && charge.installmentsCount > 0 ? charge.installmentsCount : 1;
+  const monthlyAmount =
+    charge.monthlyInstallmentAmount && charge.monthlyInstallmentAmount > 0
+      ? charge.monthlyInstallmentAmount
+      : Math.round((chargeTotal / installmentsCount) * 100) / 100;
+  const initialPaid = Math.min(
+    installmentsCount,
+    Math.max(0, charge.initialPaidInstallments ?? 0)
+  );
+  const maxInitialRemaining =
+    initialPaid >= installmentsCount
+      ? 0
+      : Number(Math.max(0, chargeTotal - initialPaid * monthlyAmount).toFixed(2));
+
+  return {
+    chargeTotal,
+    installmentsCount,
+    monthlyAmount,
+    initialPaid,
+    maxInitialRemaining,
+  };
+};
+
+const doesTxMatchPersonForCharge = (
+  tx: ReconcileTransactionRef,
+  charge: ThirdPartyCardCharge,
+  people: PersonContact[]
+): boolean => {
+  if (tx.relatedPersonId && charge.personId && isSameEntityId(tx.relatedPersonId, charge.personId)) {
+    return true;
+  }
+
+  const chargePersonNorm = normalizeStr(charge.personName || '');
+  const txPersonNorm = normalizeStr(tx.relatedPersonName || tx.personName || '');
+
+  if (txPersonNorm && chargePersonNorm) {
+    if (
+      txPersonNorm === chargePersonNorm ||
+      txPersonNorm.includes(chargePersonNorm) ||
+      chargePersonNorm.includes(txPersonNorm)
+    ) {
+      return true;
+    }
+  }
+
+  if (txPersonNorm) {
+    const linkedPerson = people.find(
+      (p) =>
+        (charge.personId && isSameEntityId(p.id, charge.personId)) ||
+        normalizeStr(p.name) === chargePersonNorm
+    );
+    if (linkedPerson) {
+      const linkedNorm = normalizeStr(linkedPerson.name);
+      if (
+        linkedNorm === txPersonNorm ||
+        txPersonNorm.includes(linkedNorm) ||
+        linkedNorm.includes(txPersonNorm)
+      ) {
+        return true;
+      }
+    }
+  }
+
+  if (tx.relatedPersonId && chargePersonNorm) {
+    const personById = people.find((p) => isSameEntityId(p.id, tx.relatedPersonId));
+    if (personById) {
+      const pNorm = normalizeStr(personById.name);
+      if (
+        pNorm === chargePersonNorm ||
+        pNorm.includes(chargePersonNorm) ||
+        chargePersonNorm.includes(pNorm)
+      ) {
+        return true;
+      }
+    }
+  }
+
+  if (!txPersonNorm && !tx.relatedPersonId && chargePersonNorm) {
+    const titleNorm = normalizeStr(tx.title || '');
+    const notesNorm = normalizeStr(tx.notes || '');
+    if (
+      (titleNorm && titleNorm.includes(chargePersonNorm)) ||
+      (notesNorm && notesNorm.includes(chargePersonNorm))
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const getTxTimestamp = (tx: ReconcileTransactionRef): number => {
+  const raw = tx.date || tx.createdAt || '';
+  const ts = new Date(raw).getTime();
+  return isNaN(ts) ? 0 : ts;
+};
+
+const isTxCoveringChargeInCycle = (
+  tx: ReconcileTransactionRef,
+  charge: ThirdPartyCardCharge,
+  people: PersonContact[],
+  cycleDate: Date
+): boolean => {
+  if (tx.type !== 'reimbursement') return false;
+  if (!isSameYearAndMonth(tx.date || tx.createdAt, cycleDate)) return false;
+
+  if (
+    isSameEntityId(tx.relatedChargeId, charge.id) ||
+    Boolean(tx.thirdPartyAllocations?.some((a) => isSameEntityId(a.chargeId, charge.id)))
+  ) {
+    return true;
+  }
+
+  const hasExplicitLinks =
+    Boolean(tx.relatedChargeId) ||
+    Boolean(tx.thirdPartyAllocations && tx.thirdPartyAllocations.length > 0);
+  if (!hasExplicitLinks) {
+    return doesTxMatchPersonForCharge(tx, charge, people);
+  }
+
+  return false;
+};
+
+const findLatestPaymentDateForCharge = (
+  charge: ThirdPartyCardCharge,
+  remainingTransactions: ReconcileTransactionRef[],
+  people: PersonContact[]
+): string | undefined => {
+  const reimbursements = remainingTransactions.filter((t) => t.type === 'reimbursement');
+  if (reimbursements.length === 0) return undefined;
+
+  const directMatches = reimbursements.filter(
+    (t) =>
+      isSameEntityId(t.relatedChargeId, charge.id) ||
+      Boolean(t.thirdPartyAllocations?.some((a) => isSameEntityId(a.chargeId, charge.id)))
+  );
+
+  if (directMatches.length > 0) {
+    const sorted = [...directMatches].sort((a, b) => getTxTimestamp(b) - getTxTimestamp(a));
+    return sorted[0].date || sorted[0].createdAt || undefined;
+  }
+
+  const legacyPersonMatches = reimbursements.filter((t) => {
+    const hasExplicitLinks =
+      Boolean(t.relatedChargeId) ||
+      Boolean(t.thirdPartyAllocations && t.thirdPartyAllocations.length > 0);
+    if (hasExplicitLinks) return false;
+    return doesTxMatchPersonForCharge(t, charge, people);
+  });
+
+  if (legacyPersonMatches.length > 0) {
+    const sorted = [...legacyPersonMatches].sort((a, b) => getTxTimestamp(b) - getTxTimestamp(a));
+    return sorted[0].date || sorted[0].createdAt || undefined;
+  }
+
+  return undefined;
+};
+
+const applyThirdPartyChargeRevertDelta = (
+  charge: ThirdPartyCardCharge,
+  revertAmount: number,
+  options?: {
+    remainingTransactions?: ReconcileTransactionRef[];
+    revertedTxDate?: string;
+    fallbackPreviousLastPaymentDate?: string;
+    people?: PersonContact[];
+    maxRemainingOverride?: number;
+  }
+): ThirdPartyCardCharge => {
+  const { installmentsCount, monthlyAmount, initialPaid, maxInitialRemaining } =
+    getThirdPartyChargeBounds(charge);
+
+  const effectiveMaxRemaining =
+    options?.maxRemainingOverride !== undefined
+      ? Math.min(maxInitialRemaining, Math.max(0, options.maxRemainingOverride))
+      : maxInitialRemaining;
+
+  const delta = Number(Math.max(0, revertAmount).toFixed(2));
+  const currentRem =
+    charge.remainingAmount !== undefined ? charge.remainingAmount : maxInitialRemaining;
+
+  let newRemaining = Math.min(
+    effectiveMaxRemaining,
+    Math.max(0, Number((currentRem + delta).toFixed(2)))
+  );
+  if (newRemaining < 0.01) {
+    newRemaining = 0;
+  }
+
+  // Si el abono eliminado pertenece a un mes estrictamente anterior al de lastPaymentDate
+  // y existe un abono activo en ese mes posterior, preservar currentPeriodPaidAmount del mes vigente.
+  let shouldDeductCurrentPeriod = true;
+  if (options?.revertedTxDate && charge.lastPaymentDate && options?.remainingTransactions) {
+    const revYM = getYearMonth(options.revertedTxDate);
+    const lastYM = getYearMonth(charge.lastPaymentDate);
+    if (revYM && lastYM) {
+      const revTotalMonths = revYM.year * 12 + revYM.month;
+      const lastTotalMonths = lastYM.year * 12 + lastYM.month;
+      if (revTotalMonths < lastTotalMonths) {
+        const lastPaymentRefDate = new Date(charge.lastPaymentDate);
+        const hasActiveTxInLastMonth = options.remainingTransactions.some((t) =>
+          isTxCoveringChargeInCycle(t, charge, options.people ?? [], lastPaymentRefDate)
+        );
+        if (hasActiveTxInLastMonth) {
+          shouldDeductCurrentPeriod = false;
+        }
+      }
+    }
+  }
+
+  const currentPeriodPaid = charge.currentPeriodPaidAmount || 0;
+  let newPeriodPaid = shouldDeductCurrentPeriod
+    ? Math.max(0, Number((currentPeriodPaid - delta).toFixed(2)))
+    : currentPeriodPaid;
+  if (newPeriodPaid < 0.01) {
+    newPeriodPaid = 0;
+  }
+
+  const latestRemainingPaymentDate =
+    options?.remainingTransactions !== undefined
+      ? findLatestPaymentDateForCharge(charge, options.remainingTransactions, options.people ?? [])
+      : undefined;
+
+  // Limpiar residuo de tolerancia de liquidación (<= 0.05) cuando no quedan pagos activos
+  if (
+    options?.remainingTransactions !== undefined &&
+    !latestRemainingPaymentDate &&
+    newPeriodPaid === 0 &&
+    effectiveMaxRemaining > 0.05 &&
+    effectiveMaxRemaining - newRemaining <= 0.05
+  ) {
+    newRemaining = effectiveMaxRemaining;
+  }
+
+  const isSettled =
+    newRemaining <= 0.05 && (newRemaining === 0 || maxInitialRemaining > 0.05);
+  if (isSettled) {
+    newRemaining = 0;
+  }
+
+  const appCoveredAmount = Math.max(0, Number((maxInitialRemaining - newRemaining).toFixed(2)));
+  const newPaidInstallments = isSettled
+    ? installmentsCount
+    : monthlyAmount > 0
+    ? Math.min(
+        installmentsCount,
+        initialPaid + Math.floor(parseFloat((appCoveredAmount / monthlyAmount).toFixed(4)))
+      )
+    : initialPaid;
+
+  const isRestoredToInitial =
+    !isSettled &&
+    newPeriodPaid === 0 &&
+    newRemaining >= maxInitialRemaining - 0.009;
+
+  let newLastPaymentDate: string | undefined;
+  if (isRestoredToInitial) {
+    newLastPaymentDate = undefined;
+  } else if (options?.remainingTransactions !== undefined) {
+    newLastPaymentDate = latestRemainingPaymentDate;
+  } else {
+    newLastPaymentDate = options?.fallbackPreviousLastPaymentDate ?? charge.lastPaymentDate;
+  }
+
+  return {
+    ...charge,
+    remainingAmount: newRemaining,
+    currentPeriodPaidAmount: newPeriodPaid,
+    paidInstallmentsCount: newPaidInstallments,
+    settled: isSettled,
+    settledAt: isSettled ? (charge.settledAt ?? new Date().toISOString()) : undefined,
+    lastPaymentDate: newLastPaymentDate,
+  };
+};
 
 const INITIAL_PEOPLE: PersonContact[] = [];
 
@@ -652,13 +1012,6 @@ export const useDebtsStore = create<DebtsState>()(
         cardId?: string,
         personId?: string
       ): { updatedCharges: { id: string; appliedAmount: number }[]; allocations: ThirdPartyChargeAllocation[] } => {
-        const normalizeStr = (str: string): string =>
-          str
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .toLowerCase()
-            .trim();
-
         const targetNameNorm = normalizeStr(personName);
 
         // Obtener todos los cargos activos no saldados de la persona
@@ -870,63 +1223,52 @@ export const useDebtsStore = create<DebtsState>()(
         return { updatedCharges, allocations };
       },
 
-      revertThirdPartyAllocations: (allocations: ThirdPartyChargeAllocation[]): boolean => {
+      revertThirdPartyAllocations: (
+        allocations: ThirdPartyChargeAllocation[],
+        remainingTransactions?: ReconcileTransactionRef[],
+        revertedTxDate?: string
+      ): boolean => {
         if (!allocations || allocations.length === 0) return false;
-        const allocMap = new Map<string, ThirdPartyChargeAllocation>();
+
+        const aggregatedByCharge = new Map<
+          string,
+          { totalApplied: number; fallbackPreviousLastPaymentDate?: string }
+        >();
+
         for (const a of allocations) {
-          if (!a || !a.chargeId) continue;
-          allocMap.set(a.chargeId, a);
-          try {
-            allocMap.set(toDeterministicUuid(a.chargeId), a);
-          } catch {
-            // ignore
+          if (!a || !a.chargeId || typeof a.appliedAmount !== 'number' || a.appliedAmount <= 0 || isNaN(a.appliedAmount)) {
+            continue;
+          }
+          const key = safeToDeterministicUuid(a.chargeId);
+          const existing = aggregatedByCharge.get(key);
+          if (existing) {
+            existing.totalApplied = Number((existing.totalApplied + a.appliedAmount).toFixed(2));
+            if (a.previousLastPaymentDate !== undefined) {
+              existing.fallbackPreviousLastPaymentDate = a.previousLastPaymentDate;
+            }
+          } else {
+            aggregatedByCharge.set(key, {
+              totalApplied: Number(a.appliedAmount.toFixed(2)),
+              fallbackPreviousLastPaymentDate: a.previousLastPaymentDate,
+            });
           }
         }
+
+        if (aggregatedByCharge.size === 0) return false;
 
         let updatedAny = false;
         set((state) => ({
           thirdPartyCharges: state.thirdPartyCharges.map((charge) => {
-            let alloc = allocMap.get(charge.id);
-            if (!alloc) {
-              try {
-                alloc = allocMap.get(toDeterministicUuid(charge.id));
-              } catch {
-                // ignore
-              }
-            }
-            if (!alloc) return charge;
+            const entry = aggregatedByCharge.get(safeToDeterministicUuid(charge.id));
+            if (!entry || entry.totalApplied <= 0) return charge;
 
             updatedAny = true;
-
-            const previousPaidInstallments = Math.max(
-              charge.initialPaidInstallments ?? 0,
-              alloc.previousPaidInstallments
-            );
-            const previousCurrentPeriodPaid =
-              alloc.previousCurrentPeriodPaid !== undefined
-                ? alloc.previousCurrentPeriodPaid
-                : Math.max(0, (charge.currentPeriodPaidAmount || 0) - alloc.appliedAmount);
-
-            const chargeTotal = charge.totalAmount ?? charge.amount ?? 0;
-            const isFullRemaining = alloc.previousRemaining >= chargeTotal;
-            const shouldClearPaymentInfo = previousCurrentPeriodPaid === 0 || isFullRemaining;
-
-            const restoredLastPaymentDate = shouldClearPaymentInfo
-              ? alloc.previousLastPaymentDate
-              : (alloc.previousLastPaymentDate ?? charge.lastPaymentDate);
-
-            const isHasRemaining = alloc.previousRemaining > 0.0001;
-            const isSettled = isHasRemaining ? false : Boolean(alloc.wasSettled);
-
-            return {
-              ...charge,
-              remainingAmount: alloc.previousRemaining,
-              paidInstallmentsCount: previousPaidInstallments,
-              currentPeriodPaidAmount: previousCurrentPeriodPaid,
-              settled: isSettled,
-              settledAt: isSettled ? (alloc.previousSettledAt ?? charge.settledAt) : undefined,
-              lastPaymentDate: restoredLastPaymentDate,
-            };
+            return applyThirdPartyChargeRevertDelta(charge, entry.totalApplied, {
+              remainingTransactions,
+              revertedTxDate,
+              fallbackPreviousLastPaymentDate: entry.fallbackPreviousLastPaymentDate,
+              people: state.people,
+            });
           }),
         }));
         if (updatedAny) {
@@ -935,137 +1277,143 @@ export const useDebtsStore = create<DebtsState>()(
         return updatedAny;
       },
 
-      revertThirdPartyChargeCollection: (chargeId: string, amount: number): void => {
+      revertThirdPartyChargeCollection: (
+        chargeId: string,
+        amount: number,
+        remainingTransactions?: ReconcileTransactionRef[],
+        revertedTxDate?: string
+      ): void => {
+        if (!chargeId || amount <= 0 || isNaN(amount)) return;
+
+        let updatedAny = false;
         set((state) => ({
           thirdPartyCharges: state.thirdPartyCharges.map((charge) => {
-            if (charge.id !== chargeId) return charge;
-            const chargeTotal = charge.totalAmount ?? charge.amount ?? 0;
-            const newRemaining = Math.min(chargeTotal, (charge.remainingAmount ?? 0) + amount);
-            const newPeriodPaid = Math.max(0, (charge.currentPeriodPaidAmount || 0) - amount);
-            const isFullRemaining = newRemaining >= chargeTotal;
-            const isPeriodPaidZero = newPeriodPaid <= 0;
-            const newPaidInstallments = charge.monthlyInstallmentAmount > 0
-              ? Math.max(
-                  charge.initialPaidInstallments ?? 0,
-                  Math.min(
-                    charge.installmentsCount,
-                    Math.max(
-                      0,
-                      Math.round(
-                        parseFloat(
-                          ((chargeTotal - newRemaining) / charge.monthlyInstallmentAmount).toFixed(4)
-                        )
-                      )
-                    )
-                  )
-                )
-              : charge.paidInstallmentsCount;
-            return {
-              ...charge,
-              remainingAmount: Number(newRemaining.toFixed(2)),
-              currentPeriodPaidAmount: isFullRemaining && isPeriodPaidZero ? 0 : Number(newPeriodPaid.toFixed(2)),
-              paidInstallmentsCount: newPaidInstallments,
-              settled: false,
-              settledAt: undefined,
-              lastPaymentDate: isFullRemaining && isPeriodPaidZero ? undefined : charge.lastPaymentDate,
-            };
+            if (!isSameEntityId(charge.id, chargeId)) return charge;
+            updatedAny = true;
+            return applyThirdPartyChargeRevertDelta(charge, amount, {
+              remainingTransactions,
+              revertedTxDate,
+              people: state.people,
+            });
           }),
         }));
-        debtSyncHandlers.onDebtAddedOrUpdated?.();
+        if (updatedAny) {
+          debtSyncHandlers.onDebtAddedOrUpdated?.();
+        }
       },
 
-      revertThirdPartyChargeAbono: (chargeId: string, amount: number): void => {
-        get().revertThirdPartyChargeCollection(chargeId, amount);
+      revertThirdPartyChargeAbono: (
+        chargeId: string,
+        amount: number,
+        remainingTransactions?: ReconcileTransactionRef[],
+        revertedTxDate?: string
+      ): void => {
+        get().revertThirdPartyChargeCollection(
+          chargeId,
+          amount,
+          remainingTransactions,
+          revertedTxDate
+        );
       },
 
-      revertThirdPartyPersonAbono: (personName: string, amount: number): boolean => {
-        const normalizeStr = (str: string): string =>
-          str
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .toLowerCase()
-            .trim();
+      revertThirdPartyPersonAbono: (
+        personName: string,
+        amount: number,
+        remainingTransactions?: ReconcileTransactionRef[],
+        revertedTxDate?: string
+      ): boolean => {
+        if (!personName || amount <= 0 || isNaN(amount)) return false;
 
-        const targetNameNorm = normalizeStr(personName);
-        const candidates = get().thirdPartyCharges.filter((c) => {
-          const matchPerson =
-            (c.personId && c.personId.trim().toLowerCase() === targetNameNorm) ||
-            normalizeStr(c.personName) === targetNameNorm ||
-            get().people.some((p) => normalizeStr(p.name) === targetNameNorm && c.personId === p.id) ||
-            normalizeStr(c.personName).includes(targetNameNorm) ||
-            targetNameNorm.includes(normalizeStr(c.personName));
-          return matchPerson;
-        });
+        const targetNorm = normalizeStr(personName);
+        if (!targetNorm) return false;
+
+        const currentPeople = get().people;
+        const allCharges = get().thirdPartyCharges;
+
+        const exactCandidates = allCharges.filter(
+          (c) =>
+            isSameEntityId(c.personId, personName) ||
+            normalizeStr(c.personName) === targetNorm ||
+            currentPeople.some(
+              (p) =>
+                normalizeStr(p.name) === targetNorm &&
+                isSameEntityId(c.personId, p.id)
+            )
+        );
+
+        const candidates =
+          exactCandidates.length > 0
+            ? [...exactCandidates]
+            : allCharges.filter((c) => {
+                const cNorm = normalizeStr(c.personName);
+                return Boolean(cNorm) && (cNorm.includes(targetNorm) || targetNorm.includes(cNorm));
+              });
 
         if (candidates.length === 0) return false;
 
-        candidates.sort((a, b) => {
-          const aPaid = a.currentPeriodPaidAmount || 0;
-          const bPaid = b.currentPeriodPaidAmount || 0;
-          if (aPaid > 0 && bPaid === 0) return -1;
-          if (bPaid > 0 && aPaid === 0) return 1;
+        const sortByRecencyDesc = (a: ThirdPartyCardCharge, b: ThirdPartyCardCharge): number => {
           const aTime = new Date(a.lastPaymentDate || a.date || a.createdAt).getTime();
           const bTime = new Date(b.lastPaymentDate || b.date || b.createdAt).getTime();
-          return bTime - aTime;
-        });
+          return (isNaN(bTime) ? 0 : bTime) - (isNaN(aTime) ? 0 : aTime);
+        };
 
-        let remainingToRevert = amount;
+        const computeMaxCanRevert = (c: ThirdPartyCardCharge): number => {
+          const { maxInitialRemaining } = getThirdPartyChargeBounds(c);
+          const chargeRemaining = c.remainingAmount !== undefined ? c.remainingAmount : maxInitialRemaining;
+          return Math.max(0, Number((maxInitialRemaining - chargeRemaining).toFixed(2)));
+        };
+
+        let remainingToRevert = Number(amount.toFixed(2));
         const revertMap = new Map<string, number>();
 
-        for (const c of candidates) {
+        // Fase 1: Priorizar cargos con saldo abonado en el ciclo actual (currentPeriodPaidAmount > 0),
+        // limitando cada asignación al tope de su currentPeriodPaidAmount y su maxCanRevert (excluyendo cuotas preexistentes).
+        const phase1Candidates = [...candidates]
+          .filter((c) => (c.currentPeriodPaidAmount || 0) > 0)
+          .sort(sortByRecencyDesc);
+
+        for (const c of phase1Candidates) {
           if (remainingToRevert <= 0) break;
-          const chargeTotal = c.totalAmount ?? c.amount ?? 0;
-          const chargeRemaining = c.remainingAmount ?? 0;
-          const maxCanRevert = Math.max(0, chargeTotal - chargeRemaining);
-          if (maxCanRevert <= 0 || isNaN(maxCanRevert)) continue;
-          const toRevert = Math.min(remainingToRevert, maxCanRevert);
+          const maxCanRevert = computeMaxCanRevert(c);
+          const periodCap = Math.min(maxCanRevert, Math.max(0, c.currentPeriodPaidAmount || 0));
+          if (periodCap <= 0 || isNaN(periodCap)) continue;
+          const toRevert = Math.min(remainingToRevert, periodCap);
           if (toRevert > 0 && !isNaN(toRevert)) {
-            const rounded = parseFloat(toRevert.toFixed(2));
+            const rounded = Number(toRevert.toFixed(2));
             revertMap.set(c.id, rounded);
-            remainingToRevert = parseFloat((remainingToRevert - rounded).toFixed(2));
+            remainingToRevert = Number((remainingToRevert - rounded).toFixed(2));
+          }
+        }
+
+        // Fase 2: Si aún queda monto por revertir, cubrir amortizaciones previas válidas dentro de la app
+        // sin invadir jamás las cuotas preexistentes.
+        if (remainingToRevert > 0.0001) {
+          const phase2Candidates = [...candidates].sort(sortByRecencyDesc);
+          for (const c of phase2Candidates) {
+            if (remainingToRevert <= 0) break;
+            const maxCanRevert = computeMaxCanRevert(c);
+            const alreadyAllocated = revertMap.get(c.id) || 0;
+            const remainingCanRevert = Math.max(0, Number((maxCanRevert - alreadyAllocated).toFixed(2)));
+            if (remainingCanRevert <= 0 || isNaN(remainingCanRevert)) continue;
+            const toRevert = Math.min(remainingToRevert, remainingCanRevert);
+            if (toRevert > 0 && !isNaN(toRevert)) {
+              const rounded = Number(toRevert.toFixed(2));
+              revertMap.set(c.id, Number((alreadyAllocated + rounded).toFixed(2)));
+              remainingToRevert = Number((remainingToRevert - rounded).toFixed(2));
+            }
           }
         }
 
         if (revertMap.size > 0) {
           set((state) => ({
             thirdPartyCharges: state.thirdPartyCharges.map((charge) => {
-              if (!revertMap.has(charge.id)) return charge;
-              const revertAmt = revertMap.get(charge.id)!;
-              const chargeTotal = charge.totalAmount ?? charge.amount ?? 0;
-              const rawRemaining = (charge.remainingAmount ?? 0) + revertAmt;
-              const newRemaining = Math.min(chargeTotal, Math.max(0, parseFloat(rawRemaining.toFixed(2))));
-              const rawPeriodPaid = (charge.currentPeriodPaidAmount || 0) - revertAmt;
-              const newPeriodPaid = Math.max(0, parseFloat(rawPeriodPaid.toFixed(2)));
-              const newPaidInstallments = charge.monthlyInstallmentAmount > 0
-                ? Math.max(
-                    charge.initialPaidInstallments ?? 0,
-                    Math.min(
-                      charge.installmentsCount,
-                      Math.max(
-                        0,
-                        Math.round(
-                          parseFloat(
-                            ((chargeTotal - newRemaining) / charge.monthlyInstallmentAmount).toFixed(4)
-                          )
-                        )
-                      )
-                    )
-                  )
-                : charge.paidInstallmentsCount;
-
-              const isRestoredToFull = newRemaining >= chargeTotal - 0.0001;
-              const isPeriodPaidZero = newPeriodPaid <= 0.0001;
-              const isHasRemaining = newRemaining > 0.0001;
-
-              return {
-                ...charge,
-                remainingAmount: Number(newRemaining.toFixed(2)),
-                currentPeriodPaidAmount: isRestoredToFull && isPeriodPaidZero ? 0 : Number(newPeriodPaid.toFixed(2)),
-                paidInstallmentsCount: newPaidInstallments,
-                settled: isHasRemaining ? false : charge.settled,
-                settledAt: isHasRemaining ? undefined : charge.settledAt,
-                lastPaymentDate: isRestoredToFull && isPeriodPaidZero ? undefined : charge.lastPaymentDate,
-              };
+              const revertAmt = revertMap.get(charge.id);
+              if (!revertAmt || revertAmt <= 0) return charge;
+              return applyThirdPartyChargeRevertDelta(charge, revertAmt, {
+                remainingTransactions,
+                revertedTxDate,
+                people: state.people,
+              });
             }),
           }));
           debtSyncHandlers.onDebtAddedOrUpdated?.();
@@ -1073,6 +1421,71 @@ export const useDebtsStore = create<DebtsState>()(
         }
 
         return false;
+      },
+
+      reconcileThirdPartyCurrentPeriod: (
+        activeTransactions: ReconcileTransactionRef[],
+        referenceDate: Date = new Date()
+      ): void => {
+        const refDate =
+          referenceDate instanceof Date && !isNaN(referenceDate.getTime())
+            ? referenceDate
+            : new Date();
+        const reimbursements = (activeTransactions || []).filter(
+          (t) => t.type === 'reimbursement'
+        );
+
+        const statePeople = get().people;
+        let updatedAny = false;
+
+        const nextCharges = get().thirdPartyCharges.map((charge) => {
+          const currentPeriodPaid = charge.currentPeriodPaidAmount || 0;
+          if (currentPeriodPaid <= 0) return charge;
+
+          const parsedLastPay = charge.lastPaymentDate ? new Date(charge.lastPaymentDate) : null;
+          const cycleDate =
+            parsedLastPay && !isNaN(parsedLastPay.getTime()) ? parsedLastPay : refDate;
+
+          const hasActiveCoverageInCycle = reimbursements.some((tx) =>
+            isTxCoveringChargeInCycle(tx, charge, statePeople, cycleDate)
+          );
+          if (hasActiveCoverageInCycle) {
+            return charge;
+          }
+
+          updatedAny = true;
+
+          // Proteger amortizaciones explícitas de otros ciclos si existen en activeTransactions
+          const { maxInitialRemaining } = getThirdPartyChargeBounds(charge);
+          const knownActivePaidOtherCycles = reimbursements.reduce((sum, tx) => {
+            if (tx.thirdPartyAllocations && tx.thirdPartyAllocations.length > 0) {
+              const allocSum = tx.thirdPartyAllocations
+                .filter((a) => isSameEntityId(a.chargeId, charge.id))
+                .reduce((acc, a) => acc + (a.appliedAmount || 0), 0);
+              return sum + allocSum;
+            }
+            if (isSameEntityId(tx.relatedChargeId, charge.id)) {
+              return sum + (tx.amount || 0);
+            }
+            return sum;
+          }, 0);
+
+          const maxRemainingOverride = Math.max(
+            0,
+            Number((maxInitialRemaining - knownActivePaidOtherCycles).toFixed(2))
+          );
+
+          return applyThirdPartyChargeRevertDelta(charge, currentPeriodPaid, {
+            remainingTransactions: reimbursements,
+            people: statePeople,
+            maxRemainingOverride,
+          });
+        });
+
+        if (updatedAny) {
+          set({ thirdPartyCharges: nextCharges });
+          debtSyncHandlers.onDebtAddedOrUpdated?.();
+        }
       },
 
       settleThirdPartyCharge: (id: string): void => {
@@ -1140,13 +1553,6 @@ export const useDebtsStore = create<DebtsState>()(
       },
 
       getThirdPartyMonthlyBillingSummary: (referenceDate: Date = new Date()): ThirdPartyPersonMonthlySummary[] => {
-        const normalizeStr = (str: string): string =>
-          str
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .toLowerCase()
-            .trim();
-
         const refDate =
           referenceDate instanceof Date && !isNaN(referenceDate.getTime())
             ? referenceDate

@@ -2613,3 +2613,37 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 - **Decisiones Permanentes**:
   - `banks` nunca debe contener ni renderizar entidades que sean tarjetas de crédito (`cards`).
   - Tanto la capa de presentación (Dashboard) como la capa de persistencia (`cards-store.ts`) deben aplicar defensas activas (`filterValidBanks`, `realBanks`) para evitar duplicidad de tarjetas como cuentas bancarias ante cualquier desfase de datos históricos o remotos.
+
+
+### [TASK-THIRD-PARTY-REVERSION-DELTA-AND-SYNC-SHIELD] - 2026-11-11
+- **Archivos Intervenidos**:
+  - `src/store/debts-store.ts`
+  - `src/store/transactions-store.ts`
+  - `src/__tests__/accounting-integration.test.ts`
+  - `src/services/sync-service.ts`
+  - `src/hooks/use-app-hydration.ts`
+  - `app/(app)/(tabs)/debts.tsx`
+  - *(Más saneamiento en Supabase de `JIM.COM` id `7bdfa5e7-0eb3-47c4-ac13-9c7c499e08a1`)*
+- **Resumen Técnico**:
+  1. **Reversión Conmutativa por Deltas y Protección de Cuotas Preexistentes (`src/store/debts-store.ts`, `src/store/transactions-store.ts`)**:
+     - Sustitución de restauración por snapshots absolutos por reversión conmutativa basada en **delta relativo** (`appliedAmount`) mediante `applyThirdPartyChargeRevertDelta` en `revertThirdPartyAllocations`, `revertThirdPartyChargeCollection` y `revertThirdPartyPersonAbono`, evitando saldos fantasma al borrar abonos fuera de orden LIFO.
+     - Protección de `initialPaidInstallments` mediante `getThirdPartyChargeBounds` (`maxInitialRemaining`) para evitar que las reversiones en `revertThirdPartyPersonAbono` y demás rutas invadan cuotas históricas preexistentes previas al registro en la app.
+     - Preservación de `currentPeriodPaidAmount` vigente al revertir abonos de meses estrictamente anteriores cuando existe cobertura activa en el ciclo de `lastPaymentDate`, propagando `remainingTransactions` y `tx.date` desde `transactions-store.ts`.
+  2. **Reconciliación Automática del Ciclo Vigente (`src/store/debts-store.ts`, `src/hooks/use-app-hydration.ts`, `src/services/sync-service.ts`)**:
+     - Implementación de `reconcileThirdPartyCurrentPeriod` para detectar y corregir diferencias huérfanas en `currentPeriodPaidAmount` sin reembolsos activos que las respalden en el ciclo, protegiendo amortizaciones explícitas de otros ciclos.
+     - Invocación de `reconcileThirdPartyCurrentPeriod` tras hidratación/sincronización inicial y Focus Sync en `use-app-hydration.ts`, y al cierre de `syncPull` cuando no hay mutaciones pendientes de cargos.
+  3. **Escudo Persistente de Mutaciones y Resiliencia en Sincronización (`src/services/sync-service.ts`, `src/hooks/use-app-hydration.ts`)**:
+     - Escudo persistente de mutaciones locales para `third_party_card_charges` en `safeStorage` (`controlfynz-pending-charge-mutations-v1` / `PENDING_CHARGE_MUTATIONS_STORAGE_KEY`) con contador monotónico `chargeMutationSeq` y captura `pushSeq` previa al upsert, protegiendo cambios locales en `syncPull` (`mergeById` y podas) y reencolando si se producen mutaciones concurrentes (`seq > pushSeq`).
+     - Drenaje prioritario de borrados pendientes (`flushPendingDeletions`) y ejecución de `syncPush` antes de `syncPull` (push-before-pull) en `syncAll`, evitando que descargas remotas sobrescriban cambios locales recientes.
+     - Aislamiento de upserts por tabla con `try/catch` individuales y acumulación en `tableErrors` dentro de `syncPush` para que un fallo parcial en una entidad no bloquee el envío del resto de tablas.
+     - Verificación temprana de `pendingDeletions`, `pendingChargeMutations` y `hasPendingBackgroundPush()` en `use-app-hydration.ts` para priorizar `syncAll` antes de aplicar estado remoto.
+  4. **Unificación en UI y Saneamiento Remoto (`app/(app)/(tabs)/debts.tsx`, Supabase)**:
+     - Unificación del cálculo de resúmenes mensuales de terceros en `debts.tsx` delegando en `getThirdPartyMonthlyBillingSummary(new Date())` desde `useDebtsStore`.
+     - Saneamiento remoto en Supabase del registro `JIM.COM` (id `7bdfa5e7-0eb3-47c4-ac13-9c7c499e08a1`).
+  5. **Calidad y Verificación (`src/__tests__/accounting-integration.test.ts`)**:
+     - Cobertura de regresión e integración en `accounting-integration.test.ts` para reversión conmutativa por deltas, protección de `initialPaidInstallments` y reconciliación de ciclo actual.
+     - `npx tsc --noEmit`: 0 errores.
+     - `npm test`: 7 suites / 146 tests en verde (100% pass).
+- **Decisiones Permanentes**:
+  - La reversión de abonos a terceros debe operar siempre por **delta relativo** (`appliedAmount`), nunca por sobrescritura de snapshots absolutos, manteniendo intactas las cuotas históricas (`initialPaidInstallments`).
+  - `sync-service` debe proteger mutaciones locales de `third_party_card_charges` mediante `controlfynz-pending-charge-mutations-v1` + `pushSeq`, drenar `syncPush` antes de `syncPull` en `syncAll`, aislar errores por tabla en `syncPush` y ejecutar `reconcileThirdPartyCurrentPeriod` tras hidratar y sincronizar.

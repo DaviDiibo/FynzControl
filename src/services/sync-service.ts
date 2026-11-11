@@ -1,7 +1,7 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { useCardsStore, setCardSyncHandlers } from '../store/cards-store';
-import { useDebtsStore, setDebtSyncHandlers } from '../store/debts-store';
+import { useDebtsStore, setDebtSyncHandlers, type ThirdPartyCardCharge } from '../store/debts-store';
 import { useTransactionsStore, setTransactionSyncHandlers } from '../store/transactions-store';
 import { useSettingsStore, type CurrencyCode } from '../store/settings-store';
 import { safeStorage } from '../store/safe-storage';
@@ -211,6 +211,192 @@ export const flushPendingDeletions = async (
   }
 };
 
+export const PENDING_CHARGE_MUTATIONS_STORAGE_KEY = 'controlfynz-pending-charge-mutations-v1';
+
+let chargeMutationSeq = 0;
+let pendingChargeMutationsCache: Record<string, number> = {};
+let isPendingChargeMutationsLoaded = false;
+let pendingChargeMutationsLoadPromise: Promise<Record<string, number>> | null = null;
+let isApplyingRemoteChargesUpdate = false;
+let lastKnownChargesSnapshot = new Map<string, string>();
+
+const normalizeChargeKey = (id: string): string => toDeterministicUuid(id);
+
+const serializeChargeSnapshot = (charge: ThirdPartyCardCharge): string =>
+  JSON.stringify({
+    personName: charge.personName,
+    personId: charge.personId ?? null,
+    cardName: charge.cardName,
+    cardId: charge.cardId ?? null,
+    concept: charge.concept,
+    amount: charge.amount,
+    totalAmount: charge.totalAmount,
+    remainingAmount: charge.remainingAmount,
+    installmentsCount: charge.installmentsCount,
+    monthlyInstallmentAmount: charge.monthlyInstallmentAmount,
+    currentPeriodPaidAmount: charge.currentPeriodPaidAmount,
+    paidInstallmentsCount: charge.paidInstallmentsCount,
+    initialPaidInstallments: charge.initialPaidInstallments ?? 0,
+    isPreexisting: Boolean(charge.isPreexisting),
+    lastPaymentDate: charge.lastPaymentDate ?? null,
+    date: charge.date,
+    settled: Boolean(charge.settled),
+    settledAt: charge.settledAt ?? null,
+  });
+
+const refreshChargeSnapshotFromStore = (): void => {
+  const charges = useDebtsStore.getState().thirdPartyCharges || [];
+  const nextSnapshot = new Map<string, string>();
+  for (const charge of charges) {
+    nextSnapshot.set(normalizeChargeKey(charge.id), serializeChargeSnapshot(charge));
+  }
+  lastKnownChargesSnapshot = nextSnapshot;
+};
+
+const persistPendingChargeMutations = async (): Promise<void> => {
+  try {
+    await safeStorage.setItem(
+      PENDING_CHARGE_MUTATIONS_STORAGE_KEY,
+      JSON.stringify(pendingChargeMutationsCache)
+    );
+  } catch {
+    // safeStorage maneja fallback a memoria internamente
+  }
+};
+
+export const getPendingChargeMutations = async (): Promise<Record<string, number>> => {
+  if (isPendingChargeMutationsLoaded) {
+    return { ...pendingChargeMutationsCache };
+  }
+  if (pendingChargeMutationsLoadPromise) {
+    return pendingChargeMutationsLoadPromise;
+  }
+
+  pendingChargeMutationsLoadPromise = (async (): Promise<Record<string, number>> => {
+    try {
+      const raw = await safeStorage.getItem(PENDING_CHARGE_MUTATIONS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<string, number> | null;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          const loaded: Record<string, number> = {};
+          let maxLoadedSeq = chargeMutationSeq;
+          for (const [key, value] of Object.entries(parsed)) {
+            if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+              const normalizedId = normalizeChargeKey(key);
+              const seq = Math.max(loaded[normalizedId] ?? 0, value);
+              loaded[normalizedId] = seq;
+              if (seq > maxLoadedSeq) {
+                maxLoadedSeq = seq;
+              }
+            }
+          }
+
+          let hasEarlyMemoryMutations = false;
+          for (const [memKey] of Object.entries(pendingChargeMutationsCache)) {
+            const normalizedId = normalizeChargeKey(memKey);
+            maxLoadedSeq += 1;
+            loaded[normalizedId] = maxLoadedSeq;
+            hasEarlyMemoryMutations = true;
+          }
+
+          chargeMutationSeq = Math.max(chargeMutationSeq, maxLoadedSeq);
+          pendingChargeMutationsCache = loaded;
+          isPendingChargeMutationsLoaded = true;
+          if (hasEarlyMemoryMutations) {
+            await persistPendingChargeMutations();
+          }
+          return { ...pendingChargeMutationsCache };
+        }
+      }
+    } catch {
+      // Fallback a caché en memoria
+    }
+    isPendingChargeMutationsLoaded = true;
+    return { ...pendingChargeMutationsCache };
+  })();
+
+  try {
+    return await pendingChargeMutationsLoadPromise;
+  } finally {
+    pendingChargeMutationsLoadPromise = null;
+  }
+};
+
+export const getPendingChargeMutationIdSet = (): Set<string> => {
+  const set = new Set<string>();
+  for (const key of Object.keys(pendingChargeMutationsCache)) {
+    set.add(key);
+  }
+  return set;
+};
+
+export const hasPendingChargeMutations = (): boolean =>
+  Object.keys(pendingChargeMutationsCache).length > 0;
+
+const hasPendingChargeMutation = (id: string): boolean => {
+  const key = normalizeChargeKey(id);
+  return (pendingChargeMutationsCache[key] ?? 0) > 0;
+};
+
+const detectAndRecordPendingChargeMutations = (): boolean => {
+  if (isApplyingRemoteChargesUpdate) {
+    return false;
+  }
+
+  const currentCharges = useDebtsStore.getState().thirdPartyCharges || [];
+  const pendingDeletions = getPendingDeletionIdSet('third_party_card_charges');
+  const currentKeys = new Set<string>();
+  let changed = false;
+
+  for (const charge of currentCharges) {
+    const key = normalizeChargeKey(charge.id);
+    currentKeys.add(key);
+
+    if (pendingDeletions.has(charge.id) || pendingDeletions.has(key)) {
+      if (pendingChargeMutationsCache[key] !== undefined) {
+        delete pendingChargeMutationsCache[key];
+        changed = true;
+      }
+      lastKnownChargesSnapshot.delete(key);
+      continue;
+    }
+
+    const serialized = serializeChargeSnapshot(charge);
+    const prevSerialized = lastKnownChargesSnapshot.get(key);
+    if (prevSerialized !== serialized) {
+      chargeMutationSeq += 1;
+      pendingChargeMutationsCache[key] = chargeMutationSeq;
+      lastKnownChargesSnapshot.set(key, serialized);
+      changed = true;
+    }
+  }
+
+  for (const prevKey of Array.from(lastKnownChargesSnapshot.keys())) {
+    if (!currentKeys.has(prevKey)) {
+      lastKnownChargesSnapshot.delete(prevKey);
+      if (pendingChargeMutationsCache[prevKey] !== undefined) {
+        delete pendingChargeMutationsCache[prevKey];
+        changed = true;
+      }
+    }
+  }
+
+  if (!useDebtsStore.persist || useDebtsStore.persist.hasHydrated()) {
+    for (const pendingKey of Object.keys(pendingChargeMutationsCache)) {
+      if (!currentKeys.has(pendingKey)) {
+        delete pendingChargeMutationsCache[pendingKey];
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    void persistPendingChargeMutations();
+  }
+
+  return changed;
+};
+
 export type SyncResult = {
   success: boolean;
   offline?: boolean;
@@ -220,13 +406,21 @@ export type SyncResult = {
   pull?: SyncResult;
 };
 
-const mergeById = <T extends { id: string }>(local: T[], remote: T[]): T[] => {
+const mergeById = <T extends { id: string }>(
+  local: T[],
+  remote: T[],
+  protectedIds?: Set<string>
+): T[] => {
   const map = new Map<string, T>();
   for (const item of local) {
     map.set(toDeterministicUuid(item.id), item);
   }
   for (const item of remote) {
-    map.set(toDeterministicUuid(item.id), item);
+    const uuid = toDeterministicUuid(item.id);
+    if (protectedIds && protectedIds.has(uuid) && map.has(uuid)) {
+      continue;
+    }
+    map.set(uuid, item);
   }
   const result = Array.from(map.values());
 
@@ -301,10 +495,17 @@ export const subscribeToSyncStatus = (listener: SyncStatusListener): (() => void
   };
 };
 
+export const hasPendingBackgroundPush = (): boolean =>
+  pushDebounceTimer !== null || hasPendingPushRequest;
+
 export const syncPush = async (userId?: string): Promise<SyncResult> => {
   if (isPushInProgress) {
     hasPendingPushRequest = true;
     return { success: false, offline: true, error: 'Sincronización push ya en curso' };
+  }
+  if (pushDebounceTimer) {
+    clearTimeout(pushDebounceTimer);
+    pushDebounceTimer = null;
   }
   isPushInProgress = true;
   notifySyncStatusListeners();
@@ -320,10 +521,12 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
 
     // Escudo de salida: procesar y vaciar prioritariamente los borrados pendientes antes de push
     await flushPendingDeletions(targetUserId);
+    await getPendingChargeMutations();
+    detectAndRecordPendingChargeMutations();
 
     const { banks, cards } = useCardsStore.getState();
-    const { people, personalDebts, friendLoans, thirdPartyCharges } = useDebtsStore.getState();
-    const { transactions } = useTransactionsStore.getState();
+    const { people, personalDebts, friendLoans } = useDebtsStore.getState();
+    const tableErrors: string[] = [];
 
     // 1. Bancos
     const pendingBankIds = getPendingDeletionIdSet('banks');
@@ -333,13 +536,20 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
     const bankRows: BankRow[] = filteredBanks.map((b) => bankToRow(b, targetUserId));
     const validBankIds = new Set<string>(bankRows.map((b) => b.id));
     if (bankRows.length > 0) {
-      const { error } = await supabase.from('banks').upsert(bankRows, { onConflict: 'id' });
-      if (error) {
-        return { success: false, offline: true, error: error.message };
+      try {
+        const { error } = await supabase.from('banks').upsert(bankRows, { onConflict: 'id' });
+        if (error) {
+          tableErrors.push(`banks: ${error.message}`);
+          console.warn('[SyncPush] Error en banks (continuando con el resto):', error.message);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        tableErrors.push(`banks: ${msg}`);
+        console.warn('[SyncPush] Excepción en banks (continuando con el resto):', msg);
       }
     }
 
-    // 2. Tarjetas de cr??dito
+    // 2. Tarjetas de crédito
     const pendingCardIds = getPendingDeletionIdSet('credit_cards');
     const filteredCards = (cards || []).filter(
       (c) => !pendingCardIds.has(c.id) && !pendingCardIds.has(toDeterministicUuid(c.id))
@@ -352,11 +562,18 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
     });
     const validCardIds = new Set<string>(cardRows.map((c) => c.id));
     if (cardRows.length > 0) {
-      const { error } = await supabase
-        .from('credit_cards')
-        .upsert(cardRows, { onConflict: 'id' });
-      if (error) {
-        return { success: false, offline: true, error: error.message };
+      try {
+        const { error } = await supabase
+          .from('credit_cards')
+          .upsert(cardRows, { onConflict: 'id' });
+        if (error) {
+          tableErrors.push(`credit_cards: ${error.message}`);
+          console.warn('[SyncPush] Error en credit_cards (continuando con el resto):', error.message);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        tableErrors.push(`credit_cards: ${msg}`);
+        console.warn('[SyncPush] Excepción en credit_cards (continuando con el resto):', msg);
       }
     }
 
@@ -368,9 +585,16 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
     const peopleRows: PersonRow[] = filteredPeople.map((p) => personToRow(p, targetUserId));
     const validPersonIds = new Set<string>(peopleRows.map((p) => p.id));
     if (peopleRows.length > 0) {
-      const { error } = await supabase.from('people').upsert(peopleRows, { onConflict: 'id' });
-      if (error) {
-        return { success: false, offline: true, error: error.message };
+      try {
+        const { error } = await supabase.from('people').upsert(peopleRows, { onConflict: 'id' });
+        if (error) {
+          tableErrors.push(`people: ${error.message}`);
+          console.warn('[SyncPush] Error en people (continuando con el resto):', error.message);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        tableErrors.push(`people: ${msg}`);
+        console.warn('[SyncPush] Excepción en people (continuando con el resto):', msg);
       }
     }
 
@@ -384,15 +608,22 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
     );
     const validDebtIds = new Set<string>(debtRows.map((d) => d.id));
     if (debtRows.length > 0) {
-      const { error } = await supabase
-        .from('personal_debts')
-        .upsert(debtRows, { onConflict: 'id' });
-      if (error) {
-        return { success: false, offline: true, error: error.message };
+      try {
+        const { error } = await supabase
+          .from('personal_debts')
+          .upsert(debtRows, { onConflict: 'id' });
+        if (error) {
+          tableErrors.push(`personal_debts: ${error.message}`);
+          console.warn('[SyncPush] Error en personal_debts (continuando con el resto):', error.message);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        tableErrors.push(`personal_debts: ${msg}`);
+        console.warn('[SyncPush] Excepción en personal_debts (continuando con el resto):', msg);
       }
     }
 
-    // 5. Pr??stamos a Amigos
+    // 5. Préstamos a Amigos
     const pendingLoanIds = getPendingDeletionIdSet('friend_loans');
     const filteredLoans = (friendLoans || []).filter(
       (l) => !pendingLoanIds.has(l.id) && !pendingLoanIds.has(toDeterministicUuid(l.id))
@@ -402,35 +633,85 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
     );
     const validLoanIds = new Set<string>(loanRows.map((l) => l.id));
     if (loanRows.length > 0) {
-      const { error } = await supabase
-        .from('friend_loans')
-        .upsert(loanRows, { onConflict: 'id' });
-      if (error) {
-        return { success: false, offline: true, error: error.message };
+      try {
+        const { error } = await supabase
+          .from('friend_loans')
+          .upsert(loanRows, { onConflict: 'id' });
+        if (error) {
+          tableErrors.push(`friend_loans: ${error.message}`);
+          console.warn('[SyncPush] Error en friend_loans (continuando con el resto):', error.message);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        tableErrors.push(`friend_loans: ${msg}`);
+        console.warn('[SyncPush] Excepción en friend_loans (continuando con el resto):', msg);
       }
     }
 
-    // 6. Compras de Terceros
+    // 6. Compras de Terceros (capturar versión monotónica pushSeq antes de enviar a red)
+    const latestThirdPartyCharges = useDebtsStore.getState().thirdPartyCharges;
+    const pushSeq = chargeMutationSeq;
     const pendingChargeIds = getPendingDeletionIdSet('third_party_card_charges');
-    const filteredCharges = (thirdPartyCharges || []).filter(
+    const filteredCharges = (latestThirdPartyCharges || []).filter(
       (tc) => !pendingChargeIds.has(tc.id) && !pendingChargeIds.has(toDeterministicUuid(tc.id))
     );
     const chargeRows: ThirdPartyCardChargeRow[] = filteredCharges.map((tc) =>
       chargeToRow(tc, targetUserId, validPersonIds, validCardIds)
     );
     const validChargeIds = new Set<string>(chargeRows.map((c) => c.id));
+    const pushedChargeKeys = chargeRows.map((c) => normalizeChargeKey(c.id));
     if (chargeRows.length > 0) {
-      const { error } = await supabase
-        .from('third_party_card_charges')
-        .upsert(chargeRows, { onConflict: 'id' });
-      if (error) {
-        return { success: false, offline: true, error: error.message };
+      try {
+        const { error } = await supabase
+          .from('third_party_card_charges')
+          .upsert(chargeRows, { onConflict: 'id' });
+        if (error) {
+          tableErrors.push(`third_party_card_charges: ${error.message}`);
+          console.warn(
+            '[SyncPush] Error en third_party_card_charges (continuando con transacciones):',
+            error.message
+          );
+        } else {
+          let clearedAny = false;
+          let hasNewerChargeMutations = false;
+          for (const key of pushedChargeKeys) {
+            const pendingSeq = pendingChargeMutationsCache[key];
+            if (pendingSeq !== undefined) {
+              if (pendingSeq <= pushSeq) {
+                delete pendingChargeMutationsCache[key];
+                clearedAny = true;
+              } else {
+                hasNewerChargeMutations = true;
+              }
+            }
+          }
+          for (const seq of Object.values(pendingChargeMutationsCache)) {
+            if (seq > pushSeq) {
+              hasNewerChargeMutations = true;
+              break;
+            }
+          }
+          if (clearedAny) {
+            await persistPendingChargeMutations();
+          }
+          if (hasNewerChargeMutations) {
+            hasPendingPushRequest = true;
+          }
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        tableErrors.push(`third_party_card_charges: ${msg}`);
+        console.warn(
+          '[SyncPush] Excepción en third_party_card_charges (continuando con transacciones):',
+          msg
+        );
       }
     }
 
     // 7. Transacciones del Libro Diario
+    const latestTransactions = useTransactionsStore.getState().transactions;
     const pendingTxIds = getPendingDeletionIdSet('transactions');
-    const filteredTx = (transactions || []).filter(
+    const filteredTx = (latestTransactions || []).filter(
       (t) => !pendingTxIds.has(t.id) && !pendingTxIds.has(toDeterministicUuid(t.id))
     );
     const txRows: TransactionRow[] = filteredTx.map((t) =>
@@ -444,13 +725,25 @@ export const syncPush = async (userId?: string): Promise<SyncResult> => {
       })
     );
     if (txRows.length > 0) {
-      const { error } = await supabase
-        .from('transactions')
-        .upsert(txRows, { onConflict: 'id' });
-      if (error) {
-        return { success: false, offline: true, error: error.message };
+      try {
+        const { error } = await supabase
+          .from('transactions')
+          .upsert(txRows, { onConflict: 'id' });
+        if (error) {
+          tableErrors.push(`transactions: ${error.message}`);
+          console.warn('[SyncPush] Error en transactions:', error.message);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        tableErrors.push(`transactions: ${msg}`);
+        console.warn('[SyncPush] Excepción en transactions:', msg);
       }
     }
+
+    if (tableErrors.length > 0) {
+      return { success: false, offline: true, error: tableErrors.join(' | ') };
+    }
+
     lastSyncTimestamp = new Date().toISOString();
     return { success: true, syncedAt: lastSyncTimestamp };
   } catch (error) {
@@ -501,8 +794,9 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
       };
     }
 
-    // Cargar cola de borrados pendientes para el escudo anti-zombis de entrada
+    // Cargar cola de borrados pendientes y mutaciones pendientes de cargos para el escudo anti-zombis de entrada
     await getPendingDeletions();
+    await getPendingChargeMutations();
 
     // 1. Pull bancos
     const { data: banksData, error: banksErr } = await supabase
@@ -752,14 +1046,23 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
       }
     }
 
+    const pendingChargeMutationIds = getPendingChargeMutationIdSet();
+
     if (chargesData && chargesData.length > 0) {
       const pendingChargeIds = getPendingDeletionIdSet('third_party_card_charges');
       const filteredCharges = (chargesData as ThirdPartyCardChargeRow[]).filter(
-        (row) => !pendingChargeIds.has(row.id) && !pendingChargeIds.has(toDeterministicUuid(row.id))
+        (row) =>
+          !pendingChargeIds.has(row.id) &&
+          !pendingChargeIds.has(toDeterministicUuid(row.id)) &&
+          !pendingChargeMutationIds.has(toDeterministicUuid(row.id))
       );
       const pulledCharges = filteredCharges.map(rowToCharge);
       const currentCharges = useDebtsStore.getState().thirdPartyCharges;
-      debtsStoreUpdates.thirdPartyCharges = mergeById(currentCharges, pulledCharges);
+      debtsStoreUpdates.thirdPartyCharges = mergeById(
+        currentCharges,
+        pulledCharges,
+        pendingChargeMutationIds
+      );
     }
     if (deletedChargesData && deletedChargesData.length > 0) {
       const deletedChargeIdSet = new Set<string>();
@@ -769,7 +1072,9 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
       }
       const baseCharges = debtsStoreUpdates.thirdPartyCharges ?? useDebtsStore.getState().thirdPartyCharges;
       const prunedCharges = baseCharges.filter(
-        (c) => !deletedChargeIdSet.has(c.id) && !deletedChargeIdSet.has(toDeterministicUuid(c.id))
+        (c) =>
+          (!deletedChargeIdSet.has(c.id) && !deletedChargeIdSet.has(toDeterministicUuid(c.id))) ||
+          pendingChargeMutationIds.has(toDeterministicUuid(c.id))
       );
       if (prunedCharges.length !== baseCharges.length) {
         debtsStoreUpdates.thirdPartyCharges = prunedCharges;
@@ -777,7 +1082,13 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
     }
 
     if (Object.keys(debtsStoreUpdates).length > 0) {
-      useDebtsStore.setState(debtsStoreUpdates);
+      isApplyingRemoteChargesUpdate = true;
+      try {
+        useDebtsStore.setState(debtsStoreUpdates);
+      } finally {
+        isApplyingRemoteChargesUpdate = false;
+      }
+      refreshChargeSnapshotFromStore();
     }
 
     if (txData && txData.length > 0) {
@@ -803,6 +1114,13 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
         useTransactionsStore.setState({ transactions: prunedTx });
       }
     }
+
+    if (!hasPendingChargeMutations()) {
+      useDebtsStore
+        .getState()
+        .reconcileThirdPartyCurrentPeriod(useTransactionsStore.getState().transactions, new Date());
+    }
+
     lastSyncTimestamp = new Date().toISOString();
     return { success: true, syncedAt: lastSyncTimestamp };
   } catch (error) {
@@ -815,16 +1133,24 @@ export const syncPull = async (userId?: string): Promise<SyncResult> => {
   }
 };
 
-export const syncAll = async (userId?: string): Promise<SyncResult> => {
+export const syncAll = async (
+  userId?: string,
+  options?: { silent?: boolean }
+): Promise<SyncResult> => {
   if (isSyncInProgress) {
     return { success: false, offline: true, error: 'Sincronización ya en curso' };
   }
 
+  const isSilent = Boolean(options?.silent);
   isSyncInProgress = true;
-  notifySyncListeners(true);
+  if (!isSilent) {
+    notifySyncListeners(true);
+  }
   notifySyncStatusListeners();
   const safetyTimeout = setTimeout(() => {
-    notifySyncListeners(false);
+    if (!isSilent) {
+      notifySyncListeners(false);
+    }
     notifySyncStatusListeners();
   }, 4000);
 
@@ -838,17 +1164,22 @@ export const syncAll = async (userId?: string): Promise<SyncResult> => {
       targetUserId = data.session.user.id;
     }
 
-    // Escudo de salida: procesar y vaciar prioritariamente los borrados pendientes
+    if (pushDebounceTimer) {
+      clearTimeout(pushDebounceTimer);
+      pushDebounceTimer = null;
+    }
+
+    // Escudo de salida: procesar y vaciar prioritariamente borrados y mutaciones locales pendientes
     await flushPendingDeletions(targetUserId);
 
-    // 1. Pull remote changes first
-    const pullResult = await syncPull(targetUserId);
-
-    // 2. Push local changes
+    // 1. Push local changes first (evita que un pull pise mutaciones locales pendientes)
     const pushResult = await syncPush(targetUserId);
 
-    const success = pullResult.success && pushResult.success;
-    const error = pullResult.error || pushResult.error;
+    // 2. Pull remote changes
+    const pullResult = await syncPull(targetUserId);
+
+    const success = pushResult.success && pullResult.success;
+    const error = pushResult.error || pullResult.error;
 
     if (success) {
       lastSyncTimestamp = new Date().toISOString();
@@ -859,8 +1190,8 @@ export const syncAll = async (userId?: string): Promise<SyncResult> => {
       push: pushResult,
       pull: pullResult,
       error,
-      offline: pullResult.offline || pushResult.offline,
-      syncedAt: lastSyncTimestamp || pullResult.syncedAt || pushResult.syncedAt,
+      offline: pushResult.offline || pullResult.offline,
+      syncedAt: lastSyncTimestamp || pushResult.syncedAt || pullResult.syncedAt,
     };
   } catch (error) {
     const errMessage =
@@ -868,7 +1199,9 @@ export const syncAll = async (userId?: string): Promise<SyncResult> => {
     return { success: false, offline: true, error: errMessage };
   } finally {
     clearTimeout(safetyTimeout);
-    notifySyncListeners(false);
+    if (!isSilent) {
+      notifySyncListeners(false);
+    }
     isSyncInProgress = false;
     notifySyncStatusListeners();
   }
@@ -1097,21 +1430,44 @@ export const startRealtimeSubscription = (userId?: string): void => {
             const idToDelete = newRow?.id || oldRow?.id;
             if (idToDelete) {
               const targetUuid = toDeterministicUuid(idToDelete);
+              if (hasPendingChargeMutation(targetUuid)) {
+                return;
+              }
               const currentCharges = useDebtsStore.getState().thirdPartyCharges;
-              useDebtsStore.setState({
-                thirdPartyCharges: currentCharges.filter((c) => toDeterministicUuid(c.id) !== targetUuid),
-              });
+              isApplyingRemoteChargesUpdate = true;
+              try {
+                useDebtsStore.setState({
+                  thirdPartyCharges: currentCharges.filter((c) => toDeterministicUuid(c.id) !== targetUuid),
+                });
+              } finally {
+                isApplyingRemoteChargesUpdate = false;
+              }
+              refreshChargeSnapshotFromStore();
             }
           } else if (newRow && (eventType === 'INSERT' || eventType === 'UPDATE')) {
             const pendingChargeIds = getPendingDeletionIdSet('third_party_card_charges');
             if (pendingChargeIds.has(newRow.id) || pendingChargeIds.has(toDeterministicUuid(newRow.id))) {
               return;
             }
+            const targetUuid = toDeterministicUuid(newRow.id);
+            if (hasPendingChargeMutation(targetUuid)) {
+              return;
+            }
             const incomingCharge = rowToThirdPartyCharge(newRow);
             const currentCharges = useDebtsStore.getState().thirdPartyCharges;
-            useDebtsStore.setState({
-              thirdPartyCharges: mergeById(currentCharges, [incomingCharge]),
-            });
+            isApplyingRemoteChargesUpdate = true;
+            try {
+              useDebtsStore.setState({
+                thirdPartyCharges: mergeById(
+                  currentCharges,
+                  [incomingCharge],
+                  getPendingChargeMutationIdSet()
+                ),
+              });
+            } finally {
+              isApplyingRemoteChargesUpdate = false;
+            }
+            refreshChargeSnapshotFromStore();
           }
         } catch (err) {
           console.error('[SyncRealtime] Error procesando evento de third_party_card_charges:', err);
@@ -1299,8 +1655,14 @@ export const purgeLocalSyncState = (): void => {
   isInitialSyncActive = false;
   lastSyncTimestamp = null;
   pendingDeletionsCache = [];
+  chargeMutationSeq = 0;
+  pendingChargeMutationsCache = {};
+  isPendingChargeMutationsLoaded = false;
+  pendingChargeMutationsLoadPromise = null;
+  lastKnownChargesSnapshot.clear();
   try {
     void safeStorage.removeItem(PENDING_DELETIONS_STORAGE_KEY);
+    void safeStorage.removeItem(PENDING_CHARGE_MUTATIONS_STORAGE_KEY);
   } catch {
     // Silencioso
   }
@@ -1317,6 +1679,10 @@ export const syncService = {
   getPendingDeletions,
   enqueuePendingDeletion,
   getPendingDeletionIdSet,
+  getPendingChargeMutations,
+  getPendingChargeMutationIdSet,
+  hasPendingChargeMutations,
+  hasPendingBackgroundPush,
   deleteRemoteRecord,
   triggerBackgroundPush,
   isSyncing,
@@ -1335,11 +1701,19 @@ setTransactionSyncHandlers({
   },
   onTransactionDeleted: (id: string): void => {
     syncService.deleteRemoteRecord('transactions', id).catch(() => {});
+    if (pushDebounceTimer !== null || hasPendingChargeMutations()) {
+      if (pushDebounceTimer) {
+        clearTimeout(pushDebounceTimer);
+        pushDebounceTimer = null;
+      }
+      void syncPush().catch(() => {});
+    }
   },
 });
 
 setDebtSyncHandlers({
   onDebtAddedOrUpdated: (): void => {
+    detectAndRecordPendingChargeMutations();
     syncService.triggerBackgroundPush();
   },
   onPersonalDebtDeleted: (id: string): void => {
@@ -1349,6 +1723,12 @@ setDebtSyncHandlers({
     syncService.deleteRemoteRecord('friend_loans', id).catch(() => {});
   },
   onThirdPartyChargeDeleted: (id: string): void => {
+    const key = normalizeChargeKey(id);
+    lastKnownChargesSnapshot.delete(key);
+    if (pendingChargeMutationsCache[key] !== undefined) {
+      delete pendingChargeMutationsCache[key];
+      void persistPendingChargeMutations();
+    }
     syncService.deleteRemoteRecord('third_party_card_charges', id).catch(() => {});
   },
   onPersonDeleted: (id: string): void => {
@@ -1377,5 +1757,23 @@ setCardSyncHandlers({
   },
 });
 
-// Carga temprana de la cola de bajas persistidas para mantener la caché caliente
+if (!useDebtsStore.persist || useDebtsStore.persist.hasHydrated()) {
+  refreshChargeSnapshotFromStore();
+} else {
+  useDebtsStore.persist.onFinishHydration?.(() => {
+    refreshChargeSnapshotFromStore();
+  });
+}
+
+useDebtsStore.subscribe((state, prevState) => {
+  if (state.thirdPartyCharges !== prevState.thirdPartyCharges) {
+    if (useDebtsStore.persist && !useDebtsStore.persist.hasHydrated()) {
+      return;
+    }
+    detectAndRecordPendingChargeMutations();
+  }
+});
+
+// Carga temprana de colas persistidas para mantener la caché caliente
 getPendingDeletions().catch(() => {});
+getPendingChargeMutations().catch(() => {});

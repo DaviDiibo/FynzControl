@@ -18,11 +18,13 @@ export const setTransactionSyncHandlers = (handlers: TransactionSyncHandlers): v
   syncHandlers = handlers;
 };
 
-const isSameBankId = (a?: string | null, b?: string | null): boolean => {
+const isSameId = (a?: string | null, b?: string | null): boolean => {
   if (!a || !b) return false;
   if (a === b) return true;
   return toDeterministicUuid(a) === toDeterministicUuid(b);
 };
+
+const isSameBankId = isSameId;
 
 export type TransactionType = 'income' | 'expense' | 'reimbursement' | 'card_payment';
 
@@ -188,7 +190,26 @@ export const useTransactionsStore = create<TransactionsState>()(
         const dateGroup = `Hoy, ${day} de ${monthName}`;
         const icon = resolveIcon(data.type, data.category);
         const category = resolveCategoryName(data.type, data.category);
-        const resolvedPersonName = data.relatedPersonName || data.personName;
+        let resolvedPersonName = data.relatedPersonName || data.personName;
+        let resolvedPersonId = data.relatedPersonId;
+
+        if (data.type === 'reimbursement') {
+          const people = useDebtsStore.getState().people;
+          if (!resolvedPersonName && resolvedPersonId) {
+            const matchedById = people.find((p) => isSameId(p.id, resolvedPersonId));
+            if (matchedById) {
+              resolvedPersonName = matchedById.name;
+            }
+          } else if (resolvedPersonName && !resolvedPersonId) {
+            const targetNorm = resolvedPersonName.trim().toLowerCase();
+            const matchedByName = people.find(
+              (p) => p.name.trim().toLowerCase() === targetNorm
+            );
+            if (matchedByName) {
+              resolvedPersonId = matchedByName.id;
+            }
+          }
+        }
 
         const newTransaction: Transaction = {
           id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
@@ -207,7 +228,7 @@ export const useTransactionsStore = create<TransactionsState>()(
           relatedLoanId: data.relatedLoanId,
           relatedDebtId: data.relatedDebtId,
           relatedChargeId: data.relatedChargeId,
-          relatedPersonId: data.relatedPersonId,
+          relatedPersonId: resolvedPersonId,
           relatedPersonName: resolvedPersonName,
           paymentMethod: data.paymentMethod,
           cardId: data.cardId,
@@ -228,26 +249,37 @@ export const useTransactionsStore = create<TransactionsState>()(
       },
 
       deleteTransaction: (id: string): void => {
-        const tx = get().transactions.find((t) => t.id === id);
+        const allTransactions = get().transactions;
+        const tx = allTransactions.find((t) => t.id === id);
         if (tx) {
+          const remainingTransactions = allTransactions.filter((t) => t.id !== id);
+          const debtsStore = useDebtsStore.getState();
+
           const resolveTargetPerson = (): string | undefined => {
             let targetPerson = tx.relatedPersonName || tx.personName;
             if (!targetPerson && tx.relatedPersonId) {
-              targetPerson = useDebtsStore.getState().people.find((p) => p.id === tx.relatedPersonId)?.name;
+              targetPerson = debtsStore.people.find((p) => isSameId(p.id, tx.relatedPersonId))?.name;
             }
             if (!targetPerson && (tx.title || tx.notes)) {
-              const debtsState = useDebtsStore.getState();
-              const peopleMatch = debtsState.people.find((p) =>
-                (Boolean(tx.title) && Boolean(p.name) && (tx.title ?? '').toLowerCase().includes((p.name ?? '').toLowerCase().trim())) ||
-                (Boolean(tx.notes) && Boolean(p.name) && (tx.notes ?? '').toLowerCase().includes((p.name ?? '').toLowerCase().trim()))
+              const titleLower = (tx.title ?? '').toLowerCase();
+              const notesLower = (tx.notes ?? '').toLowerCase();
+              const sortedPeople = [...debtsStore.people].sort(
+                (a, b) => (b.name ?? '').trim().length - (a.name ?? '').trim().length
               );
+              const peopleMatch = sortedPeople.find((p) => {
+                const nameLower = (p.name ?? '').toLowerCase().trim();
+                return Boolean(nameLower) && (titleLower.includes(nameLower) || notesLower.includes(nameLower));
+              });
               if (peopleMatch) {
                 targetPerson = peopleMatch.name;
               } else {
-                const chargeMatch = debtsState.thirdPartyCharges.find((c) =>
-                  (Boolean(tx.title) && Boolean(c.personName) && (tx.title ?? '').toLowerCase().includes((c.personName ?? '').toLowerCase().trim())) ||
-                  (Boolean(tx.notes) && Boolean(c.personName) && (tx.notes ?? '').toLowerCase().includes((c.personName ?? '').toLowerCase().trim()))
+                const sortedCharges = [...debtsStore.thirdPartyCharges].sort(
+                  (a, b) => (b.personName ?? '').trim().length - (a.personName ?? '').trim().length
                 );
+                const chargeMatch = sortedCharges.find((c) => {
+                  const nameLower = (c.personName ?? '').toLowerCase().trim();
+                  return Boolean(nameLower) && (titleLower.includes(nameLower) || notesLower.includes(nameLower));
+                });
                 if (chargeMatch) {
                   targetPerson = chargeMatch.personName;
                 }
@@ -256,35 +288,75 @@ export const useTransactionsStore = create<TransactionsState>()(
             return targetPerson;
           };
 
-          if (tx.thirdPartyAllocations && tx.thirdPartyAllocations.length > 0) {
-            const didRevert = useDebtsStore.getState().revertThirdPartyAllocations(tx.thirdPartyAllocations);
-            if (!didRevert) {
-              const targetPerson = resolveTargetPerson();
-              if (targetPerson) {
-                useDebtsStore.getState().revertThirdPartyPersonAbono(targetPerson, tx.amount);
-              } else if (tx.relatedPersonId) {
-                useDebtsStore.getState().revertThirdPartyPersonAbono(tx.relatedPersonId, tx.amount);
-              }
-            }
-          } else if (tx.relatedChargeId) {
-            const debtsStore = useDebtsStore.getState();
-            if (typeof debtsStore.revertThirdPartyChargeAbono === 'function') {
-              debtsStore.revertThirdPartyChargeAbono(tx.relatedChargeId, tx.amount);
-            } else {
-              debtsStore.revertThirdPartyChargeCollection(tx.relatedChargeId, tx.amount);
-            }
-          } else if (
+          const isThirdPartyReimbursement =
             tx.type === 'reimbursement' ||
             tx.category === 'Cobro Tarjeta Compartida' ||
             tx.category === 'Reembolso' ||
-            Boolean(tx.relatedPersonName || tx.personName || tx.relatedPersonId)
-          ) {
+            (tx.type === 'income' &&
+              !tx.relatedLoanId &&
+              !tx.relatedDebtId &&
+              tx.category !== 'Cobro Préstamo' &&
+              tx.category !== 'Desembolso Préstamo' &&
+              Boolean(tx.relatedPersonName || tx.personName || tx.relatedPersonId));
+
+          const revertByPersonFallback = (): void => {
             const targetPerson = resolveTargetPerson();
             if (targetPerson) {
-              useDebtsStore.getState().revertThirdPartyPersonAbono(targetPerson, tx.amount);
+              debtsStore.revertThirdPartyPersonAbono(
+                targetPerson,
+                tx.amount,
+                remainingTransactions,
+                tx.date
+              );
             } else if (tx.relatedPersonId) {
-              useDebtsStore.getState().revertThirdPartyPersonAbono(tx.relatedPersonId, tx.amount);
+              debtsStore.revertThirdPartyPersonAbono(
+                tx.relatedPersonId,
+                tx.amount,
+                remainingTransactions,
+                tx.date
+              );
             }
+          };
+
+          if (tx.thirdPartyAllocations && tx.thirdPartyAllocations.length > 0) {
+            const didRevert = debtsStore.revertThirdPartyAllocations(
+              tx.thirdPartyAllocations,
+              remainingTransactions,
+              tx.date
+            );
+            if (!didRevert) {
+              if (
+                tx.relatedChargeId &&
+                debtsStore.thirdPartyCharges.some((c) => isSameId(c.id, tx.relatedChargeId))
+              ) {
+                debtsStore.revertThirdPartyChargeAbono(
+                  tx.relatedChargeId,
+                  tx.amount,
+                  remainingTransactions,
+                  tx.date
+                );
+              } else {
+                revertByPersonFallback();
+              }
+            }
+          } else if (tx.relatedChargeId && tx.type !== 'expense' && tx.type !== 'card_payment') {
+            if (typeof debtsStore.revertThirdPartyChargeAbono === 'function') {
+              debtsStore.revertThirdPartyChargeAbono(
+                tx.relatedChargeId,
+                tx.amount,
+                remainingTransactions,
+                tx.date
+              );
+            } else {
+              debtsStore.revertThirdPartyChargeCollection(
+                tx.relatedChargeId,
+                tx.amount,
+                remainingTransactions,
+                tx.date
+              );
+            }
+          } else if (isThirdPartyReimbursement) {
+            revertByPersonFallback();
           }
 
           if (tx.relatedLoanId && tx.type === 'income') {

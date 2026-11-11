@@ -1431,5 +1431,468 @@ describe('Integración Contable: Amortizaciones, Cobros, Reversiones y Abonos en
     expect(statementDic.isStatementPaid).toBe(false);
   });
 
+  it('Caso 18: Reversión conmutativa fuera de orden LIFO para cargo preexistente de tercero (initialPaidInstallments: 2, 3 cuotas de $219.74)', () => {
+    // 1. Registrar compras para Junior el 10 de Noviembre:
+    // - Cargo corriente de $50 (1 cuota) para probar cascada
+    // - Cargo preexistente de 3 cuotas de $219.74 ($659.22 total) con 2 cuotas ya pagadas (saldo inicial $219.74)
+    jest.setSystemTime(new Date('2026-11-10T10:00:00Z'));
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Junior',
+      cardName: 'Nubank',
+      concept: 'Snack compartido',
+      amount: 50,
+      installmentsCount: 1,
+    });
+
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Junior',
+      cardName: 'Nubank',
+      concept: 'Monitor cuotas preexistente',
+      amount: 659.22,
+      installmentsCount: 3,
+      monthlyInstallmentAmount: 219.74,
+      initialPaidInstallments: 2,
+      paidInstallmentsCount: 2,
+      isPreexisting: true,
+      remainingAmount: 219.74,
+    });
+
+    const snackInitial = useDebtsStore.getState().thirdPartyCharges.find((c) => c.concept === 'Snack compartido')!;
+    const monitorInitial = useDebtsStore.getState().thirdPartyCharges.find((c) => c.concept === 'Monitor cuotas preexistente')!;
+    expect(monitorInitial.remainingAmount).toBe(219.74);
+    expect(monitorInitial.initialPaidInstallments).toBe(2);
+    expect(monitorInitial.paidInstallmentsCount).toBe(2);
+
+    // 2. Abono 1 (10/nov): $216.84 ($50 liquida Snack + $166.84 amortiza Monitor, quedando $52.90)
+    const nov10Iso = '2026-11-10T15:00:00.000Z';
+    jest.setSystemTime(new Date(nov10Iso));
+    const abono1 = useDebtsStore.getState().recordMonthlyPersonAbono('Junior', 216.84);
+    expect(abono1.allocations).toHaveLength(2);
+
+    useTransactionsStore.getState().addTransaction({
+      title: 'Abono Junior 10/nov',
+      amount: 216.84,
+      type: 'reimbursement',
+      category: 'Cobro Tarjeta Compartida',
+      personName: 'Junior',
+      relatedPersonName: 'Junior',
+      date: nov10Iso,
+      thirdPartyAllocations: abono1.allocations,
+    });
+
+    const monitorAfter1 = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === monitorInitial.id)!;
+    expect(monitorAfter1.remainingAmount).toBe(52.9);
+    expect(monitorAfter1.currentPeriodPaidAmount).toBe(166.84);
+    expect(monitorAfter1.lastPaymentDate).toBe(nov10Iso);
+
+    // 3. Abono 2 (11/nov): $52.90 (liquida Monitor; su snapshot guarda previousCurrentPeriodPaid: 166.84)
+    const nov11Iso = '2026-11-11T11:00:00.000Z';
+    jest.setSystemTime(new Date(nov11Iso));
+    const abono2 = useDebtsStore.getState().recordMonthlyPersonAbono('Junior', 52.9);
+    expect(abono2.allocations).toHaveLength(1);
+    expect(abono2.allocations[0].previousCurrentPeriodPaid).toBe(166.84);
+    expect(abono2.allocations[0].previousRemaining).toBe(52.9);
+
+    useTransactionsStore.getState().addTransaction({
+      title: 'Abono Junior 11/nov',
+      amount: 52.9,
+      type: 'reimbursement',
+      category: 'Cobro Tarjeta Compartida',
+      personName: 'Junior',
+      relatedPersonName: 'Junior',
+      date: nov11Iso,
+      thirdPartyAllocations: abono2.allocations,
+    });
+
+    const monitorAfter2 = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === monitorInitial.id)!;
+    expect(monitorAfter2.remainingAmount).toBe(0);
+    expect(monitorAfter2.currentPeriodPaidAmount).toBe(219.74);
+    expect(monitorAfter2.settled).toBe(true);
+    expect(monitorAfter2.paidInstallmentsCount).toBe(3);
+
+    const txs = useTransactionsStore.getState().transactions;
+    const txNov10 = txs.find((t) => t.title === 'Abono Junior 10/nov')!;
+    const txNov11 = txs.find((t) => t.title === 'Abono Junior 11/nov')!;
+
+    // 4. Eliminar PRIMERO el abono del 10/nov (fuera de orden LIFO)
+    jest.setSystemTime(new Date('2026-11-11T18:00:00.000Z'));
+    useTransactionsStore.getState().deleteTransaction(txNov10.id);
+
+    const snackMid = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === snackInitial.id)!;
+    expect(snackMid.remainingAmount).toBe(50);
+    expect(snackMid.currentPeriodPaidAmount).toBe(0);
+    expect(snackMid.settled).toBe(false);
+    expect(snackMid.lastPaymentDate).toBeUndefined();
+
+    const monitorMid = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === monitorInitial.id)!;
+    expect(monitorMid.remainingAmount).toBe(166.84);
+    expect(monitorMid.currentPeriodPaidAmount).toBe(52.9);
+    expect(monitorMid.settled).toBe(false);
+    expect(monitorMid.settledAt).toBeUndefined();
+    expect(monitorMid.paidInstallmentsCount).toBe(2);
+    expect(monitorMid.lastPaymentDate).toBe(nov11Iso);
+
+    // 5. Eliminar SEGUNDO el abono del 11/nov (sin resucitar previousCurrentPeriodPaid: 166.84)
+    useTransactionsStore.getState().deleteTransaction(txNov11.id);
+    expect(useTransactionsStore.getState().transactions).toHaveLength(0);
+
+    const monitorFinal = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === monitorInitial.id)!;
+    expect(monitorFinal.currentPeriodPaidAmount).toBe(0);
+    expect(monitorFinal.remainingAmount).toBe(219.74);
+    expect(monitorFinal.lastPaymentDate).toBeUndefined();
+    expect(monitorFinal.settled).toBe(false);
+    expect(monitorFinal.settledAt).toBeUndefined();
+    expect(monitorFinal.paidInstallmentsCount).toBe(2);
+
+    const summaryFinal = useDebtsStore
+      .getState()
+      .getThirdPartyMonthlyBillingSummary(new Date('2026-11-11T18:00:00.000Z'));
+    const juniorSummary = summaryFinal.find((s) => s.personName === 'Junior')!;
+    expect(juniorSummary.monthlyPaidAmount).toBe(0);
+    expect(juniorSummary.monthlyPendingAmount).toBe(269.74);
+    expect(juniorSummary.totalRemainingDebt).toBe(269.74);
+  });
+
+  it('Caso 19: Eliminación de abono intermedio manteniendo otro activo preserva montos exactos y lastPaymentDate más reciente', () => {
+    jest.setSystemTime(new Date('2026-11-05T12:00:00.000Z'));
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Junior',
+      cardName: 'Visa Gold',
+      concept: 'Televisor 3 cuotas',
+      amount: 300,
+      installmentsCount: 3,
+      monthlyInstallmentAmount: 100,
+    });
+    const chargeId = useDebtsStore.getState().thirdPartyCharges[0].id;
+
+    // Abono 1 (05/nov): $40
+    const nov05Iso = '2026-11-05T12:00:00.000Z';
+    const r1 = useDebtsStore.getState().recordMonthlyPersonAbono('Junior', 40);
+    useTransactionsStore.getState().addTransaction({
+      title: 'Abono 05/nov',
+      amount: 40,
+      type: 'reimbursement',
+      category: 'Cobro Tarjeta Compartida',
+      personName: 'Junior',
+      relatedPersonName: 'Junior',
+      date: nov05Iso,
+      thirdPartyAllocations: r1.allocations,
+    });
+
+    // Abono 2 (08/nov): $60
+    const nov08Iso = '2026-11-08T12:00:00.000Z';
+    jest.setSystemTime(new Date(nov08Iso));
+    const r2 = useDebtsStore.getState().recordMonthlyPersonAbono('Junior', 60);
+    useTransactionsStore.getState().addTransaction({
+      title: 'Abono 08/nov',
+      amount: 60,
+      type: 'reimbursement',
+      category: 'Cobro Tarjeta Compartida',
+      personName: 'Junior',
+      relatedPersonName: 'Junior',
+      date: nov08Iso,
+      thirdPartyAllocations: r2.allocations,
+    });
+
+    // Abono 3 (11/nov): $50
+    const nov11Iso = '2026-11-11T12:00:00.000Z';
+    jest.setSystemTime(new Date(nov11Iso));
+    const r3 = useDebtsStore.getState().recordMonthlyPersonAbono('Junior', 50);
+    useTransactionsStore.getState().addTransaction({
+      title: 'Abono 11/nov',
+      amount: 50,
+      type: 'reimbursement',
+      category: 'Cobro Tarjeta Compartida',
+      personName: 'Junior',
+      relatedPersonName: 'Junior',
+      date: nov11Iso,
+      thirdPartyAllocations: r3.allocations,
+    });
+
+    const chargeBefore = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === chargeId)!;
+    expect(chargeBefore.remainingAmount).toBe(150);
+    expect(chargeBefore.currentPeriodPaidAmount).toBe(150);
+    expect(chargeBefore.paidInstallmentsCount).toBe(1);
+
+    // Eliminar abono intermedio (08/nov, $60) manteniendo activos el del 05/nov ($40) y 11/nov ($50)
+    const tx08 = useTransactionsStore.getState().transactions.find((t) => t.title === 'Abono 08/nov')!;
+    const tx11 = useTransactionsStore.getState().transactions.find((t) => t.title === 'Abono 11/nov')!;
+    useTransactionsStore.getState().deleteTransaction(tx08.id);
+
+    const chargeAfterMidDelete = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === chargeId)!;
+    expect(chargeAfterMidDelete.remainingAmount).toBe(210);
+    expect(chargeAfterMidDelete.currentPeriodPaidAmount).toBe(90);
+    expect(chargeAfterMidDelete.paidInstallmentsCount).toBe(0);
+    expect(chargeAfterMidDelete.settled).toBe(false);
+    expect(chargeAfterMidDelete.lastPaymentDate).toBe(nov11Iso);
+
+    // Eliminar también el del 11/nov ($50): debe retroceder exactamente al del 05/nov ($40)
+    useTransactionsStore.getState().deleteTransaction(tx11.id);
+
+    const chargeWithOnlyFirst = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === chargeId)!;
+    expect(chargeWithOnlyFirst.remainingAmount).toBe(260);
+    expect(chargeWithOnlyFirst.currentPeriodPaidAmount).toBe(40);
+    expect(chargeWithOnlyFirst.lastPaymentDate).toBe(nov05Iso);
+  });
+
+  it('Caso 20: Fallback revertThirdPartyPersonAbono excluye cuotas preexistentes y prioriza cargos con currentPeriodPaidAmount > 0', () => {
+    const oct15Iso = '2026-10-15T12:00:00.000Z';
+    jest.setSystemTime(new Date(oct15Iso));
+
+    // Cargo A: Preexistente con initialPaidInstallments = 2, 0 abonos dentro de la app
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Junior',
+      cardName: 'Nubank',
+      concept: 'Cargo Preexistente Intacto',
+      amount: 659.22,
+      installmentsCount: 3,
+      monthlyInstallmentAmount: 219.74,
+      initialPaidInstallments: 2,
+      paidInstallmentsCount: 2,
+      isPreexisting: true,
+      remainingAmount: 219.74,
+    });
+
+    // Cargo B: Compra de $300 a 3 cuotas con abono de $100 en Octubre + $40 en Noviembre
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Junior',
+      cardName: 'Next',
+      concept: 'Cargo Mixto Oct-Nov',
+      amount: 300,
+      installmentsCount: 3,
+      monthlyInstallmentAmount: 100,
+    });
+
+    // Cargo C: Compra de $150 (1 cuota) con abono de $50 en Noviembre
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Junior',
+      cardName: 'Next',
+      concept: 'Cargo Noviembre',
+      amount: 150,
+      installmentsCount: 1,
+    });
+
+    const chargeA = useDebtsStore.getState().thirdPartyCharges.find((c) => c.concept === 'Cargo Preexistente Intacto')!;
+    const chargeB = useDebtsStore.getState().thirdPartyCharges.find((c) => c.concept === 'Cargo Mixto Oct-Nov')!;
+    const chargeC = useDebtsStore.getState().thirdPartyCharges.find((c) => c.concept === 'Cargo Noviembre')!;
+
+    // Abono Octubre en Cargo B ($100) con transacción activa preservada
+    useDebtsStore.getState().recordThirdPartyInstallmentAbono(chargeB.id, 100);
+    useTransactionsStore.getState().addTransaction({
+      title: 'Abono Oct Junior',
+      amount: 100,
+      type: 'reimbursement',
+      category: 'Cobro Tarjeta Compartida',
+      personName: 'Junior',
+      relatedPersonName: 'Junior',
+      relatedChargeId: chargeB.id,
+      date: oct15Iso,
+    });
+    const txOct = useTransactionsStore.getState().transactions[0];
+
+    // Abonos en Noviembre: $40 a Cargo B y $50 a Cargo C
+    const nov10Iso = '2026-11-10T12:00:00.000Z';
+    jest.setSystemTime(new Date(nov10Iso));
+    useDebtsStore.setState((state) => ({
+      thirdPartyCharges: state.thirdPartyCharges.map((c) => {
+        if (c.id === chargeB.id) {
+          return {
+            ...c,
+            remainingAmount: 160,
+            currentPeriodPaidAmount: 40,
+            lastPaymentDate: nov10Iso,
+          };
+        }
+        if (c.id === chargeC.id) {
+          return {
+            ...c,
+            remainingAmount: 100,
+            currentPeriodPaidAmount: 50,
+            lastPaymentDate: '2026-11-11T12:00:00.000Z',
+          };
+        }
+        return c;
+      }),
+    }));
+
+    // Revertir vía fallback $90 ($40 de Cargo B + $50 de Cargo C) manteniendo txOct activa
+    const nov11Iso = '2026-11-11T12:00:00.000Z';
+    jest.setSystemTime(new Date(nov11Iso));
+    const reverted = useDebtsStore
+      .getState()
+      .revertThirdPartyPersonAbono('Junior', 90, [txOct], nov11Iso);
+    expect(reverted).toBe(true);
+
+    const chargeAAfter = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === chargeA.id)!;
+    expect(chargeAAfter.remainingAmount).toBe(219.74);
+    expect(chargeAAfter.paidInstallmentsCount).toBe(2);
+    expect(chargeAAfter.currentPeriodPaidAmount).toBe(0);
+    expect(chargeAAfter.lastPaymentDate).toBeUndefined();
+
+    const chargeBAfter = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === chargeB.id)!;
+    expect(chargeBAfter.remainingAmount).toBe(200);
+    expect(chargeBAfter.currentPeriodPaidAmount).toBe(0);
+    expect(chargeBAfter.paidInstallmentsCount).toBe(1);
+    expect(chargeBAfter.lastPaymentDate).toBe(oct15Iso);
+
+    const chargeCAfter = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === chargeC.id)!;
+    expect(chargeCAfter.remainingAmount).toBe(150);
+    expect(chargeCAfter.currentPeriodPaidAmount).toBe(0);
+    expect(chargeCAfter.lastPaymentDate).toBeUndefined();
+
+    // Intentar revertir $500 extra cuando Cargo B solo tiene $100 pagados en app y Cargo A tiene 2 cuotas preexistentes:
+    // Cargo A jamás debe absorber sus cuotas preexistentes
+    useDebtsStore.getState().revertThirdPartyPersonAbono('Junior', 500, []);
+    const chargeAFinal = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === chargeA.id)!;
+    expect(chargeAFinal.remainingAmount).toBe(219.74);
+    expect(chargeAFinal.paidInstallmentsCount).toBe(2);
+  });
+
+  it('Caso 21: Reconciliación reconcileThirdPartyCurrentPeriod limpia currentPeriodPaidAmount fantasma (166.84) con 0 txs y respeta txs activas', () => {
+    const nov11Date = new Date('2026-11-11T12:00:00.000Z');
+    jest.setSystemTime(nov11Date);
+
+    // 1. Cargo de Junior con saldo huérfano del bug de producción (166.84 fantasma y 52.90 restante)
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Junior',
+      cardName: 'Nubank',
+      concept: 'Compra Junior Huérfana',
+      amount: 659.22,
+      installmentsCount: 3,
+      monthlyInstallmentAmount: 219.74,
+      initialPaidInstallments: 2,
+      paidInstallmentsCount: 2,
+      isPreexisting: true,
+      remainingAmount: 219.74,
+    });
+
+    // 2. Cargo de Ana con abono activo legítimo en Noviembre
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Ana',
+      cardName: 'Visa Gold',
+      concept: 'Compra Ana Activa',
+      amount: 200,
+      installmentsCount: 2,
+      monthlyInstallmentAmount: 100,
+    });
+
+    // 3. Cargo de Carlos con abono activo legítimo en Octubre
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Carlos',
+      cardName: 'Visa Gold',
+      concept: 'Compra Carlos Octubre',
+      amount: 200,
+      installmentsCount: 2,
+      monthlyInstallmentAmount: 100,
+    });
+
+    const juniorCharge = useDebtsStore.getState().thirdPartyCharges.find((c) => c.personName === 'Junior')!;
+    const anaCharge = useDebtsStore.getState().thirdPartyCharges.find((c) => c.personName === 'Ana')!;
+    const carlosCharge = useDebtsStore.getState().thirdPartyCharges.find((c) => c.personName === 'Carlos')!;
+
+    useDebtsStore.setState((state) => ({
+      thirdPartyCharges: state.thirdPartyCharges.map((c) => {
+        if (c.id === juniorCharge.id) {
+          return {
+            ...c,
+            remainingAmount: 52.9,
+            currentPeriodPaidAmount: 166.84,
+            lastPaymentDate: '2026-11-10T12:00:00.000Z',
+            settled: false,
+          };
+        }
+        if (c.id === anaCharge.id) {
+          return {
+            ...c,
+            remainingAmount: 100,
+            currentPeriodPaidAmount: 100,
+            lastPaymentDate: '2026-11-09T12:00:00.000Z',
+            settled: false,
+          };
+        }
+        if (c.id === carlosCharge.id) {
+          return {
+            ...c,
+            remainingAmount: 100,
+            currentPeriodPaidAmount: 100,
+            lastPaymentDate: '2026-10-15T12:00:00.000Z',
+            settled: false,
+          };
+        }
+        return c;
+      }),
+    }));
+
+    // Ejecutar reconciliación con 0 txs para Junior, pero sí txs activas para Ana (Nov) y Carlos (Oct)
+    useDebtsStore.getState().reconcileThirdPartyCurrentPeriod(
+      [
+        {
+          id: 'tx-ana-nov',
+          type: 'reimbursement',
+          amount: 100,
+          date: '2026-11-09T12:00:00.000Z',
+          relatedPersonName: 'Ana',
+        },
+        {
+          id: 'tx-carlos-oct',
+          type: 'reimbursement',
+          amount: 100,
+          date: '2026-10-15T12:00:00.000Z',
+          relatedPersonName: 'Carlos',
+        },
+      ],
+      nov11Date
+    );
+
+    const juniorHealed = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === juniorCharge.id)!;
+    expect(juniorHealed.currentPeriodPaidAmount).toBe(0);
+    expect(juniorHealed.remainingAmount).toBe(219.74);
+    expect(juniorHealed.lastPaymentDate).toBeUndefined();
+    expect(juniorHealed.settled).toBe(false);
+    expect(juniorHealed.paidInstallmentsCount).toBe(2);
+
+    const anaUntouched = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === anaCharge.id)!;
+    expect(anaUntouched.currentPeriodPaidAmount).toBe(100);
+    expect(anaUntouched.remainingAmount).toBe(100);
+    expect(anaUntouched.lastPaymentDate).toBe('2026-11-09T12:00:00.000Z');
+
+    const carlosUntouched = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === carlosCharge.id)!;
+    expect(carlosUntouched.currentPeriodPaidAmount).toBe(100);
+    expect(carlosUntouched.remainingAmount).toBe(100);
+    expect(carlosUntouched.lastPaymentDate).toBe('2026-10-15T12:00:00.000Z');
+
+    // Ahora verificar que si Junior SÍ tiene transacción activa en el ciclo, NO se limpia su saldo
+    useDebtsStore.setState((state) => ({
+      thirdPartyCharges: state.thirdPartyCharges.map((c) =>
+        c.id === juniorCharge.id
+          ? {
+              ...c,
+              remainingAmount: 52.9,
+              currentPeriodPaidAmount: 166.84,
+              lastPaymentDate: '2026-11-10T12:00:00.000Z',
+            }
+          : c
+      ),
+    }));
+
+    useDebtsStore.getState().reconcileThirdPartyCurrentPeriod(
+      [
+        {
+          id: 'tx-junior-nov',
+          type: 'reimbursement',
+          amount: 166.84,
+          date: '2026-11-10T12:00:00.000Z',
+          relatedPersonName: 'Junior',
+        },
+      ],
+      nov11Date
+    );
+
+    const juniorProtected = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === juniorCharge.id)!;
+    expect(juniorProtected.currentPeriodPaidAmount).toBe(166.84);
+    expect(juniorProtected.remainingAmount).toBe(52.9);
+    expect(juniorProtected.lastPaymentDate).toBe('2026-11-10T12:00:00.000Z');
+  });
+
 });
 
