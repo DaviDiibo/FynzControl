@@ -290,6 +290,7 @@ const DebtsScreen = (): JSX.Element => {
 
   // Store data y acciones
   const banks = useCardsStore((state) => state.banks);
+  const creditCards = useCardsStore((state) => state.cards);
   const [selectedDestinationBankId, setSelectedDestinationBankId] = useState<string | null>(
     () => (banks.length > 0 ? banks[0].id : null)
   );
@@ -330,6 +331,9 @@ const DebtsScreen = (): JSX.Element => {
   const recordMonthlyPersonAbono = useDebtsStore(
     (state) => state.recordMonthlyPersonAbono
   );
+  const getThirdPartyMonthlyBillingSummary = useDebtsStore(
+    (state) => state.getThirdPartyMonthlyBillingSummary
+  );
   const deleteThirdPartyCharge = useDebtsStore(
     (state) => state.deleteThirdPartyCharge
   );
@@ -354,104 +358,18 @@ const DebtsScreen = (): JSX.Element => {
   );
 
   const thirdPartyMonthlySummaries = useMemo((): ThirdPartyPersonMonthlySummary[] => {
-    const normalizeStr = (str: string): string =>
-      str
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .trim();
-
-    const activeCharges = thirdPartyCharges.filter((c) => {
-      const remaining = c.remainingAmount !== undefined ? c.remainingAmount : c.amount;
-      return (!c.settled && remaining > 0) || ((c.currentPeriodPaidAmount || 0) > 0);
-    });
-
-    const summaryMap = new Map<string, ThirdPartyPersonMonthlySummary>();
-
-    for (const rawCharge of activeCharges) {
-      const installmentsCount =
-        rawCharge.installmentsCount && rawCharge.installmentsCount > 0
-          ? rawCharge.installmentsCount
-          : 1;
-      const remainingAmount =
-        rawCharge.remainingAmount !== undefined ? rawCharge.remainingAmount : rawCharge.amount;
-      const monthlyInstallmentAmount =
-        rawCharge.monthlyInstallmentAmount && rawCharge.monthlyInstallmentAmount > 0
-          ? rawCharge.monthlyInstallmentAmount
-          : Math.round((rawCharge.amount / installmentsCount) * 100) / 100;
-
-      const c: ThirdPartyCardCharge = {
-        ...rawCharge,
-        remainingAmount,
-        installmentsCount,
-        monthlyInstallmentAmount,
-      };
-
-      const person = people.find(
-        (p) =>
-          (Boolean(c.personId) && p.id === c.personId) ||
-          normalizeStr(p.name) === normalizeStr(c.personName)
-      );
-      const resolvedPersonName = (person?.name || c.personName || 'Tercero').trim();
-      const resolvedPersonId = person?.id || c.personId;
-      const groupKey = normalizeStr(resolvedPersonName);
-
-      let summary = summaryMap.get(groupKey);
-      if (!summary) {
-        summary = {
-          personName: resolvedPersonName,
-          personId: resolvedPersonId,
-          cardName: c.cardName || 'Tarjeta de Crédito',
-          cardId: c.cardId,
-          monthlyDueAmount: 0,
-          monthlyPaidAmount: 0,
-          monthlyPendingAmount: 0,
-          isMonthSettled: false,
-          totalRemainingDebt: 0,
-          chargesCount: 0,
-          charges: [],
-        };
-        summaryMap.set(groupKey, summary);
-      } else {
-        const currentCardLower = summary.cardName.toLowerCase();
-        const newCardName = (c.cardName || '').trim();
-        if (newCardName && !currentCardLower.includes(newCardName.toLowerCase())) {
-          summary.cardName = `${summary.cardName} / ${newCardName}`;
-        }
-      }
-
-      const preCycleRemaining = parseFloat(((c.remainingAmount ?? 0) + (c.currentPeriodPaidAmount || 0)).toFixed(2));
-      const chargeMonthlyDue =
-        c.installmentsCount <= 1
-          ? preCycleRemaining
-          : Math.min(c.monthlyInstallmentAmount, preCycleRemaining);
-      const chargeMonthlyPaid = c.currentPeriodPaidAmount || 0;
-
-      summary.monthlyDueAmount = parseFloat(
-        (summary.monthlyDueAmount + chargeMonthlyDue).toFixed(2)
-      );
-      summary.monthlyPaidAmount = parseFloat(
-        (summary.monthlyPaidAmount + chargeMonthlyPaid).toFixed(2)
-      );
-      summary.totalRemainingDebt = parseFloat(
-        (summary.totalRemainingDebt + c.remainingAmount).toFixed(2)
-      );
-      summary.charges.push(c);
-    }
-
-    const results: ThirdPartyPersonMonthlySummary[] = [];
-    for (const summary of summaryMap.values()) {
-      summary.monthlyPendingAmount = Math.max(
-        0,
-        parseFloat((summary.monthlyDueAmount - summary.monthlyPaidAmount).toFixed(2))
-      );
-      summary.isMonthSettled = summary.monthlyPendingAmount <= 0;
-      summary.chargesCount = summary.charges.length;
-      results.push(summary);
-    }
-
-    return results.sort((a, b) => b.monthlyPendingAmount - a.monthlyPendingAmount);
-  }, [thirdPartyCharges, people, focusRefreshKey]);
+    void thirdPartyCharges;
+    void people;
+    void creditCards;
+    void focusRefreshKey;
+    return getThirdPartyMonthlyBillingSummary(new Date());
+  }, [
+    getThirdPartyMonthlyBillingSummary,
+    thirdPartyCharges,
+    people,
+    creditCards,
+    focusRefreshKey,
+  ]);
 
   const totalReceivable = totalThirdPartyReceivable;
   const hasThirdPartyCharges =
@@ -742,6 +660,7 @@ const DebtsScreen = (): JSX.Element => {
       type: 'reimbursement',
       category: 'Cobro Tarjeta Compartida',
       personName: selectedSummaryForAbono.personName,
+      relatedPersonId: selectedSummaryForAbono.personId,
       relatedPersonName: selectedSummaryForAbono.personName,
       cardName: selectedSummaryForAbono.cardName,
       bankId: selectedDestinationBankId || undefined,
@@ -1383,7 +1302,7 @@ const DebtsScreen = (): JSX.Element => {
                               <View style={styles.commitmentRowBottom}>
                                 <Text style={styles.commitmentGlobalDebtText}>
                                   {summary.totalRemainingDebt <= 0
-                                    ? `Abonado este ciclo: ${currencySymbol}{formatAmount(summary.monthlyPaidAmount)} • Resta por transferir: ${currencySymbol}0,00`
+                                    ? `Abonado este ciclo: ${currencySymbol}${formatAmount(summary.monthlyPaidAmount)} • Resta por transferir: ${currencySymbol}0,00`
                                     : `Deuda total global a futuro: ${currencySymbol}${formatAmount(summary.totalRemainingDebt)} • ${summary.chargesCount} ${summary.chargesCount === 1 ? 'compra activa' : 'compras activas'}`}
                                 </Text>
                               </View>
