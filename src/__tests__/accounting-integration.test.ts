@@ -1894,5 +1894,122 @@ describe('Integración Contable: Amortizaciones, Cobros, Reversiones y Abonos en
     expect(juniorProtected.lastPaymentDate).toBe('2026-11-10T12:00:00.000Z');
   });
 
+  it('Caso 22: Autocuración reconstructiva de cargos cuando vienen de sync con currentPeriodPaidAmount = 0 pero existen txs activas', () => {
+    const nov12Date = new Date('2026-11-12T14:30:00.000Z');
+    jest.setSystemTime(nov12Date);
+
+    // 1. Cargar cargos desfasados con currentPeriodPaidAmount = 0 (como vienen tras sync)
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Junior',
+      cardName: 'Nubank',
+      concept: 'CASA DAS PIPOCAS',
+      amount: 1500.00,
+      installmentsCount: 8,
+      monthlyInstallmentAmount: 187.50,
+      initialPaidInstallments: 7,
+      paidInstallmentsCount: 7,
+      isPreexisting: true,
+      remainingAmount: 187.50,
+    });
+
+    useDebtsStore.getState().addThirdPartyCharge({
+      personName: 'Junior',
+      cardName: 'Nubank',
+      concept: 'VS BIKES BREVES',
+      amount: 629.04,
+      installmentsCount: 3,
+      monthlyInstallmentAmount: 209.68,
+      initialPaidInstallments: 1,
+      paidInstallmentsCount: 1,
+      isPreexisting: true,
+      remainingAmount: 419.36,
+    });
+
+    const pipocasCharge = useDebtsStore.getState().thirdPartyCharges.find((c) => c.concept === 'CASA DAS PIPOCAS')!;
+    const vsBikesCharge = useDebtsStore.getState().thirdPartyCharges.find((c) => c.concept === 'VS BIKES BREVES')!;
+
+    // Forzar currentPeriodPaidAmount = 0
+    useDebtsStore.setState((state) => ({
+      thirdPartyCharges: state.thirdPartyCharges.map((c) => {
+        if (c.id === pipocasCharge.id) {
+          return {
+            ...c,
+            currentPeriodPaidAmount: 0,
+            remainingAmount: 187.50,
+            settled: false,
+            lastPaymentDate: undefined,
+          };
+        }
+        if (c.id === vsBikesCharge.id) {
+          return {
+            ...c,
+            currentPeriodPaidAmount: 0,
+            remainingAmount: 419.36,
+            settled: false,
+            lastPaymentDate: undefined,
+          };
+        }
+        return c;
+      }),
+    }));
+
+    // Ejecutar reconcileThirdPartyCurrentPeriod con las txs activas de reembolso
+    useDebtsStore.getState().reconcileThirdPartyCurrentPeriod(
+      [
+        {
+          id: 'tx-junior-700',
+          type: 'reimbursement',
+          amount: 700,
+          date: '2026-11-12T02:18:17.982Z',
+          relatedPersonName: 'Junior',
+          thirdPartyAllocations: [
+            {
+              chargeId: pipocasCharge.id,
+              appliedAmount: 187.50,
+              previousRemaining: 187.50,
+              previousPaidInstallments: 7,
+              previousCurrentPeriodPaid: 0,
+              wasSettled: false,
+            },
+          ],
+        },
+        {
+          id: 'tx-junior-100',
+          type: 'reimbursement',
+          amount: 100,
+          date: '2026-11-12T14:27:35.118Z',
+          relatedPersonName: 'Junior',
+          thirdPartyAllocations: [
+            {
+              chargeId: vsBikesCharge.id,
+              appliedAmount: 47.10,
+              previousRemaining: 419.36,
+              previousPaidInstallments: 1,
+              previousCurrentPeriodPaid: 0,
+              wasSettled: false,
+            },
+          ],
+        },
+      ],
+      nov12Date
+    );
+
+    // Verificar autocuración de CASA DAS PIPOCAS (liquidado totalmente)
+    const pipocasHealed = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === pipocasCharge.id)!;
+    expect(pipocasHealed.currentPeriodPaidAmount).toBe(187.50);
+    expect(pipocasHealed.remainingAmount).toBe(0);
+    expect(pipocasHealed.paidInstallmentsCount).toBe(8);
+    expect(pipocasHealed.settled).toBe(true);
+    expect(pipocasHealed.lastPaymentDate).toBe('2026-11-12T02:18:17.982Z');
+
+    // Verificar autocuración de VS BIKES (abono parcial)
+    const vsBikesHealed = useDebtsStore.getState().thirdPartyCharges.find((c) => c.id === vsBikesCharge.id)!;
+    expect(vsBikesHealed.currentPeriodPaidAmount).toBe(47.10);
+    expect(vsBikesHealed.remainingAmount).toBe(372.26);
+    expect(vsBikesHealed.paidInstallmentsCount).toBe(1);
+    expect(vsBikesHealed.settled).toBe(false);
+    expect(vsBikesHealed.lastPaymentDate).toBe('2026-11-12T14:27:35.118Z');
+  });
+
 });
 

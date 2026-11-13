@@ -300,6 +300,7 @@ describe('Vencimientos Recurrentes, Semáforo de Urgencia y Liquidación de Deud
     expect(status.nextDueDate.getDate()).toBe(6);
     // Días restantes: del 15 Oct al 6 Nov = 22 días
     expect(status.daysRemaining).toBe(22);
+    expect(status.daysRemainingFormatted).toBe('en 22 días');
     expect(status.urgency).toBe('normal');
     expect(status.shouldAlertInDashboard).toBe(false);
   });
@@ -313,6 +314,7 @@ describe('Vencimientos Recurrentes, Semáforo de Urgencia y Liquidación de Deud
 
     expect(overdueStatus.isUpToDateThisMonth).toBe(false);
     expect(overdueStatus.daysRemaining).toBe(-9);
+    expect(overdueStatus.daysRemainingFormatted).toBe('hace 9 días');
     expect(overdueStatus.urgency).toBe('overdue');
     expect(overdueStatus.shouldAlertInDashboard).toBe(true);
 
@@ -322,6 +324,7 @@ describe('Vencimientos Recurrentes, Semáforo de Urgencia y Liquidación de Deud
 
     expect(todayStatus.isUpToDateThisMonth).toBe(false);
     expect(todayStatus.daysRemaining).toBe(0);
+    expect(todayStatus.daysRemainingFormatted).toBe('hoy');
     expect(todayStatus.urgency).toBe('today');
     expect(todayStatus.shouldAlertInDashboard).toBe(true);
   });
@@ -333,20 +336,34 @@ describe('Vencimientos Recurrentes, Semáforo de Urgencia y Liquidación de Deud
     // dueDay = 3 -> faltan 2 días (<= 3 días) -> urgent, alerta
     const urgentStatus = getDebtDueStatus(3, undefined, refDate);
     expect(urgentStatus.daysRemaining).toBe(2);
+    expect(urgentStatus.daysRemainingFormatted).toBe('en 2 días');
     expect(urgentStatus.urgency).toBe('urgent');
     expect(urgentStatus.shouldAlertInDashboard).toBe(true);
 
     // dueDay = 6 -> faltan 5 días (<= 7 días) -> warning, alerta
     const warningStatus = getDebtDueStatus(6, undefined, refDate);
     expect(warningStatus.daysRemaining).toBe(5);
+    expect(warningStatus.daysRemainingFormatted).toBe('en 5 días');
     expect(warningStatus.urgency).toBe('warning');
     expect(warningStatus.shouldAlertInDashboard).toBe(true);
 
     // dueDay = 25 -> faltan 24 días (> 7 días) -> normal, NO alerta
     const normalStatus = getDebtDueStatus(25, undefined, refDate);
     expect(normalStatus.daysRemaining).toBe(24);
+    expect(normalStatus.daysRemainingFormatted).toBe('en 24 días');
     expect(normalStatus.urgency).toBe('normal');
     expect(normalStatus.shouldAlertInDashboard).toBe(false);
+
+    // dueDay = 2 -> falta 1 día -> mañana
+    const tomorrowStatus = getDebtDueStatus(2, undefined, refDate);
+    expect(tomorrowStatus.daysRemaining).toBe(1);
+    expect(tomorrowStatus.daysRemainingFormatted).toBe('mañana');
+
+    // ayer: refDate 2 de Octubre, dueDay 1 -> hace 1 día
+    const yesterdayRef = new Date('2026-10-02T10:00:00Z');
+    const yesterdayStatus = getDebtDueStatus(1, undefined, yesterdayRef);
+    expect(yesterdayStatus.daysRemaining).toBe(-1);
+    expect(yesterdayStatus.daysRemainingFormatted).toBe('hace 1 día');
   });
 
   it('Caso 16: Asignación de lastPaymentDate en store y consolidación en UpcomingDebtsCard', () => {

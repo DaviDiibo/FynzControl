@@ -2647,3 +2647,74 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
 - **Decisiones Permanentes**:
   - La reversión de abonos a terceros debe operar siempre por **delta relativo** (`appliedAmount`), nunca por sobrescritura de snapshots absolutos, manteniendo intactas las cuotas históricas (`initialPaidInstallments`).
   - `sync-service` debe proteger mutaciones locales de `third_party_card_charges` mediante `controlfynz-pending-charge-mutations-v1` + `pushSeq`, drenar `syncPush` antes de `syncPull` en `syncAll`, aislar errores por tabla en `syncPush` y ejecutar `reconcileThirdPartyCurrentPeriod` tras hidratar y sincronizar.
+
+
+### [TASK-ABONOS-SYNC-HEALING] - 2026-11-13
+- **Archivos Intervenidos**:
+  - `src/lib/sync-adapters.ts`
+  - `src/store/debts-store.ts`
+  - `src/__tests__/accounting-integration.test.ts`
+  - *(Base de datos Supabase: `third_party_card_charges`, función y triggers PostgreSQL `prevent_soft_delete_resurrection`)*
+- **Resumen Técnico**:
+  1. **Saneamiento en Supabase**:
+     - Saneamiento y recalibración en Supabase de las 5 compras de Junior asignando los R$ 800.00 de abonos activos del 12/Nov (saldando Casa das Pipocas, JIM.COM, Marajo Tecidos x2 y amortizando VS Bikes Breves).
+  2. **Prevención de Resurrección de Zombis (Triggers PostgreSQL)**:
+     - Creación de función y triggers en Postgres `prevent_soft_delete_resurrection` para impedir que upserts o sincronizaciones desde clientes desactualizados desmarquen `deleted_at: null` en transacciones y compras eliminadas.
+  3. **Respeto a Timestamps de Soft-Delete (`src/lib/sync-adapters.ts`)**:
+     - Corrección en los adaptadores de sincronización para respetar y preservar `deleted_at` timestamps durante los mapeos bidireccionales entre el modelo local y Supabase.
+  4. **Autocuración Reconstructiva (`src/store/debts-store.ts`)**:
+     - Implementación de autocuración reconstructiva en `reconcileThirdPartyCurrentPeriod` (`src/store/debts-store.ts`) para reconstruir cuotas amortizadas a partir de transacciones activas de reembolso.
+  5. **Pruebas de Integración y Regresión (`src/__tests__/accounting-integration.test.ts`)**:
+     - Añadido Caso 22 en suite de pruebas de integración con 100% de tests en verde (147/147 tests en 7 suites) y TypeScript con 0 errores.
+- **Decisiones Permanentes**:
+  - En la base de datos Supabase, los registros eliminados lógicamente (`deleted_at IS NOT NULL`) están blindados por el trigger `prevent_soft_delete_resurrection`; ningún upsert cliente puede revivirlos salvo borrado explícito del timestamp por mantenimiento controlado.
+  - La reconciliación de cargos de terceros en `reconcileThirdPartyCurrentPeriod` debe aplicar autocuración reconstructiva utilizando las transacciones de abono activas como fuente de verdad contable irrefutable.
+
+
+### [TASK-DEBTS-DUE-STATUS-UX] - 2026-11-13
+- **Archivos Intervenidos**:
+  - `src/utils/date-helpers.ts`
+  - `app/(app)/(tabs)/debts.tsx`
+  - `app/(app)/debts/[id].tsx`
+  - `src/__tests__/debt-dates-liquidation.test.ts`
+- **Resumen Técnico**:
+  1. **Refinamiento de UX y Precisión Temporal en Deudas Personales/Bancarias**:
+     - Sustitución del badge ambiguo "AL DÍA ESTE MES" por la etiqueta concisa y precisa "AL DÍA" tanto en la lista de deudas (`debts.tsx`) como en la pantalla de detalle (`debts/[id].tsx`).
+  2. **Proyección de Próximo Débito con Días Relativos (`src/utils/date-helpers.ts`)**:
+     - Implementación de la función `formatDaysRemaining` y la propiedad calculada `daysRemainingFormatted` dentro del resultado de `calculateRecurringDueDate`.
+     - Proyección dinámica de la próxima fecha de débito junto con días restantes relativos (ej. "Próximo débito: 10 Dic (en 27 días)"), evitando vincular rígidamente a "este mes" cuando el próximo pago es en el mes subsiguiente.
+  3. **Sincronización en Detalle de Deuda (`app/(app)/debts/[id].tsx`)**:
+     - Visualización uniforme del estado al día y de la próxima fecha proyectada con tiempo relativo en la tarjeta de cuota y cronograma.
+  4. **Pruebas Unitarias de Regresión (`src/__tests__/debt-dates-liquidation.test.ts`)**:
+     - Cobertura de tests unitarios validando días restantes relativos (`formatDaysRemaining`) y proyección de vencimientos recurrentes futuros con fake timers deterministas.
+     - Verificación completa: 7 suites / 147 tests en verde (100% pass) y TypeScript con 0 errores (`npx tsc --noEmit`).
+- **Decisiones Permanentes**:
+  - En préstamos y deudas personales (`personal_debts`), el estado al corriente debe expresarse como "AL DÍA" y acompañarse de la proyección relativa de días hacia el próximo débito, sin asumir rígidamente que el pago corresponde al mes calendario en curso cuando la próxima cuota cae en el mes subsiguiente.
+
+
+### [RELEASE-V1.0.5-DESKTOP-AND-WEB] - 2026-11-13
+- **Archivos Intervenidos**:
+  - `package.json`
+  - `app.json`
+  - `src-tauri/tauri.conf.json`
+  - `src/lib/sync-adapters.ts`
+  - `src/store/debts-store.ts`
+  - `src/utils/date-helpers.ts`
+  - `app/(app)/(tabs)/debts.tsx`
+  - `app/(app)/debts/[id].tsx`
+- **Resumen Técnico**:
+  1. **Bump Oficial de Versión a 1.0.5 Sincronizado**: `package.json`, `app.json` y `src-tauri/tauri.conf.json`.
+  2. **Compilación y Firma Minisign (Tauri)**: Generación de `ControlFynz_1.0.5_x64-setup.exe`, `ControlFynz_1.0.5_x64-setup.nsis.zip`, `ControlFynz_1.0.5_x64-setup.nsis.zip.sig` y `latest.json` en UTF-8 puro sin BOM para `@tauri-apps/plugin-updater`.
+  3. **Mejoras Integradas**:
+     - Escudo anti-zombis en adaptadores de sincronización (`sync-adapters.ts`) y triggers PostgreSQL `prevent_soft_delete_resurrection`.
+     - Autocuración reconstructiva de abonos en `debts-store.ts` a partir de transacciones de reembolso activas.
+     - Refinamiento de UX y claridad temporal en deudas bancarias/personales (`AL DÍA` y `en X días` relativos).
+  4. **Calidad y Verificación**:
+     - TypeScript: 0 errores (`npx tsc --noEmit`).
+     - Jest: 147/147 pruebas unitarias aprobadas (100% pass, 7 suites).
+- **Decisiones Permanentes**:
+  - Todo artefacto de release de escritorio debe estar firmado con `controlfynz.key` y acompañado de su manifiesto `latest.json` en UTF-8 puro sin BOM.
+
+
+
+

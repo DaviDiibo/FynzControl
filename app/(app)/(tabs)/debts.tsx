@@ -956,7 +956,7 @@ const DebtsScreen = (): JSX.Element => {
                       ) : isUpToDate ? (
                         <View style={styles.upToDateBadgeNeon}>
                           <Ionicons name="checkmark-circle" size={12} color="#00FFA3" />
-                          <Text style={styles.upToDateBadgeNeonText}>AL DÍA ESTE MES</Text>
+                          <Text style={styles.upToDateBadgeNeonText}>AL DÍA</Text>
                         </View>
                       ) : (
                         <View
@@ -1052,7 +1052,7 @@ const DebtsScreen = (): JSX.Element => {
                           />
                           <Text style={[styles.metaText, styles.paymentDayHighlightNeon]}>
                             {isUpToDate
-                              ? `Próximo débito: ${debtStatus.nextDueDateFormatted} (Al día este mes)`
+                              ? `Próximo débito: ${debtStatus.nextDueDateFormatted} (${debtStatus.daysRemainingFormatted})`
                               : `Día de débito: Día ${item.dueDay ?? dueInfo.effectiveDay} (${dueInfo.fullFormatted.replace('corte', 'débito')})`}
                           </Text>
                         </View>

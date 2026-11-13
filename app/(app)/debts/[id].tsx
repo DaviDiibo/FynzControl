@@ -282,6 +282,11 @@ const DebtDetailScreen = (): JSX.Element => {
     ? resolveLoanStatusInfo(isSettled, friendLoan?.dueDate)
     : resolveDebtStatusInfo(isSettled, personalDebt?.dueDay, personalDebt?.lastPaymentDate);
 
+  const debtStatus = useMemo(() => {
+    if (!personalDebt) return null;
+    return getDebtDueStatus(personalDebt.dueDay ?? 1, personalDebt.lastPaymentDate);
+  }, [personalDebt?.dueDay, personalDebt?.lastPaymentDate]);
+
   const handleConfirmDebtPayment = (paymentData: PersonalDebtPaymentData): void => {
     if (!personalDebt) return;
     const { amount, mode, installmentsCount, nominalAmountExtinguished, discountSaved, bankId } = paymentData;
@@ -477,6 +482,15 @@ const DebtDetailScreen = (): JSX.Element => {
                 <Ionicons name="calendar-outline" size={13} color="#8E8E93" />
                 <Text style={styles.heroDateText}>
                   Inicio: {formatDate(createdAt)}
+                </Text>
+              </View>
+            )}
+
+            {!isSettled && debtStatus && (
+              <View style={styles.heroDateItem}>
+                <Ionicons name="repeat-outline" size={13} color="#00FFA3" />
+                <Text style={[styles.heroDateText, { color: '#00FFA3' }]}>
+                  Próximo débito: {debtStatus.nextDueDateFormatted} ({debtStatus.daysRemainingFormatted})
                 </Text>
               </View>
             )}

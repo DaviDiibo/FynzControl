@@ -216,6 +216,12 @@ const SPANISH_MONTHS: readonly string[] = [
   'Diciembre',
 ];
 
+export const resolveDeletedAt = (entity: unknown): string | null => {
+  if (!entity || typeof entity !== 'object') return null;
+  const item = entity as { deletedAt?: string | null; deleted_at?: string | null };
+  return item.deletedAt ?? item.deleted_at ?? null;
+};
+
 export const bankToRow = (bank: Bank, userId: string): BankRow => ({
   id: toDeterministicUuid(bank.id),
   user_id: userId,
@@ -223,7 +229,7 @@ export const bankToRow = (bank: Bank, userId: string): BankRow => ({
   initial_balance: bank.initialBalance !== undefined ? Number(bank.initialBalance) : 0,
   created_at: bank.createdAt || new Date().toISOString(),
   updated_at: new Date().toISOString(),
-  deleted_at: null,
+  deleted_at: resolveDeletedAt(bank),
 });
 
 export const rowToBank = (row: BankRow): Bank => ({
@@ -257,7 +263,7 @@ export const cardToRow = (
   is_default: Boolean(card.isDefault),
   created_at: card.createdAt || new Date().toISOString(),
   updated_at: new Date().toISOString(),
-  deleted_at: null,
+  deleted_at: resolveDeletedAt(card),
 });
 
 export const rowToCard = (row: CreditCardRow): CreditCard => ({
@@ -285,13 +291,14 @@ export const personToRow = (person: PersonContact, userId: string): PersonRow =>
   email: null,
   created_at: person.createdAt || new Date().toISOString(),
   updated_at: new Date().toISOString(),
-  deleted_at: null,
+  deleted_at: resolveDeletedAt(person),
 });
 
 export const rowToPerson = (row: PersonRow): PersonContact => ({
   id: row.id,
   name: row.name,
   createdAt: row.created_at,
+  deletedAt: row.deleted_at ?? undefined,
 });
 
 export const debtToRow = (
@@ -344,7 +351,7 @@ export const debtToRow = (
     icon: debt.icon ?? 'cash-outline',
     created_at: debt.createdAt || new Date().toISOString(),
     updated_at: new Date().toISOString(),
-    deleted_at: null,
+    deleted_at: resolveDeletedAt(debt),
   };
 };
 
@@ -383,6 +390,7 @@ export const rowToDebt = (row: PersonalDebtRow): PersonalDebt => ({
   lastPaymentDate: row.last_payment_date ?? undefined,
   icon: (row.icon as keyof typeof Ionicons.glyphMap) ?? 'cash-outline',
   createdAt: row.created_at,
+  deletedAt: row.deleted_at ?? undefined,
 });
 
 export const chargeToRow = (
@@ -421,7 +429,7 @@ export const chargeToRow = (
     settled_at: charge.settledAt ?? null,
     created_at: charge.createdAt || new Date().toISOString(),
     updated_at: new Date().toISOString(),
-    deleted_at: null,
+    deleted_at: resolveDeletedAt(charge),
   };
 };
 
@@ -446,6 +454,7 @@ export const rowToCharge = (row: ThirdPartyCardChargeRow): ThirdPartyCardCharge 
   settled: Boolean(row.settled),
   settledAt: row.settled_at ?? undefined,
   createdAt: row.created_at || row.date || new Date().toISOString(),
+  deletedAt: row.deleted_at ?? undefined,
 });
 
 export const loanToRow = (
@@ -473,7 +482,7 @@ export const loanToRow = (
   settled_at: loan.settledAt ?? null,
   created_at: loan.createdAt || new Date().toISOString(),
   updated_at: new Date().toISOString(),
-  deleted_at: null,
+  deleted_at: resolveDeletedAt(loan),
 });
 
 export const rowToLoan = (row: FriendLoanRow): FriendLoan => ({
@@ -493,6 +502,7 @@ export const rowToLoan = (row: FriendLoanRow): FriendLoan => ({
   settled: Boolean(row.settled),
   settledAt: row.settled_at ?? undefined,
   createdAt: row.created_at,
+  deletedAt: row.deleted_at ?? undefined,
 });
 
 export const transactionToRow = (
@@ -567,7 +577,7 @@ export const transactionToRow = (
     third_party_allocations: tx.thirdPartyAllocations ?? [],
     created_at: tx.createdAt || tx.date || new Date().toISOString(),
     updated_at: new Date().toISOString(),
-    deleted_at: null,
+    deleted_at: resolveDeletedAt(tx),
   };
 };
 
