@@ -2,6 +2,7 @@ export interface RecurringCutDateResult {
   effectiveDate: Date;
   formattedDate: string;
   daysRemaining: number;
+  daysRemainingFormatted?: string;
   isOverdue: boolean;
   isToday: boolean;
   isDueSoon: boolean;
@@ -619,11 +620,20 @@ export type DebtDueStatusLevel =
   | 'warning'
   | 'normal';
 
+export const formatDaysRemaining = (days: number): string => {
+  if (days < -1) return `hace ${Math.abs(days)} días`;
+  if (days === -1) return 'hace 1 día';
+  if (days === 0) return 'hoy';
+  if (days === 1) return 'mañana';
+  return `en ${days} días`;
+};
+
 export type DebtDueStatus = {
   status: DebtDueStatusLevel;
   statusText: string;
   isUpToDateThisMonth: boolean;
   daysRemaining: number;
+  daysRemainingFormatted: string;
   nextDueDate: Date;
   nextDueDateFormatted: string;
   fullFormatted: string;
@@ -684,6 +694,7 @@ export const getDebtDueStatus = (
   const refMidnight = new Date(refYear, refMonth, refDay, 0, 0, 0, 0);
   const msDiff = nextDueDate.getTime() - refMidnight.getTime();
   const daysRemaining = Math.round(msDiff / (1000 * 60 * 60 * 24));
+  const daysRemainingFormatted = formatDaysRemaining(daysRemaining);
 
   let urgency: DebtDueStatus['urgency'] = 'normal';
   if (daysRemaining < 0) {
@@ -763,6 +774,7 @@ export const getDebtDueStatus = (
     statusText,
     isUpToDateThisMonth,
     daysRemaining,
+    daysRemainingFormatted,
     nextDueDate,
     nextDueDateFormatted,
     fullFormatted,
@@ -781,6 +793,7 @@ export const getNextDebtDueDate = (
   isUpToDateThisMonth: boolean;
   status: DebtDueStatusLevel;
   statusText: string;
+  daysRemainingFormatted: string;
 } => {
   let resolvedDueDay = dueDay;
   if (resolvedDueDay === undefined && dueDateStr) {
@@ -803,6 +816,7 @@ export const getNextDebtDueDate = (
     effectiveDate: debtStatus.nextDueDate,
     formattedDate,
     daysRemaining: debtStatus.daysRemaining,
+    daysRemainingFormatted: debtStatus.daysRemainingFormatted,
     isOverdue: debtStatus.daysRemaining < 0 && !debtStatus.isUpToDateThisMonth,
     isToday: debtStatus.daysRemaining === 0 && !debtStatus.isUpToDateThisMonth,
     isDueSoon:

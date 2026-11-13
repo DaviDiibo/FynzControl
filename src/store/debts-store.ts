@@ -51,12 +51,14 @@ export interface PersonalDebt {
   lastPaymentDate?: string; // ISO 8601
   icon: keyof typeof Ionicons.glyphMap;
   createdAt: string; // ISO 8601
+  deletedAt?: string;
 }
 
 export interface PersonContact {
   id: string;
   name: string;
   createdAt: string;
+  deletedAt?: string;
 }
 
 export interface ThirdPartyCardCharge {
@@ -80,6 +82,7 @@ export interface ThirdPartyCardCharge {
   settled: boolean;
   settledAt?: string;
   createdAt: string;
+  deletedAt?: string;
 }
 
 export interface ThirdPartyChargeAllocation {
@@ -109,6 +112,7 @@ export interface ReconcileTransactionRef {
   cardId?: string;
   cardName?: string;
   thirdPartyAllocations?: ThirdPartyChargeAllocation[];
+  deletedAt?: string;
 }
 
 export interface FriendLoan {
@@ -128,6 +132,7 @@ export interface FriendLoan {
   settled: boolean;
   settledAt?: string;
   createdAt: string; // ISO 8601
+  deletedAt?: string;
 }
 
 export interface ThirdPartyPersonMonthlySummary {
@@ -1440,39 +1445,122 @@ export const useDebtsStore = create<DebtsState>()(
 
         const nextCharges = get().thirdPartyCharges.map((charge) => {
           const currentPeriodPaid = charge.currentPeriodPaidAmount || 0;
-          if (currentPeriodPaid <= 0) return charge;
 
+          const latestTxDateStr = findLatestPaymentDateForCharge(
+            charge,
+            reimbursements,
+            statePeople
+          );
+          const parsedLatestTx = latestTxDateStr ? new Date(latestTxDateStr) : null;
           const parsedLastPay = charge.lastPaymentDate ? new Date(charge.lastPaymentDate) : null;
           const cycleDate =
-            parsedLastPay && !isNaN(parsedLastPay.getTime()) ? parsedLastPay : refDate;
+            parsedLastPay && !isNaN(parsedLastPay.getTime())
+              ? parsedLastPay
+              : parsedLatestTx && !isNaN(parsedLatestTx.getTime())
+              ? parsedLatestTx
+              : refDate;
 
-          const hasActiveCoverageInCycle = reimbursements.some((tx) =>
-            isTxCoveringChargeInCycle(tx, charge, statePeople, cycleDate)
+          const getAppliedToCharge = (tx: ReconcileTransactionRef): number => {
+            if (tx.thirdPartyAllocations && tx.thirdPartyAllocations.length > 0) {
+              const alloc = tx.thirdPartyAllocations.find((a) =>
+                isSameEntityId(a.chargeId, charge.id)
+              );
+              return alloc ? alloc.appliedAmount || 0 : 0;
+            }
+            if (isSameEntityId(tx.relatedChargeId, charge.id)) {
+              return tx.amount || 0;
+            }
+            const hasExplicitLinks =
+              Boolean(tx.relatedChargeId) ||
+              Boolean(tx.thirdPartyAllocations && tx.thirdPartyAllocations.length > 0);
+            if (!hasExplicitLinks && doesTxMatchPersonForCharge(tx, charge, statePeople)) {
+              return tx.amount || 0;
+            }
+            return 0;
+          };
+
+          const cycleAllocatedAmount = reimbursements.reduce((sum, tx) => {
+            if (!isSameYearAndMonth(tx.date || tx.createdAt, cycleDate)) {
+              return sum;
+            }
+            return sum + getAppliedToCharge(tx);
+          }, 0);
+
+          const totalActiveAllocatedAllTime = reimbursements.reduce(
+            (sum, tx) => sum + getAppliedToCharge(tx),
+            0
           );
+
+          // Caso A: Autocuración reconstructiva
+          // Si el cargo en memoria/sync tiene currentPeriodPaidAmount menor al monto
+          // asignado según las transacciones activas del ciclo (incluyendo currentPeriodPaid <= 0),
+          // reconstruir amortizaciones, cuotas y saldos correspondientes.
+          if (cycleAllocatedAmount > 0 && currentPeriodPaid < cycleAllocatedAmount - 0.001) {
+            const { installmentsCount, monthlyAmount, initialPaid, maxInitialRemaining } =
+              getThirdPartyChargeBounds(charge);
+
+            const newPeriodPaid = Number(cycleAllocatedAmount.toFixed(2));
+            let newRemaining = Math.max(
+              0,
+              Number((maxInitialRemaining - totalActiveAllocatedAllTime).toFixed(2))
+            );
+
+            const isSettled =
+              newRemaining <= 0.05 && (newRemaining === 0 || maxInitialRemaining > 0.05);
+            if (isSettled) {
+              newRemaining = 0;
+            }
+
+            const appCoveredAmount = Math.max(
+              0,
+              Number((maxInitialRemaining - newRemaining).toFixed(2))
+            );
+            const newPaidInstallments = isSettled
+              ? installmentsCount
+              : monthlyAmount > 0
+              ? Math.min(
+                  installmentsCount,
+                  initialPaid + Math.floor(parseFloat((appCoveredAmount / monthlyAmount).toFixed(4)))
+                )
+              : initialPaid;
+
+            const effectiveLastPaymentDate =
+              latestTxDateStr ?? charge.lastPaymentDate ?? cycleDate.toISOString();
+
+            updatedAny = true;
+            return {
+              ...charge,
+              currentPeriodPaidAmount: newPeriodPaid,
+              remainingAmount: newRemaining,
+              paidInstallmentsCount: newPaidInstallments,
+              settled: isSettled,
+              settledAt: isSettled ? (charge.settledAt ?? effectiveLastPaymentDate) : undefined,
+              lastPaymentDate: effectiveLastPaymentDate,
+            };
+          }
+
+          // Caso B: Si hay cobertura activa en el ciclo y el cargo ya está consistente, respetar
+          const hasActiveCoverageInCycle =
+            cycleAllocatedAmount > 0 ||
+            reimbursements.some((tx) =>
+              isTxCoveringChargeInCycle(tx, charge, statePeople, cycleDate)
+            );
           if (hasActiveCoverageInCycle) {
             return charge;
           }
 
+          // Si currentPeriodPaid <= 0 y no hay cobertura en ciclo, no hay nada que limpiar
+          if (currentPeriodPaid <= 0) {
+            return charge;
+          }
+
+          // Caso C: Limpieza de saldo fantasma (cuando currentPeriodPaid > 0 pero 0 transacciones activas)
           updatedAny = true;
 
-          // Proteger amortizaciones explícitas de otros ciclos si existen en activeTransactions
           const { maxInitialRemaining } = getThirdPartyChargeBounds(charge);
-          const knownActivePaidOtherCycles = reimbursements.reduce((sum, tx) => {
-            if (tx.thirdPartyAllocations && tx.thirdPartyAllocations.length > 0) {
-              const allocSum = tx.thirdPartyAllocations
-                .filter((a) => isSameEntityId(a.chargeId, charge.id))
-                .reduce((acc, a) => acc + (a.appliedAmount || 0), 0);
-              return sum + allocSum;
-            }
-            if (isSameEntityId(tx.relatedChargeId, charge.id)) {
-              return sum + (tx.amount || 0);
-            }
-            return sum;
-          }, 0);
-
           const maxRemainingOverride = Math.max(
             0,
-            Number((maxInitialRemaining - knownActivePaidOtherCycles).toFixed(2))
+            Number((maxInitialRemaining - totalActiveAllocatedAllTime).toFixed(2))
           );
 
           return applyThirdPartyChargeRevertDelta(charge, currentPeriodPaid, {
