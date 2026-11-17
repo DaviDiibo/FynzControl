@@ -386,11 +386,11 @@ const DebtsScreen = (): JSX.Element => {
     return purePersonalDebts
       .filter((d) => (d.remainingAmount ?? d.totalAmount) > 0 && !d.settled)
       .reduce((sum, d) => sum + (d.monthlyPayment ?? 0), 0);
-  }, [purePersonalDebts]);
+  }, [purePersonalDebts, focusRefreshKey]);
 
   const totalOriginal = useMemo(() => {
     return purePersonalDebts.reduce((sum, d) => sum + d.totalAmount, 0);
-  }, [purePersonalDebts]);
+  }, [purePersonalDebts, focusRefreshKey]);
 
   // Filtros de búsqueda sobre la lista de deudas personales
   const filteredPersonalDebts = useMemo(() => {
@@ -515,6 +515,7 @@ const DebtsScreen = (): JSX.Element => {
       personName: selectedLoanForAbono.friendName,
       bankId: bankId || undefined,
     });
+    setFocusRefreshKey((prev) => prev + 1);
     setSelectedLoanForAbono(null);
   };
 
@@ -553,6 +554,8 @@ const DebtsScreen = (): JSX.Element => {
       debtDiscountSaved: discountSaved,
       bankId,
     });
+
+    setFocusRefreshKey((prev) => prev + 1);
 
     // 3. Cerrar el modal
     setSelectedDebtForPayment(null);
@@ -666,6 +669,8 @@ const DebtsScreen = (): JSX.Element => {
       bankId: selectedDestinationBankId || undefined,
       thirdPartyAllocations: abonoResult.allocations,
     });
+
+    setFocusRefreshKey((prev) => prev + 1);
 
     // 3. Cerrar el modal
     setSelectedSummaryForAbono(null);
@@ -2447,6 +2452,7 @@ const DebtsScreen = (): JSX.Element => {
                   onPress={() => {
                     if (chargeToDelete) {
                       deleteThirdPartyCharge(chargeToDelete.id);
+                      setFocusRefreshKey((prev) => prev + 1);
                       setChargeToDelete(null);
                     }
                   }}
@@ -2614,6 +2620,7 @@ const DebtsScreen = (): JSX.Element => {
                               removeInitialLoanTransactions({ loanId: friendLoanToDelete.id });
                             }
                           }
+                          setFocusRefreshKey((prev) => prev + 1);
                           closeLoanDeleteModal();
                         }}
                       >
