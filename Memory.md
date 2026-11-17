@@ -12,8 +12,8 @@
 - **Testing & QA**: Jest 30 + `jest-expo` (153/153 tests aprobados en 8 suites, 100% pass). Verificación doble obligatoria (`npm test` + `npx tsc --noEmit` 0 errores) previo a cerrar cualquier tarea.
 
 ## 2. Estado Activo del Sprint y Foco Inmediato
-- **Sprint Activo**: Reactividad y Estabilidad en Flujos Contables / Release v1.0.5.
-- **Hitos Recientes Concluidos**: `[TASK-CATEGORIES-EXPANSION]`, `[TASK-DEBTS-REACTIVITY-FIX]`, `[RELEASE-V1.0.5-DESKTOP-AND-WEB]`, `[TASK-DEBTS-DUE-STATUS-UX]`.
+- **Sprint Activo**: Reactividad y Estabilidad en Flujos Contables / Release v1.0.6.
+- **Hitos Recientes Concluidos**: `[RELEASE-V1.0.6-DESKTOP-AND-WEB]`, `[TASK-CATEGORIES-EXPANSION]`, `[TASK-DEBTS-REACTIVITY-FIX]`, `[RELEASE-V1.0.5-DESKTOP-AND-WEB]`.
 - **Foco Inmediato / Próximos Pasos**: Monitoreo de reactividad y UX en flujos contables, y seguimiento de sincronización multi-dispositivo.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
