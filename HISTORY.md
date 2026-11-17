@@ -2732,6 +2732,26 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
   - En pantallas con métricas y tarjetas agregadas memoizadas derivadas de transacciones (`debts.tsx`), forzar siempre la invalidación síncrona mediante el tick reactivo (`setFocusRefreshKey((prev) => prev + 1)`) al confirmar o revertir cobros, abonos o bajas, evitando que la UI retenga valores desactualizados hasta el siguiente cambio de foco de pestaña.
 
 
+### [TASK-CATEGORIES-EXPANSION] - 2026-11-17
+- **Archivos Intervenidos**:
+  - `src/constants/categories.ts`
+  - `src/store/transactions-store.ts`
+  - `src/__tests__/categories.test.ts`
+- **Resumen Técnico**:
+  1. **Expansión y Refactorización del Catálogo de Categorías**:
+     - Sustitución de nombres largos por etiquetas compactas y directas para optimizar legibilidad en interfaces móviles.
+     - Categorías de Gastos (`EXPENSE_CATEGORIES`): incorporación de `Mercado` (reemplazo de `Alimentación` con icono `cart-outline`), `Restaurantes` (`restaurant-outline`), `Bares` (`beer-outline`), `Deportes` (`fitness-outline`) y `Viáticos` (`briefcase-outline`).
+     - Categorías de Ingresos (`INCOME_CATEGORIES`): incorporación de `Viáticos` (`briefcase-outline`) y actualización de `Reembolsos` (`people-outline`, pagos compartidos y deudas de amigos).
+  2. **Resolución Contextual y Retrocompatibilidad en Transacciones**:
+     - Implementación de `resolveCategoryName` y `resolveCategoryIcon` en `src/store/transactions-store.ts` para mapear de forma transparente IDs y etiquetas preexistentes (incluyendo soporte retrocompatible para `food` -> `Mercado` y `cart-outline`) sin requerir migraciones destructivas en registros históricos.
+  3. **Suite de Pruebas Unitarias (`src/__tests__/categories.test.ts`)**:
+     - Creación de suite con 6 tests validando: unicidad e integridad de IDs e iconos, presencia de nuevas categorías (`Mercado`, `Restaurantes`, `Bares`, `Deportes`, `Viáticos`), y retrocompatibilidad contextual en `resolveCategoryName` y `resolveCategoryIcon`.
+     - Verificación completa: 8 suites / 153 tests en verde (100% pass) y TypeScript con 0 errores (`npx tsc --noEmit`).
+- **Decisiones Permanentes**:
+  - Al expandir o renombrar catálogos de categorías, los IDs históricos (como `food`) deben mantenerse soportados y resueltos contextualmente a sus nuevos nombres canónicos (`Mercado`) e iconos correspondientes a través de `resolveCategoryName` y `resolveCategoryIcon`, garantizando que transacciones pasadas o sincronizadas se muestren consistentemente sin mutar la base de datos.
+
+
+
 
 
 

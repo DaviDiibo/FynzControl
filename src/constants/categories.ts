@@ -9,10 +9,34 @@ export type CategoryItem = {
 
 export const EXPENSE_CATEGORIES: CategoryItem[] = [
   {
-    id: 'alimentacion',
-    name: 'Alimentación',
+    id: 'mercado',
+    name: 'Mercado',
     icon: 'cart-outline',
     color: '#FF9F0A',
+  },
+  {
+    id: 'restaurantes',
+    name: 'Restaurantes',
+    icon: 'restaurant-outline',
+    color: '#FF9500',
+  },
+  {
+    id: 'bares',
+    name: 'Bares',
+    icon: 'beer-outline',
+    color: '#AF52DE',
+  },
+  {
+    id: 'deportes',
+    name: 'Deportes',
+    icon: 'fitness-outline',
+    color: '#00FFA3',
+  },
+  {
+    id: 'viaticos',
+    name: 'Viáticos',
+    icon: 'briefcase-outline',
+    color: '#5856D6',
   },
   {
     id: 'transporte',
@@ -138,10 +162,16 @@ export const INCOME_CATEGORIES: CategoryItem[] = [
     color: '#FF9F0A',
   },
   {
-    id: 'reembolsos',
-    name: 'Reembolsos',
+    id: 'viaticos',
+    name: 'Viáticos',
     icon: 'receipt-outline',
     color: '#30D158',
+  },
+  {
+    id: 'reembolsos',
+    name: 'Reembolsos',
+    icon: 'people-outline',
+    color: '#32ADE6',
   },
   {
     id: 'otros-ingresos',

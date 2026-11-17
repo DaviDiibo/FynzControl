@@ -9,14 +9,15 @@
 - **UI & Tema**: Modo oscuro cyberpunk/neón (`#121212`, tarjetas `#1E1E1E`, acento `#00FFA3`, peligro `#FF453A`). Modales interactivos transparentes, nunca diálogos toscos nativos.
 - **Multiplataforma**: Paridad iOS (KeyboardOffset 48dp, Safe Area), Android (KeyboardOffset 0dp, Edge-to-edge) y Web/Tauri Desktop (`useIsWide(768)`).
 - **Backend / Infra & Sync**: Offline-First con Supabase (Auth, RLS, PostgreSQL). Sincronización Multi-Dispositivo en `sync-service.ts` y `use-app-hydration.ts`: Pull en hidratación, Focus Sync, Supabase Realtime, Tombstone Queue persistida y debouncing con reintento concurrente.
-- **Testing & QA**: Jest 30 + `jest-expo` (147/147 tests aprobados en 7 suites, 100% pass). Verificación doble obligatoria (`npm test` + `npx tsc --noEmit` 0 errores) previo a cerrar cualquier tarea.
+- **Testing & QA**: Jest 30 + `jest-expo` (153/153 tests aprobados en 8 suites, 100% pass). Verificación doble obligatoria (`npm test` + `npx tsc --noEmit` 0 errores) previo a cerrar cualquier tarea.
 
 ## 2. Estado Activo del Sprint y Foco Inmediato
 - **Sprint Activo**: Reactividad y Estabilidad en Flujos Contables / Release v1.0.5.
-- **Hitos Recientes Concluidos**: `[TASK-DEBTS-REACTIVITY-FIX]`, `[RELEASE-V1.0.5-DESKTOP-AND-WEB]`, `[TASK-DEBTS-DUE-STATUS-UX]`, `[TASK-ABONOS-SYNC-HEALING]`.
+- **Hitos Recientes Concluidos**: `[TASK-CATEGORIES-EXPANSION]`, `[TASK-DEBTS-REACTIVITY-FIX]`, `[RELEASE-V1.0.5-DESKTOP-AND-WEB]`, `[TASK-DEBTS-DUE-STATUS-UX]`.
 - **Foco Inmediato / Próximos Pasos**: Monitoreo de reactividad y UX en flujos contables, y seguimiento de sincronización multi-dispositivo.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
+- ❌ **NO romper compatibilidad de IDs heredados al renombrar o expandir categorías**: Resolver siempre mediante mapeo contextual (`resolveCategoryName` / `resolveCategoryIcon`, ej. `food` -> `Mercado` / `cart-outline`) para que registros históricos muestren nombre e icono canónicos sin mutar destructivamente la base de datos.
 - ❌ **NO depender de re-enfoque de pantalla para refrescar resúmenes calculados tras abonos o cobros**: En `debts.tsx` y pantallas con estados memoizados derivados, forzar la invalidación síncrona mediante un tick de reactividad (`setFocusRefreshKey((prev) => prev + 1)`) al confirmar o revertir cobros, abonos o bajas, asegurando que las tarjetas de resumen y montos comprometidos se actualicen en vivo al cerrar el modal sin requerir navegar fuera de la pestaña.
 - ❌ **NO mostrar badges de "este mes" en deudas pagadas cuyo próximo pago es en meses subsiguientes**: En deudas bancarias/personales (`personal_debts`), mostrar "AL DÍA" y proyectar la próxima fecha con días relativos (`daysRemainingFormatted`, ej. "Próximo débito: 10 Dic (en 27 días)") sin asociarlo erróneamente a "este mes".
 - ❌ **NO permitir que sincronizaciones o upserts revivan registros eliminados (zombis)**: Proteger con trigger `prevent_soft_delete_resurrection` en Postgres y respetar `deleted_at` en `sync-adapters.ts`.
@@ -61,6 +62,7 @@
 - ❌ **NO dar por concluida una tarea sin verificación doble**: Mandatorio `npm test` (100% pass) y `npx tsc --noEmit` (0 errores).
 
 ## 4. Bugs Críticos Resueltos & Blindajes
+- **Expansión de Categorías y Retrocompatibilidad Contextual (`categories.ts` / `transactions-store.ts`)**: Catálogo optimizado con nombres concisos (`Mercado`, `Restaurantes`, `Bares`, `Deportes`, `Viáticos`, `Reembolsos`). Resolución contextual retrocompatible de IDs preexistentes (`food` -> `Mercado` / `cart-outline`) sin mutación destructiva de base de datos. 153/153 tests en verde (8 suites).
 - **Reactividad Inmediata en Deudas (`debts.tsx`)**: Refresco síncrono forzado vía `setFocusRefreshKey((prev) => prev + 1)` tras confirmar abonos a terceros, cobros de préstamos, pagos de deudas y eliminaciones, invalidando memos de compromiso mensual para actualización en vivo instantánea. 147/147 tests en verde.
 - **UX Temporal y Estado Al Día en Deudas (`date-helpers.ts` / `debts.tsx` / `debts/[id].tsx`)**: Sustitución de badge ambiguo "AL DÍA ESTE MES" por "AL DÍA" y proyección de días relativos con `formatDaysRemaining` / `daysRemainingFormatted` (ej. "Próximo débito: 10 Dic (en 27 días)") sin fijar al mes en curso. 147/147 tests en verde.
 - **Autocuración Reconstructiva de Abonos y Blindaje Anti-Zombi (`debts-store.ts` / `sync-adapters.ts` / Supabase)**: Saneamiento de las 5 compras de Junior con R$ 800.00 de abonos activos. Triggers en Postgres `prevent_soft_delete_resurrection` contra resurrección en upserts. Autocuración en `reconcileThirdPartyCurrentPeriod` reconstruyendo cuotas desde transacciones de reembolso. 147/147 tests en verde.

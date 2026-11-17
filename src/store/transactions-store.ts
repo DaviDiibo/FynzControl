@@ -118,7 +118,15 @@ const SPANISH_MONTHS: readonly string[] = [
   'Diciembre',
 ];
 
-const resolveIcon = (
+const normalizeCategoryIdentifier = (identifier: string): string => {
+  const norm = (identifier || '').trim().toLowerCase();
+  if (norm === 'alimentacion' || norm === 'alimentación') {
+    return 'mercado';
+  }
+  return identifier;
+};
+
+export const resolveCategoryIcon = (
   type: TransactionType,
   categoryIdentifier: string
 ): keyof typeof Ionicons.glyphMap => {
@@ -138,9 +146,17 @@ const resolveIcon = (
     return 'trending-up-outline';
   }
 
-  const allCategories = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES];
-  const found = allCategories.find(
-    (c) => c.id === categoryIdentifier || c.name === categoryIdentifier
+  const normalizedIdentifier = normalizeCategoryIdentifier(categoryIdentifier);
+
+  const prioritizedCategories =
+    type === 'income'
+      ? [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
+      : [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES];
+
+  const found = prioritizedCategories.find(
+    (c) =>
+      c.id.toLowerCase() === normalizedIdentifier.toLowerCase() ||
+      c.name.toLowerCase() === normalizedIdentifier.toLowerCase()
   );
 
   if (found) {
@@ -150,7 +166,9 @@ const resolveIcon = (
   return type === 'income' ? 'arrow-down-circle-outline' : 'arrow-up-circle-outline';
 };
 
-const resolveCategoryName = (
+export const resolveIcon = resolveCategoryIcon;
+
+export const resolveCategoryName = (
   type: TransactionType,
   categoryIdentifier: string
 ): string => {
@@ -165,9 +183,17 @@ const resolveCategoryName = (
       : 'Reembolso';
   }
 
-  const allCategories = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES];
-  const found = allCategories.find(
-    (c) => c.id === categoryIdentifier || c.name === categoryIdentifier
+  const normalizedIdentifier = normalizeCategoryIdentifier(categoryIdentifier);
+
+  const prioritizedCategories =
+    type === 'income'
+      ? [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
+      : [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES];
+
+  const found = prioritizedCategories.find(
+    (c) =>
+      c.id.toLowerCase() === normalizedIdentifier.toLowerCase() ||
+      c.name.toLowerCase() === normalizedIdentifier.toLowerCase()
   );
 
   return found ? found.name : categoryIdentifier;
