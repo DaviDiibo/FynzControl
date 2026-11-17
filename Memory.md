@@ -12,11 +12,12 @@
 - **Testing & QA**: Jest 30 + `jest-expo` (147/147 tests aprobados en 7 suites, 100% pass). Verificación doble obligatoria (`npm test` + `npx tsc --noEmit` 0 errores) previo a cerrar cualquier tarea.
 
 ## 2. Estado Activo del Sprint y Foco Inmediato
-- **Sprint Activo**: Publicación del Release v1.0.5 (Desktop Tauri + Web), con auto-updater firmado con Minisign y validación de distribución.
-- **Hitos Recientes Concluidos**: `[RELEASE-V1.0.5-DESKTOP-AND-WEB]`, `[TASK-DEBTS-DUE-STATUS-UX]`, `[TASK-ABONOS-SYNC-HEALING]`, `[TASK-THIRD-PARTY-REVERSION-DELTA-AND-SYNC-SHIELD]`.
-- **Foco Inmediato / Próximos Pasos**: Monitoreo de auto-actualización en clientes de escritorio v1.0.5 y seguimiento de sincronización multi-dispositivo.
+- **Sprint Activo**: Reactividad y Estabilidad en Flujos Contables / Release v1.0.5.
+- **Hitos Recientes Concluidos**: `[TASK-DEBTS-REACTIVITY-FIX]`, `[RELEASE-V1.0.5-DESKTOP-AND-WEB]`, `[TASK-DEBTS-DUE-STATUS-UX]`, `[TASK-ABONOS-SYNC-HEALING]`.
+- **Foco Inmediato / Próximos Pasos**: Monitoreo de reactividad y UX en flujos contables, y seguimiento de sincronización multi-dispositivo.
 
 ## 3. Lecciones Aprendidas y Reglas de Oro (Qué NO Hacer)
+- ❌ **NO depender de re-enfoque de pantalla para refrescar resúmenes calculados tras abonos o cobros**: En `debts.tsx` y pantallas con estados memoizados derivados, forzar la invalidación síncrona mediante un tick de reactividad (`setFocusRefreshKey((prev) => prev + 1)`) al confirmar o revertir cobros, abonos o bajas, asegurando que las tarjetas de resumen y montos comprometidos se actualicen en vivo al cerrar el modal sin requerir navegar fuera de la pestaña.
 - ❌ **NO mostrar badges de "este mes" en deudas pagadas cuyo próximo pago es en meses subsiguientes**: En deudas bancarias/personales (`personal_debts`), mostrar "AL DÍA" y proyectar la próxima fecha con días relativos (`daysRemainingFormatted`, ej. "Próximo débito: 10 Dic (en 27 días)") sin asociarlo erróneamente a "este mes".
 - ❌ **NO permitir que sincronizaciones o upserts revivan registros eliminados (zombis)**: Proteger con trigger `prevent_soft_delete_resurrection` en Postgres y respetar `deleted_at` en `sync-adapters.ts`.
 - ❌ **NO omitir autocuración reconstructiva al detectar desajuste en cuotas de terceros**: `reconcileThirdPartyCurrentPeriod` debe reconstruir cuotas amortizadas a partir de transacciones activas de reembolso como fuente de verdad contable irrefutable.
@@ -60,6 +61,7 @@
 - ❌ **NO dar por concluida una tarea sin verificación doble**: Mandatorio `npm test` (100% pass) y `npx tsc --noEmit` (0 errores).
 
 ## 4. Bugs Críticos Resueltos & Blindajes
+- **Reactividad Inmediata en Deudas (`debts.tsx`)**: Refresco síncrono forzado vía `setFocusRefreshKey((prev) => prev + 1)` tras confirmar abonos a terceros, cobros de préstamos, pagos de deudas y eliminaciones, invalidando memos de compromiso mensual para actualización en vivo instantánea. 147/147 tests en verde.
 - **UX Temporal y Estado Al Día en Deudas (`date-helpers.ts` / `debts.tsx` / `debts/[id].tsx`)**: Sustitución de badge ambiguo "AL DÍA ESTE MES" por "AL DÍA" y proyección de días relativos con `formatDaysRemaining` / `daysRemainingFormatted` (ej. "Próximo débito: 10 Dic (en 27 días)") sin fijar al mes en curso. 147/147 tests en verde.
 - **Autocuración Reconstructiva de Abonos y Blindaje Anti-Zombi (`debts-store.ts` / `sync-adapters.ts` / Supabase)**: Saneamiento de las 5 compras de Junior con R$ 800.00 de abonos activos. Triggers en Postgres `prevent_soft_delete_resurrection` contra resurrección en upserts. Autocuración en `reconcileThirdPartyCurrentPeriod` reconstruyendo cuotas desde transacciones de reembolso. 147/147 tests en verde.
 - **Reversión por Deltas y Escudo Sync en Cargos de Terceros (`debts-store.ts` / `sync-service.ts` / `debts.tsx`)**: Reversión conmutativa por `appliedAmount`, protección de `initialPaidInstallments` en `revertThirdPartyPersonAbono`, reconciliación `reconcileThirdPartyCurrentPeriod`, escudo `PENDING_CHARGE_MUTATIONS` (`pushSeq`) + push-before-pull + aislamiento por tabla en `syncPush`, resumen unificado en `debts.tsx` y saneamiento de `JIM.COM` en Supabase. 146/146 tests en verde.

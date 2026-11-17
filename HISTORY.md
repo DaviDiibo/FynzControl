@@ -2716,5 +2716,22 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
   - Todo artefacto de release de escritorio debe estar firmado con `controlfynz.key` y acompañado de su manifiesto `latest.json` en UTF-8 puro sin BOM.
 
 
+### [TASK-DEBTS-REACTIVITY-FIX] - 2026-11-17
+- **Archivos Intervenidos**:
+  - `app/(app)/(tabs)/debts.tsx`
+- **Resumen Técnico**:
+  1. **Reactividad Inmediata en Pantalla de Deudas (`debts.tsx`)**:
+     - Corrección de reactividad inmediata en pantalla de Deudas (`debts.tsx`) tras la confirmación de abonos a terceros, cobros a amigos y pagos de deudas.
+     - Se forzó el recálculo síncrono mediante `setFocusRefreshKey((prev) => prev + 1)` en `handleConfirmThirdPartyAbono`, `handleConfirmFriendLoanCollection`, `handleConfirmDebtPayment` y eliminación de deudas.
+  2. **Invalidación Reactiva de Memos de Compromiso Mensual**:
+     - Se añadió `focusRefreshKey` a los `useMemo` de compromiso mensual y cálculo de deudas en `debts.tsx` para que las tarjetas de resumen y montos abonados se actualicen en vivo al cerrar los modales sin requerir salir de la pestaña ni forzar recargas.
+  3. **Calidad y Verificación**:
+     - TypeScript: 0 errores (`npx tsc --noEmit`).
+     - Jest: 147/147 pruebas unitarias aprobadas (100% pass, 7 suites).
+- **Decisiones Permanentes**:
+  - En pantallas con métricas y tarjetas agregadas memoizadas derivadas de transacciones (`debts.tsx`), forzar siempre la invalidación síncrona mediante el tick reactivo (`setFocusRefreshKey((prev) => prev + 1)`) al confirmar o revertir cobros, abonos o bajas, evitando que la UI retenga valores desactualizados hasta el siguiente cambio de foco de pestaña.
+
+
+
 
 
