@@ -2751,6 +2751,29 @@ Este archivo almacena la memoria episódica y la bitácora técnica de tareas e 
   - Al expandir o renombrar catálogos de categorías, los IDs históricos (como `food`) deben mantenerse soportados y resueltos contextualmente a sus nuevos nombres canónicos (`Mercado`) e iconos correspondientes a través de `resolveCategoryName` y `resolveCategoryIcon`, garantizando que transacciones pasadas o sincronizadas se muestren consistentemente sin mutar la base de datos.
 
 
+### [RELEASE-V1.0.6-DESKTOP-AND-WEB] - 2026-11-17
+- **Archivos Intervenidos**:
+  - `package.json`
+  - `app.json`
+  - `src-tauri/tauri.conf.json`
+  - `app/(app)/(tabs)/debts.tsx`
+  - `src/constants/categories.ts`
+  - `src/store/transactions-store.ts`
+  - `src/__tests__/categories.test.ts`
+- **Resumen Técnico**:
+  1. **Bump Oficial de Versión a 1.0.6 Sincronizado**: `package.json`, `app.json` y `src-tauri/tauri.conf.json`.
+  2. **Compilación y Firma Minisign (Tauri)**: Generación de `ControlFynz_1.0.6_x64-setup.exe` (12.22 MiB), `ControlFynz_1.0.6_x64-setup.nsis.zip`, `ControlFynz_1.0.6_x64-setup.nsis.zip.sig` y `latest.json` en UTF-8 puro sin BOM para `@tauri-apps/plugin-updater`.
+  3. **Mejoras Integradas**:
+     - Reactividad síncrona en pantalla de deudas (`debts.tsx`) con invalidación forzada vía tick (`setFocusRefreshKey`) al registrar o revertir cobros y abonos.
+     - Expansión de categorías compactas en `categories.ts`: introducción de Mercado, Restaurantes, Bares, Deportes y Viáticos con retrocompatibilidad contextual (`resolveCategoryName` / `resolveCategoryIcon`).
+  4. **Calidad y Verificación**:
+     - TypeScript: 0 errores (`npx tsc --noEmit`).
+     - Jest: 153/153 pruebas unitarias aprobadas (100% pass, 8 suites).
+- **Decisiones Permanentes**:
+  - Todo artefacto de release de escritorio debe estar firmado con `controlfynz.key` y acompañado de su manifiesto `latest.json` en UTF-8 puro sin BOM.
+
+
+
 
 
 
